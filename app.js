@@ -140,6 +140,59 @@ $("btnRecenter").addEventListener("click", () => {
     state.map.setZoom(19);
   }
 });
+// 🆕 North-Up / Heading-Up toggle
+$("btnOrient").addEventListener("click", () => {
+  state.headingUp = !state.headingUp;
+  const btn = $("btnOrient");
+  if (state.headingUp) {
+    btn.textContent = "🧭 Heading-Up";
+    btn.classList.add("active-toggle");
+  } else {
+    btn.textContent = "🧭 North-Up";
+    btn.classList.remove("active-toggle");
+    // Reset rotation to north
+    if (state.map) state.map.setHeading(0);
+  }
+});
+
+// 🆕 Auto-Zoom toggle
+$("btnAutoZoom").addEventListener("click", () => {
+  state.autoZoom = !state.autoZoom;
+  const btn = $("btnAutoZoom");
+  btn.textContent = state.autoZoom ? "🔍 Auto-Zoom: ON" : "🔍 Auto-Zoom: OFF";
+  btn.classList.toggle("active-toggle", state.autoZoom);
+});
+
+// 🆕 Calculate ideal zoom based on speed (mph)
+// Slow/stopped → close in. Fast → zoom out to see ahead.
+function zoomForSpeed(mph) {
+  if (mph < 1)   return 20;   // stopped
+  if (mph < 4)   return 19;   // crawl / turning
+  if (mph < 8)   return 18;   // working speed
+  if (mph < 14)  return 17;   // typical spray speed
+  if (mph < 20)  return 16;   // road / fast transit
+  return 15;                  // highway
+}
+
+// 🆕 Apply zoom + rotation based on current speed/heading
+function applyMapView(mph) {
+  if (!state.map) return;
+
+  // Auto-zoom
+  if (state.autoZoom) {
+    const target = zoomForSpeed(mph);
+    if (target !== state.lastZoom) {
+      state.map.setZoom(target);
+      state.lastZoom = target;
+    }
+  }
+
+  // Heading-up rotation
+  if (state.headingUp && state.currentHeading != null && !isNaN(state.currentHeading)) {
+    // Map rotation is "what's at the top" — to put heading at top, negate it
+    state.map.setHeading(state.currentHeading);
+  }
+}
 
 function startSession() {
   if (!navigator.geolocation) { alert("Geolocation not supported on this device."); return; }
