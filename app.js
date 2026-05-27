@@ -1022,31 +1022,70 @@ $("btnDeleteRep").addEventListener("click", () => {
   $("repBody").textContent = "Select a report…";
 });
 
-// Print to PDF
+// Print to PDF — with mobile-friendly back button
 $("btnPdfRep").addEventListener("click", () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   const r = all[$("repSelect").value];
   if (!r) return alert("Select a report first.");
   const html = `
     <html><head><title>${r.name || r.id}</title>
-    <style>body{font-family:Arial;padding:30px;color:#111}h1{margin:0 0 8px}
-    h2{margin:20px 0 6px;border-bottom:1px solid #ccc;padding-bottom:4px}
-    table{width:100%;border-collapse:collapse;margin-top:6px}
-    td{padding:6px 8px;border-bottom:1px solid #eee}td:first-child{color:#555;width:40%}
-    </style></head><body>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: Arial; padding: 20px; color: #111; margin: 0; }
+      h1 { margin: 0 0 8px }
+      h2 { margin: 20px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 4px }
+      table { width: 100%; border-collapse: collapse; margin-top: 6px }
+      td { padding: 6px 8px; border-bottom: 1px solid #eee }
+      td:first-child { color: #555; width: 40% }
+
+      /* Action bar — sticky at top, hidden when printing */
+      .action-bar {
+        position: sticky; top: 0; z-index: 100;
+        background: #1a1d23; color: #fff;
+        padding: 12px 16px;
+        display: flex; gap: 10px; justify-content: space-between;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        margin: -20px -20px 20px -20px;
+      }
+      .action-bar button {
+        flex: 1; padding: 12px 16px; font-size: 16px;
+        border: none; border-radius: 6px; cursor: pointer;
+        font-weight: bold;
+      }
+      .btn-back  { background: #555; color: #fff; }
+      .btn-print { background: #ffb703; color: #1a1a1a; }
+      .btn-back:active  { background: #333; }
+      .btn-print:active { background: #d99700; }
+
+      /* Hide action bar when printing */
+      @media print {
+        .action-bar { display: none !important; }
+        body { padding: 30px; }
+      }
+    </style>
+    </head><body>
+
+    <div class="action-bar">
+      <button class="btn-back"  onclick="window.close(); setTimeout(()=>history.back(),100);">← Back to App</button>
+      <button class="btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
+    </div>
+
     <h1>🚜 Diamond O Farms — ${r.name || "Field Report"}</h1>
     <div>${new Date(r.date).toLocaleString()} &nbsp;·&nbsp; ${r.id}</div>
+
     <h2>Field</h2><table>
       <tr><td>Field</td><td>${r.field.name}</td></tr>
       <tr><td>Crop</td><td>${r.field.crop}</td></tr>
       <tr><td>Variety</td><td>${r.field.variety || "—"}</td></tr>
       <tr><td>Boundary Acres</td><td>${r.boundaryAcres}</td></tr>
     </table>
+
     <h2>Equipment</h2><table>
       <tr><td>Machine</td><td>${r.equipment.name}</td></tr>
       <tr><td>Type</td><td>${r.equipment.type}</td></tr>
       <tr><td>Width</td><td>${r.equipment.width} ft</td></tr>
     </table>
+
     <h2>Results</h2><table>
       <tr><td>Acres Covered</td><td>${r.acres}</td></tr>
       <tr><td>Coverage %</td><td>${r.coverage != null ? r.coverage + "%" : "—"}</td></tr>
@@ -1055,16 +1094,18 @@ $("btnPdfRep").addEventListener("click", () => {
       <tr><td>Bushels</td><td>${r.bushels}</td></tr>
       <tr><td>Gallons</td><td>${r.gallons}</td></tr>
     </table>
+
     ${r.equipment.type === "sprayer" ? `
     <h2>Sprayer</h2><table>
       <tr><td>GPA</td><td>${r.sprayer.gpa}</td></tr>
       <tr><td>Nozzle Spacing</td><td>${r.sprayer.nozzle} in</td></tr>
       <tr><td>Target Speed</td><td>${r.sprayer.target} mph</td></tr>
     </table>` : ""}
-    <script>window.onload=()=>window.print();<\/script>
+
     </body></html>`;
   const w = window.open("", "_blank");
-  w.document.write(html); w.document.close();
+  w.document.write(html);
+  w.document.close();
 });
 
 function formatReport(r) {
