@@ -33,9 +33,16 @@ const state = {
   currentHeading: 0,      // last known heading
   lastZoom: 19,           // remembered zoom so we don't fight the user
   // 🆕 Trail + speed coloring
+  // 🆕 Trail + speed coloring
   trailEnabled: true,
   trailSegments: [],      // array of google.maps.Polyline objects
   lastSpeedTier: null,    // "slow" | "ok" | "fast"
+  // 🆕 Speed stats
+  speedSum: 0,
+  speedCount: 0,
+  speedMax: 0,
+  // 🆕 Raw trail points for KML/GPX export
+  trailPoints: [],        // [{ lat, lng, ts, speed }, ...]
 };
 // 🆕 Speed tier vs target (target comes from Sprayer tab)
 function speedTier(mph) {
@@ -83,6 +90,8 @@ function addTrailSegment(p1, p2, mph) {
 function clearTrail() {
   state.trailSegments.forEach(s => s.setMap(null));
   state.trailSegments = [];
+  // 🆕 Also clear raw points
+  state.trailPoints = [];
 }
 // ===== Constants =====
 const FT_PER_METER = 3.28084;
@@ -224,6 +233,98 @@ $("btnTrail").addEventListener("click", () => {
 
 // 🆕 Clear trail button
 $("btnClearTrail").addEventListener("click", clearTrail);
+// 🆕 Export KML (Google Earth)
+$("btnExportKML").addEventListener("click", () => {
+  if (state.trailPoints.length < 2) return alert("No trail to export yet.");
+  const fieldName = (state.field.name || "field").replace(/[^a-z0-9]+/gi, "_");
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const coords = state.trailPoints
+    .map(p => `${p.lng.toFixed(7)},${p.lat.toFixed(7)},0`)
+    .join(" ");
+  const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Diamond O Farms — ${state.field.name || "Trail"}</name>
+    <description>Exported ${new Date().toLocaleString()}</description>
+    <Style id="trail">
+      <LineStyle><color>ff00b7ff</color><width>3</width></LineStyle>
+    </Style>
+    <Placemark>
+      <name>Machine Path</name>
+      <styleUrl>#trail</styleUrl>
+      <LineString>
+        <tessellate>1</tessellate>
+        <coordinates>${coords}</coordinates>
+      </LineString>
+    </Placemark>${boundaryKML()}
+  </Document>
+</kml>`;
+  downloadFile(`DiamondO_${fieldName}_${ts}.kml`, kml, "application/vnd.google-earth.kml+xml");
+});
+
+// 🆕 Export GPX (standard GPS track format)
+$("btnExportGPX").addEventListener("click", () => {
+  if (state.trailPoints.length < 2) return alert("No trail to export yet.");
+  const fieldName = (state.field.name || "field").replace(/[^a-z0-9]+/gi, "_");
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const points = state.trailPoints.map(p => {
+    const t = new Date(p.ts).toISOString();
+    // GPX speed is in m/s
+    const mps = (p.speed / MPS_TO_MPH).toFixed(2);
+    return `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lng.toFixed(7)}">
+        <time>${t}</time>
+        <speed>${mps}</speed>
+      </trkpt>`;
+  }).join("\n");
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Diamond O Farms Data Systems Pro"
+     xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>${state.field.name || "Trail"}</name>
+    <time>${new Date().toISOString()}</time>
+  </metadata>
+  <trk>
+    <name>${state.equipment.name || "Machine"} — ${state.field.name || "Field"}</name>
+    <trkseg>
+${points}
+    </trkseg>
+  </trk>
+</gpx>`;
+  downloadFile(`DiamondO_${fieldName}_${ts}.gpx`, gpx, "application/gpx+xml");
+});
+
+// 🆕 Include boundary polygon in KML if it exists
+function boundaryKML() {
+  if (!state.boundary.points || state.boundary.points.length < 3) return "";
+  const ring = state.boundary.points
+    .concat([state.boundary.points[0]]) // close ring
+    .map(p => `${p.lng.toFixed(7)},${p.lat.toFixed(7)},0`)
+    .join(" ");
+  return `
+    <Placemark>
+      <name>Field Boundary</name>
+      <Style>
+        <LineStyle><color>ff03b7ff</color><width>3</width></LineStyle>
+        <PolyStyle><color>3303b7ff</color></PolyStyle>
+      </Style>
+      <Polygon><outerBoundaryIs><LinearRing>
+        <coordinates>${ring}</coordinates>
+      </LinearRing></outerBoundaryIs></Polygon>
+    </Placemark>`;
+}
+
+// 🆕 Generic browser file download helper
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 // 🆕 Calculate ideal zoom based on speed (mph)
 // Slow/stopped → close in. Fast → zoom out to see ahead.
 function zoomForSpeed(mph) {
@@ -274,6 +375,14 @@ function startSession() {
   clearTrail();
   state.lastSpeedTier = null;
 
+  // 🆕 Reset speed stats + trail points
+  state.speedSum = 0;
+  state.speedCount = 0;
+  state.speedMax = 0;
+  state.trailPoints = [];
+  $("mAvgSpeed").textContent = "0.0";
+  $("mMaxSpeed").textContent = "0.0";
+  $("mAcresLeft").textContent = "—";
   $("btnStart").disabled = true;
   $("btnStop").disabled  = false;
   setMode("RUNNING");
@@ -336,6 +445,7 @@ function onPos(pos) {
   updateMarkerColor(smoothMph);
 
   // 🆕 Draw breadcrumb trail segment (skip while in boundary mode)
+  // 🆕 Draw breadcrumb trail segment (skip while in boundary mode)
   if (!state.boundary.active && state.lastPos) {
     addTrailSegment(
       { lat: state.lastPos.lat, lng: state.lastPos.lng },
@@ -344,6 +454,10 @@ function onPos(pos) {
     );
   }
 
+  // 🆕 Record raw point for KML/GPX export
+  if (!state.boundary.active) {
+    state.trailPoints.push({ lat, lng, ts, speed: smoothMph });
+  }
   // Boundary mode → store only, no painting
   if (state.boundary.active) {
     state.boundary.points.push({ lat, lng });
@@ -461,14 +575,30 @@ function updateMetrics(mph) {
   $("mSpeed").textContent = mph.toFixed(1);
   $("mAcres").textContent = state.acres.toFixed(2);
 
-  // Acres/hr smoothed
+  // 🆕 Speed average / max (only count meaningful movement: > 0.5 mph)
+  if (mph > 0.5) {
+    state.speedSum += mph;
+    state.speedCount += 1;
+    if (mph > state.speedMax) state.speedMax = mph;
+  }
+  const avgSpeed = state.speedCount > 0 ? state.speedSum / state.speedCount : 0;
+  $("mAvgSpeed").textContent = avgSpeed.toFixed(1);
+  $("mMaxSpeed").textContent = state.speedMax.toFixed(1);
+
+  // 🆕 Acres remaining = boundary acres − covered acres
+  if (state.boundary.acres > 0) {
+    const left = Math.max(0, state.boundary.acres - state.acres);
+    $("mAcresLeft").textContent = left.toFixed(2);
+  } else {
+    $("mAcresLeft").textContent = "—";
+  }
+
   const elapsedHr = (Date.now() - state.sessionStart) / 3600000;
   const ahr = elapsedHr > 0 ? state.acres / elapsedHr : 0;
   state.acHrBuf.push(ahr);
   if (state.acHrBuf.length > SMOOTH_N) state.acHrBuf.shift();
   $("mAcHr").textContent = avg(state.acHrBuf).toFixed(1);
 
-  // Efficiency
   const eff = state.efficiencyAttempts > 0
     ? Math.round((state.efficiencyHits / state.efficiencyAttempts) * 100)
     : 0;
@@ -477,7 +607,6 @@ function updateMetrics(mph) {
   $("mBu").textContent  = Math.round(state.bushels);
   $("mGal").textContent = state.gallons.toFixed(1);
 
-  // Live GPM
   if (state.equipment.type === "sprayer") {
     const gpm = (state.sprayer.gpa * mph * state.equipment.width) / 495;
     state.liveGPM = gpm;
@@ -487,7 +616,6 @@ function updateMetrics(mph) {
     $("spNozGpm").textContent = (gpm / nozzlesPerSide).toFixed(2);
   }
 }
-
 // ============================================================
 // EQUIPMENT MODE — show/hide bushel vs gallon
 // ============================================================
