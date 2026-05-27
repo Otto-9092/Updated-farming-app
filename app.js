@@ -11,6 +11,7 @@ const state = {
   running: false,
   lastPos: null,
   speedBuf: [],
+  smoothMph: null, 
   acHrBuf: [],
   acres: 0,
   bushels: 0,
@@ -50,10 +51,15 @@ const state = {
 // ===== Constants =====
 const FT_PER_METER = 3.28084;
 const SQFT_PER_ACRE = 43560;
-const SMOOTH_N = 5;
+const SMOOTH_N = 10;                // bigger buffer for smoother speed
 const CELL_SIZE_DEG = 0.00005;
 const MPS_TO_MPH = 2.23694;
 
+// ===== GPS quality thresholds =====
+const GPS_MAX_ACCURACY_M    = 15;   // reject fixes worse than this (meters)
+const GPS_MIN_MOVE_M        = 0.5;  // ignore micro-jitter below this (meters)
+const GPS_MAX_REALISTIC_MPH = 60;   // reject impossible speed jumps
+const SPEED_EMA_ALPHA       = 0.25; // exponential smoothing: lower = smoother, higher = more responsive
 // ===== localStorage keys =====
 const LS_EQ     = "dof_equipment_library";
 const LS_REPS   = "dof_reports";
@@ -225,19 +231,34 @@ function stopSession() {
 // ============================================================
 // BACKGROUND LOCATION FOLLOW (runs even outside a session)
 // ============================================================
+// ============================================================
+// BACKGROUND LOCATION FOLLOW (runs even outside a session)
+// ============================================================
 function startLocationFollow() {
   if (!navigator.geolocation) return;
   navigator.geolocation.watchPosition(
     (pos) => {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
-      setGpsPill(true);
+      const acc = pos.coords.accuracy != null ? pos.coords.accuracy : 999;
+      setGpsPill(true, acc);
+
+      // Reject low-quality fixes for display too
+      if (acc > GPS_MAX_ACCURACY_M) return;
+
       if (state.machineMarker) state.machineMarker.setPosition({ lat, lng });
       if (state.map && state.autoCenter) state.map.panTo({ lat, lng });
       if (!state.running) state.lastPos = { lat, lng, ts: pos.timestamp || Date.now() };
-      const mph = pos.coords.speed != null ? pos.coords.speed * MPS_TO_MPH : 0;
-      if (pos.coords.heading != null && !isNaN(pos.coords.heading)) state.currentHeading = pos.coords.heading;
-      applyMapView(mph);
+
+      const rawMph = pos.coords.speed != null && pos.coords.speed >= 0
+        ? pos.coords.speed * MPS_TO_MPH : 0;
+      if (state.smoothMph == null) state.smoothMph = rawMph;
+      else state.smoothMph = (SPEED_EMA_ALPHA * rawMph) + ((1 - SPEED_EMA_ALPHA) * state.smoothMph);
+
+      if (pos.coords.heading != null && !isNaN(pos.coords.heading)) {
+        state.currentHeading = pos.coords.heading;
+      }
+      applyMapView(state.smoothMph);
     },
     (err) => { console.warn(err); setGpsPill(false); },
     { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
@@ -247,26 +268,54 @@ function startLocationFollow() {
 // ============================================================
 // GPS POSITION HANDLER (during a session)
 // ============================================================
+// ============================================================
+// GPS POSITION HANDLER (during a session)
+// ============================================================
 function onPos(pos) {
-  setGpsPill(true);
   const lat = pos.coords.latitude;
   const lng = pos.coords.longitude;
   const ts  = pos.timestamp || Date.now();
+  const acc = pos.coords.accuracy != null ? pos.coords.accuracy : 999;
   const heading = pos.coords.heading;
   const speedMps = pos.coords.speed;
 
-  let mph = 0;
-  if (speedMps != null && !isNaN(speedMps)) {
-    mph = speedMps * MPS_TO_MPH;
+  // --- Update GPS quality pill regardless of whether we accept the fix ---
+  setGpsPill(true, acc);
+
+  // --- Reject low-quality fixes outright ---
+  if (acc > GPS_MAX_ACCURACY_M) {
+    // Bad fix: skip painting, skip metrics update, but keep listening
+    return;
+  }
+
+  // --- Compute raw speed (prefer device-provided, fall back to derived) ---
+  let rawMph = 0;
+  if (speedMps != null && !isNaN(speedMps) && speedMps >= 0) {
+    rawMph = speedMps * MPS_TO_MPH;
   } else if (state.lastPos) {
     const dMeters = haversine(state.lastPos.lat, state.lastPos.lng, lat, lng);
     const dt = (ts - state.lastPos.ts) / 1000;
-    if (dt > 0) mph = (dMeters / dt) * MPS_TO_MPH;
+    if (dt > 0) rawMph = (dMeters / dt) * MPS_TO_MPH;
   }
-  state.speedBuf.push(mph);
-  if (state.speedBuf.length > SMOOTH_N) state.speedBuf.shift();
-  const smoothMph = avg(state.speedBuf);
 
+  // --- Reject physically impossible speed jumps ---
+  if (rawMph > GPS_MAX_REALISTIC_MPH) {
+    return;
+  }
+
+  // --- Exponential moving average for silky speed display ---
+  if (state.smoothMph == null) {
+    state.smoothMph = rawMph;
+  } else {
+    state.smoothMph = (SPEED_EMA_ALPHA * rawMph) + ((1 - SPEED_EMA_ALPHA) * state.smoothMph);
+  }
+  const smoothMph = state.smoothMph;
+
+  // Keep the legacy buffer for any downstream code that uses it
+  state.speedBuf.push(rawMph);
+  if (state.speedBuf.length > SMOOTH_N) state.speedBuf.shift();
+
+  // --- Update marker position & heading ---
   state.machineMarker.setPosition({ lat, lng });
   if (heading != null && !isNaN(heading)) {
     state.currentHeading = heading;
@@ -279,6 +328,7 @@ function onPos(pos) {
   applyMapView(smoothMph);
   updateMarkerColor(smoothMph);
 
+  // --- Boundary recording mode ---
   if (state.boundary.active) {
     state.boundary.points.push({ lat, lng });
     drawBoundaryPreview();
@@ -287,13 +337,22 @@ function onPos(pos) {
     return;
   }
 
+  // --- Paint swath only if we actually moved enough ---
   if (state.lastPos) {
-    paintSwath(state.lastPos, { lat, lng }, heading);
-    addTrailSegment({ lat: state.lastPos.lat, lng: state.lastPos.lng }, { lat, lng }, smoothMph);
+    const moved = haversine(state.lastPos.lat, state.lastPos.lng, lat, lng);
+    if (moved >= GPS_MIN_MOVE_M) {
+      paintSwath(state.lastPos, { lat, lng }, heading);
+      addTrailSegment({ lat: state.lastPos.lat, lng: state.lastPos.lng }, { lat, lng }, smoothMph);
+      state.trailPoints.push({ lat, lng, ts, speed: smoothMph });
+      state.lastPos = { lat, lng, ts };
+    }
+    // If we didn't move enough, KEEP the old lastPos so the next fix
+    // can still compare against the last "real" position
+  } else {
+    state.lastPos = { lat, lng, ts };
+    state.trailPoints.push({ lat, lng, ts, speed: smoothMph });
   }
-  state.trailPoints.push({ lat, lng, ts, speed: smoothMph });
 
-  state.lastPos = { lat, lng, ts };
   updateMetrics(smoothMph);
 }
 
@@ -909,10 +968,25 @@ function formatReport(r) {
 // ============================================================
 // UTILITIES
 // ============================================================
-function setGpsPill(ok) {
+function setGpsPill(ok, accuracyM) {
   const p = $("gpsPill");
-  p.textContent = ok ? "GPS: OK" : "GPS: OFF";
-  p.className = "pill " + (ok ? "pill-good" : "pill-bad");
+  if (!p) return;
+  if (!ok) {
+    p.textContent = "GPS: OFF";
+    p.className = "pill pill-bad";
+    return;
+  }
+  if (accuracyM == null || !isFinite(accuracyM)) {
+    p.textContent = "GPS: …";
+    p.className = "pill pill-warn";
+    return;
+  }
+  const m = Math.round(accuracyM);
+  p.textContent = `GPS: ${m}m`;
+  // Color-code by quality
+  if (accuracyM <= 5)        p.className = "pill pill-good";   // excellent
+  else if (accuracyM <= 15)  p.className = "pill pill-warn";   // usable
+  else                       p.className = "pill pill-bad";    // rejected
 }
 function setMode(m) { $("modePill").textContent = m; }
 function avg(a) { return a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0; }
