@@ -176,44 +176,43 @@
 </div>
 
     <div class="card">
-  <div class="card-title">Equipment Library</div>
+      <div class="card-title">Equipment Library</div>
 
-  <!-- Core fields — always visible -->
-  <label>Machine Name <input id="eqName" type="text" placeholder="e.g. JD 4730" /></label>
-  <label>Type
-    <select id="eqType">
-      <option value="sprayer">🚿 Sprayer</option>
-      <option value="combine">🌾 Combine</option>
-      <option value="planter">🚜 Planter</option>
-      <option value="tillage">🍂 Tillage</option>
-      <option value="spreader">🟫 Spreader</option>
-      <option value="other">❓ Other</option>
-    </select>
-  </label>
-  <label>Working Width (ft) <input id="eqWidth" type="number" value="90" min="1" step="0.5" /></label>
+      <!-- Core fields — always visible -->
+      <label>Machine Name <input id="eqName" type="text" placeholder="e.g. JD 4730" /></label>
+      <label>Type
+        <select id="eqType">
+          <option value="sprayer">🚿 Sprayer</option>
+          <option value="combine">🌾 Combine</option>
+          <option value="planter">🚜 Planter</option>
+          <option value="tillage">🍂 Tillage</option>
+          <option value="spreader">🟫 Spreader</option>
+          <option value="other">❓ Other</option>
+        </select>
+      </label>
+      <label>Working Width (ft) <input id="eqWidth" type="number" value="90" min="1" step="0.5" /></label>
 
-  <!-- Button to re-open the modal for the currently selected type -->
-  <div class="btn-row">
-    <button id="btnEditEqParams" class="btn">⚙️ Edit <span id="btnEditEqLabel">Sprayer</span> Settings</button>
-  </div>
+      <!-- Button to re-open the modal for the currently selected type -->
+      <div class="btn-row">
+        <button id="btnEditEqParams" class="btn">⚙️ Edit <span id="btnEditEqLabel">Sprayer</span> Settings</button>
+      </div>
 
-  <!-- Live summary of what's been set -->
-  <div class="hint" id="eqParamSummary">Sprayer: 15 GPA, 20" nozzles, target 12 mph</div>
+      <!-- Live summary of what's been set -->
+      <div class="hint" id="eqParamSummary">Sprayer: 15 GPA, 20" nozzles, target 12 mph</div>
 
-  <!-- Save / Load -->
-  <div class="btn-row">
-    <button id="btnSaveEq" class="btn btn-primary">💾 Save Machine</button>
-  </div>
+      <!-- Save / Load -->
+      <div class="btn-row">
+        <button id="btnSaveEq" class="btn btn-primary">💾 Save Machine</button>
+      </div>
 
-  <label>Load Saved Machine
-    <select id="eqLoad"></select>
-  </label>
-  <div class="btn-row">
-    <button id="btnLoadEq"   class="btn">📂 Load</button>
-    <button id="btnDeleteEq" class="btn btn-ghost">🗑 Delete</button>
-  </div>
-</div>
-
+      <label>Load Saved Machine
+        <select id="eqLoad"></select>
+      </label>
+      <div class="btn-row">
+        <button id="btnLoadEq"   class="btn">📂 Load</button>
+        <button id="btnDeleteEq" class="btn btn-ghost">🗑 Delete</button>
+      </div>
+    </div>
 
   </section>
 
