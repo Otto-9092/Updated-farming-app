@@ -651,4 +651,30 @@ window.addEventListener("DOMContentLoaded", () => {
   loadReportsList();
   applyEquipmentUI();
   renderSectionButtons();
+  startLocationFollow();   // 🆕 start following GPS right away
 });
+
+// 🆕 Follow user location even when not in a session
+function startLocationFollow() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      setGpsPill(true);
+      // Always move marker + recenter map on user
+      if (state.machineMarker) {
+        state.machineMarker.setPosition({ lat, lng });
+      }
+      if (state.map) {
+        state.map.panTo({ lat, lng });
+      }
+      // If a session isn't running, still update lastPos so A-B works
+      if (!state.running) {
+        state.lastPos = { lat, lng, ts: pos.timestamp || Date.now() };
+      }
+    },
+    (err) => { console.warn(err); setGpsPill(false); },
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+  );
+}
