@@ -26,8 +26,12 @@ const state = {
   coveragePolys: [],
   field: { name: "", crop: "Corn", variety: "" },
   equipment: { name: "", type: "sprayer", width: 90 },
-  sprayer: { gpa: 15, nozzle: 20, target: 12 },
-  sessionStart: null,
+  sprayer:  { gpa: 15, nozzle: 20, target: 12, tank: 1200, product: "" },
+  combine:  { expectedYield: 180, tankCapacity: 350, moisture: 15.0 },
+  planter:  { rowSpacing: 30, rows: 16, population: 34000, variety: "", downforce: 150 },
+  tillage:  { depth: 6, passType: "primary", notes: "" },
+  spreader: { productType: "dry_fert", rate: 200, bin: 8000, productName: "" },
+  other:    { notes: "" },  sessionStart: null,
   // Map view options
   headingUp: false,
   autoZoom: true,
@@ -628,14 +632,228 @@ function readFormsIntoState() {
   state.equipment.name  = $("eqName").value || "Machine";
   state.equipment.type  = $("eqType").value;
   state.equipment.width = Math.max(1, parseFloat($("eqWidth").value) || 90);
-  // Sprayer fields are optional until C2 moves them into the equipment sub-menu
-  const spGPA = $("spGPA"), spNoz = $("spNoz"), spTgt = $("spTgt");
-  if (spGPA) state.sprayer.gpa    = parseFloat(spGPA.value) || 15;
-  if (spNoz) state.sprayer.nozzle = parseFloat(spNoz.value) || 20;
-  if (spTgt) state.sprayer.target = parseFloat(spTgt.value) || 12;
+  // Pull whatever sub-menu is currently active into state
+  const current = readEqParams(state.equipment.type);
+  applyEqParamsToState(current.type, current.values);
   applyEquipmentUI();
 }
 $("eqType").addEventListener("change", () => { state.equipment.type = $("eqType").value; applyEquipmentUI(); });
+// ============================================================
+// EQUIPMENT TYPE CONFIG — defines per-type parameters
+// ============================================================
+const EQ_TYPES = {
+  sprayer: {
+    label: "Sprayer",
+    emoji: "🚿",
+    subId: "subSprayer",
+    fields: ["spGPA", "spNoz", "spTgt", "spTank", "spProduct"],
+  },
+  combine: {
+    label: "Combine",
+    emoji: "🌾",
+    subId: "subCombine",
+    fields: ["cmYield", "cmTank", "cmMoisture"],
+  },
+  planter: {
+    label: "Planter",
+    emoji: "🚜",
+    subId: "subPlanter",
+    fields: ["plRowSpacing", "plRows", "plPopulation", "plVariety", "plDownforce"],
+  },
+  tillage: {
+    label: "Tillage",
+    emoji: "🍂",
+    subId: "subTillage",
+    fields: ["tlDepth", "tlPassType", "tlNotes"],
+  },
+  spreader: {
+    label: "Spreader",
+    emoji: "🟫",
+    subId: "subSpreader",
+    fields: ["sdProductType", "sdRate", "sdBin", "sdProductName"],
+  },
+  other: {
+    label: "Other",
+    emoji: "❓",
+    subId: "subOther",
+    fields: ["otNotes"],
+  },
+};
+
+// Snapshot of param values when modal opens — for Cancel support
+let eqModalSnapshot = null;
+
+// ============================================================
+// EQUIPMENT MODAL — open / close / show right sub-menu
+// ============================================================
+function showEqSubmenu(type) {
+  // Hide all sub-menus
+  document.querySelectorAll(".eq-submenu").forEach(el => el.classList.add("hidden"));
+  // Show the one for the selected type
+  const cfg = EQ_TYPES[type];
+  if (!cfg) return;
+  const sub = $(cfg.subId);
+  if (sub) sub.classList.remove("hidden");
+  // Update modal title
+  const title = $("eqModalTitle");
+  if (title) title.textContent = `${cfg.emoji} ${cfg.label} Settings`;
+}
+
+function openEqModal() {
+  const type = $("eqType").value;
+  showEqSubmenu(type);
+  // Snapshot current values so Cancel can restore
+  eqModalSnapshot = readEqParams(type);
+  $("eqModal").classList.remove("hidden");
+}
+
+function closeEqModal() {
+  $("eqModal").classList.add("hidden");
+  eqModalSnapshot = null;
+}
+
+function cancelEqModal() {
+  // Restore original values from snapshot
+  if (eqModalSnapshot) {
+    writeEqParams(eqModalSnapshot.type, eqModalSnapshot.values);
+  }
+  closeEqModal();
+}
+
+function saveEqModal() {
+  const type = $("eqType").value;
+  // Pull values from the visible sub-menu into state
+  const values = readEqParams(type).values;
+  applyEqParamsToState(type, values);
+  updateEqSummary();
+  closeEqModal();
+}
+
+// Read DOM values for a given equipment type → { type, values: {...} }
+function readEqParams(type) {
+  const cfg = EQ_TYPES[type];
+  const values = {};
+  if (!cfg) return { type, values };
+  cfg.fields.forEach(id => {
+    const el = $(id);
+    if (el) values[id] = el.value;
+  });
+  return { type, values };
+}
+
+// Write values back into DOM inputs
+function writeEqParams(type, values) {
+  const cfg = EQ_TYPES[type];
+  if (!cfg) return;
+  cfg.fields.forEach(id => {
+    const el = $(id);
+    if (el && values[id] != null) el.value = values[id];
+  });
+}
+
+// Push DOM values into state object (so live metrics use them)
+function applyEqParamsToState(type, values) {
+  if (type === "sprayer") {
+    state.sprayer.gpa     = parseFloat(values.spGPA)    || 15;
+    state.sprayer.nozzle  = parseFloat(values.spNoz)    || 20;
+    state.sprayer.target  = parseFloat(values.spTgt)    || 12;
+    state.sprayer.tank    = parseFloat(values.spTank)   || 0;
+    state.sprayer.product = values.spProduct || "";
+  } else if (type === "combine") {
+    state.combine = state.combine || {};
+    state.combine.expectedYield = parseFloat(values.cmYield)    || 0;
+    state.combine.tankCapacity  = parseFloat(values.cmTank)     || 0;
+    state.combine.moisture      = parseFloat(values.cmMoisture) || 0;
+  } else if (type === "planter") {
+    state.planter = state.planter || {};
+    state.planter.rowSpacing = parseFloat(values.plRowSpacing) || 30;
+    state.planter.rows       = parseFloat(values.plRows)       || 16;
+    state.planter.population = parseFloat(values.plPopulation) || 0;
+    state.planter.variety    = values.plVariety || "";
+    state.planter.downforce  = parseFloat(values.plDownforce)  || 0;
+  } else if (type === "tillage") {
+    state.tillage = state.tillage || {};
+    state.tillage.depth    = parseFloat(values.tlDepth) || 0;
+    state.tillage.passType = values.tlPassType || "primary";
+    state.tillage.notes    = values.tlNotes || "";
+  } else if (type === "spreader") {
+    state.spreader = state.spreader || {};
+    state.spreader.productType = values.sdProductType || "dry_fert";
+    state.spreader.rate        = parseFloat(values.sdRate) || 0;
+    state.spreader.bin         = parseFloat(values.sdBin)  || 0;
+    state.spreader.productName = values.sdProductName || "";
+  } else if (type === "other") {
+    state.other = state.other || {};
+    state.other.notes = values.otNotes || "";
+  }
+}
+
+// Update the summary hint under the Edit button
+function updateEqSummary() {
+  const type = $("eqType").value;
+  const cfg = EQ_TYPES[type];
+  const label = $("btnEditEqLabel");
+  const summary = $("eqParamSummary");
+  if (label && cfg) label.textContent = cfg.label;
+  if (!summary || !cfg) return;
+
+  let text = "";
+  if (type === "sprayer") {
+    text = `Sprayer: ${state.sprayer.gpa} GPA, ${state.sprayer.nozzle}" nozzles, target ${state.sprayer.target} mph${state.sprayer.tank ? `, ${state.sprayer.tank} gal tank` : ""}${state.sprayer.product ? ` — ${state.sprayer.product}` : ""}`;
+  } else if (type === "combine") {
+    const c = state.combine || {};
+    text = `Combine: ${c.expectedYield || "?"} bu/ac expected, ${c.tankCapacity || "?"} bu tank, ${c.moisture || "?"}% moisture`;
+  } else if (type === "planter") {
+    const p = state.planter || {};
+    const suggestedWidth = (p.rows && p.rowSpacing) ? (p.rows * p.rowSpacing / 12).toFixed(1) : "?";
+    text = `Planter: ${p.rows || "?"} rows × ${p.rowSpacing || "?"}" (${suggestedWidth} ft) — ${p.population || "?"} seeds/ac${p.variety ? ` — ${p.variety}` : ""}`;
+  } else if (type === "tillage") {
+    const t = state.tillage || {};
+    text = `Tillage: ${t.depth || "?"}" deep, ${t.passType || "primary"} pass${t.notes ? ` — ${t.notes}` : ""}`;
+  } else if (type === "spreader") {
+    const s = state.spreader || {};
+    text = `Spreader: ${s.rate || "?"} lbs/ac of ${s.productName || s.productType || "product"}, ${s.bin || "?"} lb bin`;
+  } else if (type === "other") {
+    const o = state.other || {};
+    text = o.notes ? `Other: ${o.notes.slice(0, 60)}${o.notes.length > 60 ? "…" : ""}` : "Other: (no notes)";
+  }
+  summary.textContent = text;
+}
+
+// Live update for planter width suggestion (inside the modal)
+function updatePlanterCalcWidth() {
+  const rows = parseFloat($("plRows")?.value) || 0;
+  const spacing = parseFloat($("plRowSpacing")?.value) || 0;
+  const el = $("plCalcWidth");
+  if (el) el.textContent = (rows * spacing / 12).toFixed(1);
+}
+
+// ============================================================
+// EQUIPMENT MODAL — wire up event listeners
+// ============================================================
+$("btnEditEqParams")?.addEventListener("click", openEqModal);
+$("btnEqModalClose")?.addEventListener("click", cancelEqModal);
+$("btnEqModalCancel")?.addEventListener("click", cancelEqModal);
+$("btnEqModalSave")?.addEventListener("click", saveEqModal);
+
+// Tap outside the card to cancel
+$("eqModal")?.addEventListener("click", (e) => {
+  if (e.target.id === "eqModal") cancelEqModal();
+});
+
+// Type dropdown: when changed, auto-open the modal so user can set new params
+$("eqType")?.addEventListener("change", () => {
+  state.equipment.type = $("eqType").value;
+  applyEquipmentUI();
+  updateEqSummary();
+  openEqModal();
+});
+
+// Planter calc: live update inside modal
+["plRows", "plRowSpacing"].forEach(id => {
+  const el = $(id);
+  if (el) el.addEventListener("input", updatePlanterCalcWidth);
+});
 
 // ============================================================
 // EQUIPMENT LIBRARY
@@ -643,35 +861,59 @@ $("eqType").addEventListener("change", () => { state.equipment.type = $("eqType"
 function loadEquipmentList() {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const sel = $("eqLoad");
+  if (!sel) return;
   sel.innerHTML = "";
   Object.keys(lib).forEach(k => {
     const o = document.createElement("option");
-    o.value = k; o.textContent = k;
+    o.value = k;
+    const cfg = EQ_TYPES[lib[k].type];
+    o.textContent = `${cfg ? cfg.emoji + " " : ""}${k}`;
     sel.appendChild(o);
   });
 }
+
 $("btnSaveEq").addEventListener("click", () => {
   readFormsIntoState();
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
-  lib[state.equipment.name] = { ...state.equipment };
+  const type = state.equipment.type;
+  // Save core equipment fields + the per-type params object
+  lib[state.equipment.name] = {
+    name:  state.equipment.name,
+    type:  type,
+    width: state.equipment.width,
+    params: readEqParams(type).values,   // raw DOM values for the active sub-menu
+  };
   localStorage.setItem(LS_EQ, JSON.stringify(lib));
   loadEquipmentList();
-  alert("Saved: " + state.equipment.name);
+  alert(`Saved: ${state.equipment.name}`);
 });
+
 $("btnLoadEq").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const k = $("eqLoad").value;
   if (!k || !lib[k]) return;
-  $("eqName").value = lib[k].name;
-  $("eqType").value = lib[k].type;
-  $("eqWidth").value = lib[k].width;
-  state.equipment = { ...lib[k] };
+  const rec = lib[k];
+  $("eqName").value  = rec.name;
+  $("eqType").value  = rec.type;
+  $("eqWidth").value = rec.width;
+  state.equipment = { name: rec.name, type: rec.type, width: rec.width };
+  // Restore the per-type params into the DOM, then push into state
+  if (rec.params) {
+    writeEqParams(rec.type, rec.params);
+    applyEqParamsToState(rec.type, rec.params);
+  }
+  // Switch which sub-menu is "active" (for next modal open) + refresh summary
+  showEqSubmenu(rec.type);
   applyEquipmentUI();
+  updateEqSummary();
+  if (rec.type === "planter") updatePlanterCalcWidth();
 });
+
 $("btnDeleteEq").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const k = $("eqLoad").value;
   if (!k) return;
+  if (!confirm(`Delete machine "${k}"?`)) return;
   delete lib[k];
   localStorage.setItem(LS_EQ, JSON.stringify(lib));
   loadEquipmentList();
@@ -1194,4 +1436,8 @@ window.addEventListener("DOMContentLoaded", () => {
   applyEquipmentUI();
   renderSectionButtons();
   startLocationFollow();
+  // Initialize the equipment sub-menu visibility + summary text
+  showEqSubmenu($("eqType").value);
+  updateEqSummary();
+  updatePlanterCalcWidth();
 });
