@@ -68,7 +68,7 @@ html, body {
 /* ===== Metrics overlay ===== */
 .metrics {
   position: absolute; left: 8px; right: 8px; top: 8px;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   gap: 6px; pointer-events: none;
 }
 .metric {
@@ -137,7 +137,8 @@ input, select {
 
 /* Small screens — metrics 2 cols */
 @media (max-width: 480px) {
-  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .metrics { grid-template-columns: repeat(3, 1fr); }
+  .m-val { font-size: 14px; }
 }
 /* 🆕 Toggle button highlight */
 .btn.active-toggle {
