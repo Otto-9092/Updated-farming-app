@@ -41,8 +41,10 @@ const state = {
   speedSum: 0,
   speedCount: 0,
   speedMax: 0,
-  // 🆕 Raw trail points for KML/GPX export
+    // 🆕 Raw trail points for KML/GPX export
   trailPoints: [],        // [{ lat, lng, ts, speed }, ...]
+  // 🆕 Currently loaded field key (for multi-field support)
+  loadedFieldKey: null,
 };
 // 🆕 Speed tier vs target (target comes from Sprayer tab)
 function speedTier(mph) {
@@ -99,6 +101,32 @@ const SQFT_PER_ACRE = 43560;
 const SMOOTH_N = 5;
 const CELL_SIZE_DEG = 0.00005; // ~5.5m grid for efficiency
 const MPS_TO_MPH = 2.23694;
+
+// 🆕 Format hours as "1h 23m" or "12m"
+function formatETA(hours) {
+  if (!isFinite(hours) || hours <= 0) return "—";
+  const totalMin = Math.round(hours * 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h === 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
+
+// 🆕 iOS Screen Wake Lock — keep display on during a session
+let wakeLockRef = null;
+async function requestWakeLock() {
+  try {
+    if ("wakeLock" in navigator) {
+      wakeLockRef = await navigator.wakeLock.request("screen");
+    }
+  } catch (e) { console.warn("Wake lock failed:", e); }
+}
+function releaseWakeLock() {
+  if (wakeLockRef) { wakeLockRef.release().catch(()=>{}); wakeLockRef = null; }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && state.running) requestWakeLock();
+});
 
 // ===== DOM helpers =====
 const $ = (id) => document.getElementById(id);
@@ -199,6 +227,19 @@ $("btnRecenter").addEventListener("click", () => {
     state.map.setZoom(19);
   }
 });
+// 🆕 Reset painted area (clears coverage but keeps GPS/trail/boundary)
+$("btnResetPaint").addEventListener("click", () => {
+  if (!confirm("Clear all painted coverage and reset acres? Boundary and trail will be kept.")) return;
+  state.coveragePolys.forEach(p => p.setMap(null));
+  state.coveragePolys = [];
+  state.coverageCells.clear();
+  state.acres = 0;
+  state.bushels = 0;
+  state.gallons = 0;
+  state.efficiencyHits = 0;
+  state.efficiencyAttempts = 0;
+  // Refresh metrics
+  $
 // 🆕 North-Up / Heading-Up toggle
 $("btnOrient").addEventListener("click", () => {
   state.headingUp = !state.headingUp;
@@ -387,11 +428,13 @@ function startSession() {
   $("btnStop").disabled  = false;
   setMode("RUNNING");
 
-  state.watchId = navigator.geolocation.watchPosition(
+    state.watchId = navigator.geolocation.watchPosition(
     onPos,
     (err) => { console.warn(err); setGpsPill(false); },
     { enableHighAccuracy: true, maximumAge: 500, timeout: 10000 }
   );
+
+  requestWakeLock(); // 🆕 keep iPhone/iPad screen on during session
 }
 
 function stopSession() {
@@ -401,6 +444,7 @@ function stopSession() {
   $("btnStart").disabled = false;
   $("btnStop").disabled  = true;
   setMode("IDLE");
+  releaseWakeLock();  // 🆕 release iOS screen lock
 }
 
 // ============================================================
@@ -585,12 +629,22 @@ function updateMetrics(mph) {
   $("mAvgSpeed").textContent = avgSpeed.toFixed(1);
   $("mMaxSpeed").textContent = state.speedMax.toFixed(1);
 
-  // 🆕 Acres remaining = boundary acres − covered acres
+   // 🆕 Acres remaining = boundary acres − covered acres
+  let acresLeft = null;
   if (state.boundary.acres > 0) {
-    const left = Math.max(0, state.boundary.acres - state.acres);
-    $("mAcresLeft").textContent = left.toFixed(2);
+    acresLeft = Math.max(0, state.boundary.acres - state.acres);
+    $("mAcresLeft").textContent = acresLeft.toFixed(2);
   } else {
     $("mAcresLeft").textContent = "—";
+  }
+
+  // 🆕 ETA = Acres Left / Acres per Hour
+  const smoothedAcHr = avg(state.acHrBuf);
+  if (acresLeft != null && smoothedAcHr > 0.1) {
+    const etaHours = acresLeft / smoothedAcHr;
+    $("mETA").textContent = formatETA(etaHours);
+  } else {
+    $("mETA").textContent = "—";
   }
 
   const elapsedHr = (Date.now() - state.sessionStart) / 3600000;
