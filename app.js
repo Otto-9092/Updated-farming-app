@@ -37,7 +37,53 @@ const state = {
   trailSegments: [],      // array of google.maps.Polyline objects
   lastSpeedTier: null,    // "slow" | "ok" | "fast"
 };
+// 🆕 Speed tier vs target (target comes from Sprayer tab)
+function speedTier(mph) {
+  const target = state.sprayer.target || 12;
+  if (mph < target - 2) return "slow";
+  if (mph > target + 2) return "fast";
+  return "ok";
+}
 
+// 🆕 Color for marker + trail based on tier
+function colorForTier(tier) {
+  if (tier === "slow") return "#f1c40f"; // yellow
+  if (tier === "fast") return "#e74c3c"; // red
+  return "#2ecc71";                      // green = on target
+}
+
+// 🆕 Update the machine marker color to match current speed tier
+function updateMarkerColor(mph) {
+  const tier = speedTier(mph);
+  if (tier === state.lastSpeedTier) return; // no change → skip
+  state.lastSpeedTier = tier;
+  if (!state.machineMarker) return;
+  const icon = state.machineMarker.getIcon();
+  icon.fillColor = colorForTier(tier);
+  state.machineMarker.setIcon(icon);
+}
+
+// 🆕 Draw a single segment of the breadcrumb trail
+function addTrailSegment(p1, p2, mph) {
+  if (!state.trailEnabled || !state.map) return;
+  if (!p1 || !p2) return;
+  const color = colorForTier(speedTier(mph));
+  const seg = new google.maps.Polyline({
+    path: [p1, p2],
+    strokeColor: color,
+    strokeOpacity: 0.95,
+    strokeWeight: 3,
+    map: state.map,
+    zIndex: 2,
+  });
+  state.trailSegments.push(seg);
+}
+
+// 🆕 Wipe the breadcrumb trail off the map
+function clearTrail() {
+  state.trailSegments.forEach(s => s.setMap(null));
+  state.trailSegments = [];
+}
 // ===== Constants =====
 const FT_PER_METER = 3.28084;
 const SQFT_PER_ACRE = 43560;
@@ -166,7 +212,18 @@ $("btnAutoZoom").addEventListener("click", () => {
   btn.textContent = state.autoZoom ? "🔍 Auto-Zoom: ON" : "🔍 Auto-Zoom: OFF";
   btn.classList.toggle("active-toggle", state.autoZoom);
 });
+// 🆕 Trail on/off
+$("btnTrail").addEventListener("click", () => {
+  state.trailEnabled = !state.trailEnabled;
+  const btn = $("btnTrail");
+  btn.textContent = state.trailEnabled ? "📍 Trail: ON" : "📍 Trail: OFF";
+  btn.classList.toggle("active-toggle", state.trailEnabled);
+  // If turning off, optionally hide existing segments (keep them in memory)
+  state.trailSegments.forEach(s => s.setMap(state.trailEnabled ? state.map : null));
+});
 
+// 🆕 Clear trail button
+$("btnClearTrail").addEventListener("click", clearTrail);
 // 🆕 Calculate ideal zoom based on speed (mph)
 // Slow/stopped → close in. Fast → zoom out to see ahead.
 function zoomForSpeed(mph) {
@@ -212,6 +269,10 @@ function startSession() {
   state.coveragePolys = [];
   state.lastPos = null;
   state.speedBuf = []; state.acHrBuf = [];
+
+  // 🆕 Fresh trail per session
+  clearTrail();
+  state.lastSpeedTier = null;
 
   $("btnStart").disabled = true;
   $("btnStop").disabled  = false;
@@ -270,6 +331,18 @@ function onPos(pos) {
 
   // 🆕 Apply auto-zoom + heading-up
   applyMapView(smoothMph);
+
+  // 🆕 Speed-based marker color
+  updateMarkerColor(smoothMph);
+
+  // 🆕 Draw breadcrumb trail segment (skip while in boundary mode)
+  if (!state.boundary.active && state.lastPos) {
+    addTrailSegment(
+      { lat: state.lastPos.lat, lng: state.lastPos.lng },
+      { lat, lng },
+      smoothMph
+    );
+  }
 
   // Boundary mode → store only, no painting
   if (state.boundary.active) {
