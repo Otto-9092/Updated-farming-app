@@ -282,52 +282,142 @@ input, select {
   color: #1a1a1a;
 }
 /* ============================================================
-   EQUIPMENT SUB-MENUS — type-specific parameter panels
+   EQUIPMENT MODAL — pop-up parameter editor
    ============================================================ */
 
-.eq-submenu {
-  margin-top: 12px;
-  padding: 12px;
-  background: #1a1d23;
-  border: 1px solid #333;
-  border-radius: 8px;
-  border-left: 4px solid #ffb703;
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  animation: fadeIn 0.18s ease-out;
 }
 
-.eq-submenu.hidden {
+.modal-overlay.hidden {
   display: none;
 }
 
-.sub-title {
-  font-size: 15px;
+.modal-card {
+  background: #15181d;
+  border: 1px solid #333;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.22s ease-out;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #2a2d33;
+}
+
+.modal-title {
+  font-size: 17px;
   font-weight: bold;
   color: #ffb703;
-  margin-bottom: 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #333;
 }
 
-.eq-submenu label {
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #aaa;
+  font-size: 22px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-close:hover, .modal-close:active {
+  background: #2a2d33;
+  color: #fff;
+}
+
+.modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-body label {
   display: block;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #ddd;
 }
 
-.eq-submenu textarea {
+.modal-body input,
+.modal-body select,
+.modal-body textarea {
+  display: block;
   width: 100%;
-  padding: 8px;
-  font-size: 16px;
+  margin-top: 4px;
+  padding: 10px;
+  font-size: 16px;            /* prevents iOS zoom */
   border: 1px solid #444;
   border-radius: 6px;
   background: #0e0e0e;
   color: #fff;
   box-sizing: border-box;
   font-family: inherit;
+}
+
+.modal-body input:focus,
+.modal-body select:focus,
+.modal-body textarea:focus {
+  outline: none;
+  border-color: #ffb703;
+  box-shadow: 0 0 0 2px rgba(255, 183, 3, 0.25);
+}
+
+.modal-body textarea {
   resize: vertical;
 }
 
-.eq-submenu .hint {
+.modal-body .hint {
   font-size: 12px;
   color: #9aa0a6;
   margin-top: -4px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid #2a2d33;
+}
+
+.modal-footer .btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 15px;
+}
+
+/* Sub-menu visibility — only one shows at a time inside the modal */
+.eq-submenu.hidden {
+  display: none;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
 }
