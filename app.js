@@ -525,19 +525,24 @@ function updateMetrics(mph) {
   $("mGal").textContent = state.gallons.toFixed(1);
 
   if (state.equipment.type === "sprayer") {
-    const gpm = (state.sprayer.gpa * mph * state.equipment.width) / 495;
-    state.liveGPM = gpm;
-    $("mGpm").textContent = gpm.toFixed(1);
-    $("spLiveGpm").textContent = gpm.toFixed(1);
-    const nozzlesPerSide = Math.max(1, Math.round((state.equipment.width * 12) / state.sprayer.nozzle));
-    $("spNozGpm").textContent = (gpm / nozzlesPerSide).toFixed(2);
-  }
+  const gpm = (state.sprayer.gpa * mph * state.equipment.width) / 495;
+  state.liveGPM = gpm;
+  $("mGpm").textContent = gpm.toFixed(1);
+
+  // Per-nozzle GPM = total GPM ÷ total number of nozzles across full boom
+  const totalNozzles = Math.max(1, Math.round((state.equipment.width * 12) / state.sprayer.nozzle));
+  const perNozzle = gpm / totalNozzles;
+  const nozEl = $("mNozGpm");
+  if (nozEl) nozEl.textContent = perNozzle.toFixed(2);
+}
 }
 
 function applyEquipmentUI() {
   const isSprayer = state.equipment.type === "sprayer";
   $("mGalBox").classList.toggle("hidden", !isSprayer);
   $("mGpmBox").classList.toggle("hidden", !isSprayer);
+  const nozBox = $("mNozGpmBox");
+  if (nozBox) nozBox.classList.toggle("hidden", !isSprayer);
   $("mBuBox").classList.toggle("hidden",   isSprayer);
 }
 
@@ -623,9 +628,11 @@ function readFormsIntoState() {
   state.equipment.name  = $("eqName").value || "Machine";
   state.equipment.type  = $("eqType").value;
   state.equipment.width = Math.max(1, parseFloat($("eqWidth").value) || 90);
-  state.sprayer.gpa    = parseFloat($("spGPA").value) || 15;
-  state.sprayer.nozzle = parseFloat($("spNoz").value) || 20;
-  state.sprayer.target = parseFloat($("spTgt").value) || 12;
+  // Sprayer fields are optional until C2 moves them into the equipment sub-menu
+  const spGPA = $("spGPA"), spNoz = $("spNoz"), spTgt = $("spTgt");
+  if (spGPA) state.sprayer.gpa    = parseFloat(spGPA.value) || 15;
+  if (spNoz) state.sprayer.nozzle = parseFloat(spNoz.value) || 20;
+  if (spTgt) state.sprayer.target = parseFloat(spTgt.value) || 12;
   applyEquipmentUI();
 }
 $("eqType").addEventListener("change", () => { state.equipment.type = $("eqType").value; applyEquipmentUI(); });
