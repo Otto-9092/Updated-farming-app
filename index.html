@@ -39,18 +39,20 @@
     <div class="map-wrap">
       <div id="map"></div>
 
-      <!-- Overlay: live metrics -->
-      <div class="metrics">
-        <div class="metric"><div class="m-label">Speed</div><div class="m-val"><span id="mSpeed">0.0</span> <small>mph</small></div></div>
-        <div class="metric"><div class="m-label">Acres</div><div class="m-val"><span id="mAcres">0.00</span></div></div>
-        <div class="metric"><div class="m-label">Acres/hr</div><div class="m-val"><span id="mAcHr">0.0</span></div></div>
-        <div class="metric"><div class="m-label">Efficiency</div><div class="m-val"><span id="mEff">0</span><small>%</small></div></div>
-        <div class="metric" id="mBuBox"><div class="m-label">Bushels</div><div class="m-val"><span id="mBu">0</span></div></div>
-        <div class="metric hidden" id="mGalBox"><div class="m-label">Gallons</div><div class="m-val"><span id="mGal">0.0</span></div></div>
-        <div class="metric hidden" id="mGpmBox"><div class="m-label">GPM</div><div class="m-val"><span id="mGpm">0.0</span></div></div>
-      </div>
-    </div>
-
+     <!-- Overlay: live metrics -->
+<div class="metrics">
+  <div class="metric"><div class="m-label">Speed</div><div class="m-val"><span id="mSpeed">0.0</span> <small>mph</small></div></div>
+  <div class="metric"><div class="m-label">Avg Speed</div><div class="m-val"><span id="mAvgSpeed">0.0</span> <small>mph</small></div></div>
+  <div class="metric"><div class="m-label">Max Speed</div><div class="m-val"><span id="mMaxSpeed">0.0</span> <small>mph</small></div></div>
+  <div class="metric"><div class="m-label">Acres</div><div class="m-val"><span id="mAcres">0.00</span></div></div>
+  <div class="metric"><div class="m-label">Acres Left</div><div class="m-val"><span id="mAcresLeft">—</span></div></div>
+  <div class="metric"><div class="m-label">Acres/hr</div><div class="m-val"><span id="mAcHr">0.0</span></div></div>
+  <div class="metric"><div class="m-label">Efficiency</div><div class="m-val"><span id="mEff">0</span><small>%</small></div></div>
+  <div class="metric" id="mBuBox"><div class="m-label">Bushels</div><div class="m-val"><span id="mBu">0</span></div></div>
+  <div class="metric hidden" id="mGalBox"><div class="m-label">Gallons</div><div class="m-val"><span id="mGal">0.0</span></div></div>
+  <div class="metric hidden" id="mGpmBox"><div class="m-label">GPM</div><div class="m-val"><span id="mGpm">0.0</span></div></div>
+</div>
+      
     <!-- Section Control -->
     <div class="card">
       <div class="card-title">Section Control</div>
@@ -80,9 +82,13 @@
     <button id="btnAutoZoom" class="btn active-toggle">🔍 Auto-Zoom: ON</button>
   </div>
   <div class="btn-row">
-    <button id="btnTrail" class="btn active-toggle">📍 Trail: ON</button>
-    <button id="btnClearTrail" class="btn btn-ghost">Clear Trail</button>
-  </div>
+  <button id="btnTrail" class="btn active-toggle">📍 Trail: ON</button>
+  <button id="btnClearTrail" class="btn btn-ghost">Clear Trail</button>
+</div>
+<div class="btn-row">
+  <button id="btnExportKML" class="btn">⬇️ Export KML</button>
+  <button id="btnExportGPX" class="btn">⬇️ Export GPX</button>
+</div>
   <div class="hint">North-Up keeps the map fixed. Heading-Up rotates so your travel direction is always at the top.</div>
   <div class="hint">Auto-Zoom: zooms out as you speed up, zooms in when slow or stopped.</div>
   <div class="hint">Trail: draws a breadcrumb line of where you've been (color = speed).</div>
