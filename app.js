@@ -861,12 +861,17 @@ function downloadFile(filename, content, mime) {
 }
 
 // ============================================================
-// REPORTS
+// REPORTS — with rename, search, filter, sort
 // ============================================================
+
+// Save current session as a new report
 $("btnSave").addEventListener("click", () => {
   const id = "REP-" + Date.now();
+  const defaultName = state.field.name || "Untitled Field";
   const rep = {
-    id, date: new Date().toISOString(),
+    id,
+    name: defaultName,                        // editable display name
+    date: new Date().toISOString(),
     field: { ...state.field },
     equipment: { ...state.equipment },
     sprayer: { ...state.sprayer },
@@ -883,45 +888,156 @@ $("btnSave").addEventListener("click", () => {
   all[id] = rep;
   localStorage.setItem(LS_REPS, JSON.stringify(all));
   loadReportsList();
-  alert("Report saved: " + id);
+  alert("Report saved: " + defaultName);
 });
-function loadReportsList() {
+
+// Get all reports as an array, applying search + filter + sort
+function getFilteredReports() {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
-  const sel = $("repSelect"); sel.innerHTML = "";
-  Object.values(all).sort((a,b) => b.date.localeCompare(a.date)).forEach(r => {
+  let list = Object.values(all);
+
+  // Backfill name for old reports that don't have one
+  list.forEach(r => { if (!r.name) r.name = (r.field && r.field.name) || r.id; });
+
+  // --- Search ---
+  const searchEl = $("repSearch");
+  const q = (searchEl && searchEl.value ? searchEl.value : "").trim().toLowerCase();
+  if (q) {
+    list = list.filter(r => {
+      const hay = [
+        r.name, r.id,
+        r.field && r.field.name, r.field && r.field.crop, r.field && r.field.variety,
+        r.equipment && r.equipment.name, r.equipment && r.equipment.type,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  // --- Date filter ---
+  const dfEl = $("repDateFilter");
+  const df = dfEl ? dfEl.value : "all";
+  if (df !== "all") {
+    const now = Date.now();
+    const day = 86400000;
+    const cutoffs = {
+      today: now - day,
+      "7d":  now - 7 * day,
+      "30d": now - 30 * day,
+      year:  new Date(new Date().getFullYear(), 0, 1).getTime(),
+    };
+    const cutoff = cutoffs[df];
+    if (cutoff != null) list = list.filter(r => new Date(r.date).getTime() >= cutoff);
+  }
+
+  // --- Sort ---
+  const sortEl = $("repSort");
+  const sort = sortEl ? sortEl.value : "date_desc";
+  list.sort((a, b) => {
+    switch (sort) {
+      case "date_asc":   return a.date.localeCompare(b.date);
+      case "name_asc":   return (a.name || "").localeCompare(b.name || "");
+      case "acres_desc": return (b.acres || 0) - (a.acres || 0);
+      case "date_desc":
+      default:           return b.date.localeCompare(a.date);
+    }
+  });
+
+  return list;
+}
+
+// Render the filtered list into the <select>
+function loadReportsList() {
+  const sel = $("repSelect");
+  if (!sel) return;
+  const prevSelected = sel.value;
+  const list = getFilteredReports();
+  sel.innerHTML = "";
+
+  list.forEach(r => {
     const o = document.createElement("option");
-    o.value = r.id; o.textContent = `${r.id} — ${r.field.name} (${r.acres} ac)`;
+    o.value = r.id;
+    const dateStr = new Date(r.date).toLocaleDateString();
+    const acresStr = (r.acres || 0).toFixed(1).padStart(6);
+    o.textContent = `${dateStr}  ${acresStr} ac  ${r.name}`;
     sel.appendChild(o);
   });
+
+  // Restore selection if still present
+  if (prevSelected && list.some(r => r.id === prevSelected)) sel.value = prevSelected;
+
+  // Update count display
+  const total = Object.keys(JSON.parse(localStorage.getItem(LS_REPS) || "{}")).length;
+  const countEl = $("repCount");
+  if (countEl) {
+    countEl.textContent = list.length === total
+      ? `${total} report${total !== 1 ? "s" : ""}`
+      : `Showing ${list.length} of ${total}`;
+  }
 }
+
+// Wire up search + filter + sort to re-render live
+["repSearch", "repDateFilter", "repSort"].forEach(id => {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener("input", loadReportsList);
+  el.addEventListener("change", loadReportsList);
+});
+
+// View
 $("btnViewRep").addEventListener("click", () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   const r = all[$("repSelect").value];
-  if (!r) return;
+  if (!r) return alert("Select a report first.");
   $("repBody").textContent = formatReport(r);
 });
+
+// Rename — NEW
+if ($("btnRenameRep")) $("btnRenameRep").addEventListener("click", () => {
+  const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
+  const id = $("repSelect").value;
+  const r = all[id];
+  if (!r) return alert("Select a report to rename.");
+  const current = r.name || (r.field && r.field.name) || id;
+  const next = prompt("New report name:", current);
+  if (next == null) return;                       // user hit cancel
+  const trimmed = next.trim();
+  if (!trimmed) return alert("Name cannot be empty.");
+  r.name = trimmed;
+  all[id] = r;
+  localStorage.setItem(LS_REPS, JSON.stringify(all));
+  loadReportsList();
+  $("repSelect").value = id;                      // keep selection
+  $("repBody").textContent = formatReport(r);     // refresh detail
+});
+
+// Delete
 $("btnDeleteRep").addEventListener("click", () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
-  delete all[$("repSelect").value];
+  const id = $("repSelect").value;
+  if (!id || !all[id]) return alert("Select a report to delete.");
+  if (!confirm(`Delete report "${all[id].name || id}"? This cannot be undone.`)) return;
+  delete all[id];
   localStorage.setItem(LS_REPS, JSON.stringify(all));
   loadReportsList();
   $("repBody").textContent = "Select a report…";
 });
+
+// Print to PDF
 $("btnPdfRep").addEventListener("click", () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   const r = all[$("repSelect").value];
   if (!r) return alert("Select a report first.");
   const html = `
-    <html><head><title>${r.id}</title>
+    <html><head><title>${r.name || r.id}</title>
     <style>body{font-family:Arial;padding:30px;color:#111}h1{margin:0 0 8px}
     h2{margin:20px 0 6px;border-bottom:1px solid #ccc;padding-bottom:4px}
     table{width:100%;border-collapse:collapse;margin-top:6px}
     td{padding:6px 8px;border-bottom:1px solid #eee}td:first-child{color:#555;width:40%}
     </style></head><body>
-    <h1>🚜 Diamond O Farms — Field Report</h1>
-    <div>${new Date(r.date).toLocaleString()}</div>
+    <h1>🚜 Diamond O Farms — ${r.name || "Field Report"}</h1>
+    <div>${new Date(r.date).toLocaleString()} &nbsp;·&nbsp; ${r.id}</div>
     <h2>Field</h2><table>
-      <tr><td>Name</td><td>${r.field.name}</td></tr>
+      <tr><td>Field</td><td>${r.field.name}</td></tr>
       <tr><td>Crop</td><td>${r.field.crop}</td></tr>
       <tr><td>Variety</td><td>${r.field.variety || "—"}</td></tr>
       <tr><td>Boundary Acres</td><td>${r.boundaryAcres}</td></tr>
@@ -950,8 +1066,10 @@ $("btnPdfRep").addEventListener("click", () => {
   const w = window.open("", "_blank");
   w.document.write(html); w.document.close();
 });
+
 function formatReport(r) {
   return [
+    `Name:      ${r.name || "(unnamed)"}`,
     `ID:        ${r.id}`,
     `Date:      ${new Date(r.date).toLocaleString()}`,
     `Field:     ${r.field.name} (${r.field.crop}${r.field.variety ? " / " + r.field.variety : ""})`,
@@ -964,7 +1082,6 @@ function formatReport(r) {
     `Gallons:   ${r.gallons}`,
   ].join("\n");
 }
-
 // ============================================================
 // UTILITIES
 // ============================================================
