@@ -30,6 +30,7 @@ const state = {
   // Map view options
   headingUp: false,
   autoZoom: true,
+  autoCenter: true,
   currentHeading: 0,
   lastZoom: 19,
   // Trail + speed coloring
@@ -232,7 +233,7 @@ function startLocationFollow() {
       const lng = pos.coords.longitude;
       setGpsPill(true);
       if (state.machineMarker) state.machineMarker.setPosition({ lat, lng });
-      if (state.map) state.map.panTo({ lat, lng });
+      if (state.map && state.autoCenter) state.map.panTo({ lat, lng });
       if (!state.running) state.lastPos = { lat, lng, ts: pos.timestamp || Date.now() };
       const mph = pos.coords.speed != null ? pos.coords.speed * MPS_TO_MPH : 0;
       if (pos.coords.heading != null && !isNaN(pos.coords.heading)) state.currentHeading = pos.coords.heading;
@@ -273,7 +274,7 @@ function onPos(pos) {
     icon.rotation = state.headingUp ? 0 : heading;
     state.machineMarker.setIcon(icon);
   }
-  state.map.panTo({ lat, lng });
+  if (state.autoCenter) state.map.panTo({ lat, lng });
 
   applyMapView(smoothMph);
   updateMarkerColor(smoothMph);
@@ -718,6 +719,16 @@ if ($("btnAutoZoom")) $("btnAutoZoom").addEventListener("click", () => {
   const btn = $("btnAutoZoom");
   btn.textContent = state.autoZoom ? "🔍 Auto-Zoom: ON" : "🔍 Auto-Zoom: OFF";
   btn.classList.toggle("active-toggle", state.autoZoom);
+});
+if ($("btnAutoCenter")) $("btnAutoCenter").addEventListener("click", () => {
+  state.autoCenter = !state.autoCenter;
+  const btn = $("btnAutoCenter");
+  btn.textContent = state.autoCenter ? "🎯 Auto-Center: ON" : "🎯 Auto-Center: OFF";
+  btn.classList.toggle("active-toggle", state.autoCenter);
+  // When re-enabling, snap back to the machine immediately
+  if (state.autoCenter && state.lastPos && state.map) {
+    state.map.panTo({ lat: state.lastPos.lat, lng: state.lastPos.lng });
+  }
 });
 if ($("btnTrail")) $("btnTrail").addEventListener("click", () => {
   state.trailEnabled = !state.trailEnabled;
