@@ -139,3 +139,9 @@ input, select {
 @media (max-width: 480px) {
   .metrics { grid-template-columns: repeat(2, 1fr); }
 }
+/* 🆕 Toggle button highlight */
+.btn.active-toggle {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent);
+}
