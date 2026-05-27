@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Diamond O Farms — Data Systems Pro</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ============== HEADER ============== -->
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">🚜</span>
+    <div>
+      <div class="title">Diamond O Farms</div>
+      <div class="subtitle">Data Systems Pro</div>
+    </div>
+  </div>
+  <div class="status-pills">
+    <span id="gpsPill" class="pill pill-bad">GPS: OFF</span>
+    <span id="modePill" class="pill">IDLE</span>
+  </div>
+</header>
+
+<!-- ============== TABS ============== -->
+<nav class="tabs">
+  <button class="tab active" data-tab="operate">Operate</button>
+  <button class="tab" data-tab="setup">Field & Equipment</button>
+  <button class="tab" data-tab="sprayer">Sprayer</button>
+  <button class="tab" data-tab="reports">Reports</button>
+</nav>
+
+<!-- ============== MAIN ============== -->
+<main>
+
+  <!-- ===== OPERATE TAB ===== -->
+  <section id="tab-operate" class="tab-panel active">
+    <div class="map-wrap">
+      <div id="map"></div>
+
+      <!-- Overlay: live metrics -->
+      <div class="metrics">
+        <div class="metric"><div class="m-label">Speed</div><div class="m-val"><span id="mSpeed">0.0</span> <small>mph</small></div></div>
+        <div class="metric"><div class="m-label">Acres</div><div class="m-val"><span id="mAcres">0.00</span></div></div>
+        <div class="metric"><div class="m-label">Acres/hr</div><div class="m-val"><span id="mAcHr">0.0</span></div></div>
+        <div class="metric"><div class="m-label">Efficiency</div><div class="m-val"><span id="mEff">0</span><small>%</small></div></div>
+        <div class="metric" id="mBuBox"><div class="m-label">Bushels</div><div class="m-val"><span id="mBu">0</span></div></div>
+        <div class="metric hidden" id="mGalBox"><div class="m-label">Gallons</div><div class="m-val"><span id="mGal">0.0</span></div></div>
+        <div class="metric hidden" id="mGpmBox"><div class="m-label">GPM</div><div class="m-val"><span id="mGpm">0.0</span></div></div>
+      </div>
+    </div>
+
+    <!-- Section Control -->
+    <div class="card">
+      <div class="card-title">Section Control</div>
+      <div class="sections">
+        <button id="secLeft"  class="sec-btn">LEFT ½</button>
+        <button id="secFull"  class="sec-btn active">FULL</button>
+        <button id="secRight" class="sec-btn">RIGHT ½</button>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="card">
+      <div class="card-title">Session</div>
+      <div class="btn-row">
+        <button id="btnStart"   class="btn btn-primary">▶ Start Session</button>
+        <button id="btnStop"    class="btn btn-danger"  disabled>■ Stop</button>
+        <button id="btnSave"    class="btn">💾 Save Report</button>
+      </div>
+    </div>
+
+    <!-- Boundary -->
+    <div class="card">
+      <div class="card-title">Field Boundary</div>
+      <div class="btn-row">
+        <button id="btnBoundStart"  class="btn">▶ Start Boundary</button>
+        <button id="btnBoundFinish" class="btn" disabled>■ Finish Boundary</button>
+        <button id="btnBoundClear"  class="btn btn-ghost">Clear</button>
+      </div>
+      <div class="hint">When boundary mode is ON, GPS points are stored without painting. Drive the perimeter, then finish.</div>
+      <div class="hint" id="boundAcresLine">Boundary acres: <b id="boundAcres">0.00</b></div>
+    </div>
+
+    <!-- A-B Guidance -->
+    <div class="card">
+      <div class="card-title">A-B Guidance</div>
+      <div class="btn-row">
+        <button id="btnSetA" class="btn">Set A</button>
+        <button id="btnSetB" class="btn">Set B</button>
+        <button id="btnClearAB" class="btn btn-ghost">Clear</button>
+      </div>
+      <div class="hint">Drops A, then B at current GPS — draws straight reference line.</div>
+    </div>
+  </section>
+
+  <!-- ===== SETUP TAB ===== -->
+  <section id="tab-setup" class="tab-panel">
+    <div class="card">
+      <div class="card-title">Field Setup</div>
+      <label>Field Name <input id="fldName" type="text" placeholder="e.g. North 80" /></label>
+      <label>Crop
+        <select id="fldCrop">
+          <option>Corn</option><option>Soybeans</option><option>Wheat</option>
+          <option>Cotton</option><option>Sorghum</option><option>Other</option>
+        </select>
+      </label>
+      <label>Variety <input id="fldVariety" type="text" placeholder="e.g. P1197AM" /></label>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Equipment Library</div>
+      <label>Machine Name <input id="eqName" type="text" placeholder="e.g. JD 4730" /></label>
+      <label>Type
+        <select id="eqType">
+          <option value="sprayer">Sprayer</option>
+          <option value="combine">Combine</option>
+          <option value="planter">Planter</option>
+          <option value="tillage">Tillage</option>
+        </select>
+      </label>
+      <label>Working Width (ft) <input id="eqWidth" type="number" value="90" min="1" /></label>
+
+      <div class="btn-row">
+        <button id="btnSaveEq" class="btn btn-primary">💾 Save Machine</button>
+      </div>
+
+      <label>Load Saved Machine
+        <select id="eqLoad"></select>
+      </label>
+      <div class="btn-row">
+        <button id="btnLoadEq"   class="btn">Load</button>
+        <button id="btnDeleteEq" class="btn btn-ghost">Delete</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SPRAYER TAB ===== -->
+  <section id="tab-sprayer" class="tab-panel">
+    <div class="card">
+      <div class="card-title">Sprayer Calibration</div>
+      <label>GPA (gallons / acre) <input id="spGPA" type="number" value="15" step="0.1" /></label>
+      <label>Nozzle Spacing (in) <input id="spNoz" type="number" value="20" step="0.5" /></label>
+      <label>Target Speed (mph) <input id="spTgt" type="number" value="12" step="0.1" /></label>
+      <div class="hint">GPM = (GPA × Speed × Width<sub>ft</sub>) / 495</div>
+      <div class="hint">Live GPM: <b id="spLiveGpm">0.0</b></div>
+      <div class="hint">Per-nozzle GPM: <b id="spNozGpm">0.00</b></div>
+    </div>
+  </section>
+
+  <!-- ===== REPORTS TAB ===== -->
+  <section id="tab-reports" class="tab-panel">
+    <div class="card">
+      <div class="card-title">Saved Reports</div>
+      <label>Session
+        <select id="repSelect"></select>
+      </label>
+      <div class="btn-row">
+        <button id="btnViewRep"   class="btn">View</button>
+        <button id="btnPdfRep"    class="btn btn-primary">📄 Export PDF</button>
+        <button id="btnDeleteRep" class="btn btn-ghost">Delete</button>
+      </div>
+      <pre id="repBody" class="report-body">Select a report…</pre>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============== CONFIG ============== -->
+<!-- Put your Google Maps API key in config.js -->
+<script src="config.js"></script>
+<script src="app.js"></script>
+<!-- Google Maps loader (uses key from config.js) -->
+<script>
+  (function () {
+    var s = document.createElement('script');
+    s.src = "https://maps.googleapis.com/maps/api/js?key=" + window.GOOGLE_MAPS_API_KEY +
+            "&libraries=geometry&callback=initMap";
+    s.async = true; s.defer = true;
+    document.head.appendChild(s);
+  })();
+</script>
+</body>
+</html>
