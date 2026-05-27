@@ -281,3 +281,53 @@ input, select {
   background: #ffb703;
   color: #1a1a1a;
 }
+/* ============================================================
+   EQUIPMENT SUB-MENUS — type-specific parameter panels
+   ============================================================ */
+
+.eq-submenu {
+  margin-top: 12px;
+  padding: 12px;
+  background: #1a1d23;
+  border: 1px solid #333;
+  border-radius: 8px;
+  border-left: 4px solid #ffb703;
+}
+
+.eq-submenu.hidden {
+  display: none;
+}
+
+.sub-title {
+  font-size: 15px;
+  font-weight: bold;
+  color: #ffb703;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #333;
+}
+
+.eq-submenu label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.eq-submenu textarea {
+  width: 100%;
+  padding: 8px;
+  font-size: 16px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #0e0e0e;
+  color: #fff;
+  box-sizing: border-box;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.eq-submenu .hint {
+  font-size: 12px;
+  color: #9aa0a6;
+  margin-top: -4px;
+  margin-bottom: 8px;
+}
