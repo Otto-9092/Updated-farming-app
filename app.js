@@ -785,8 +785,9 @@ function readFormsIntoState() {
 $("eqType").addEventListener("change", () => { state.equipment.type = $("eqType").value; applyEquipmentUI(); });
 
 // Equipment library (localStorage)
-const LS_EQ   = "dof_equipment_library";
-const LS_REPS = "dof_reports";
+const LS_EQ     = "dof_equipment_library";
+const LS_REPS   = "dof_reports";
+const LS_FIELDS = "dof_fields_library";
 
 function loadEquipmentList() {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
@@ -993,7 +994,80 @@ function extendLine(a, b, meters) {
   const back = (brg + 180) % 360;
   return [ offsetMeters(a.lat, a.lng, back, meters), offsetMeters(b.lat, b.lng, brg, meters) ];
 }
+// ============================================================
+// 🆕 MULTI-FIELD SUPPORT
+// ============================================================
+function loadFieldsList() {
+  const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+  const sel = $("fldLoad");
+  if (!sel) return;
+  sel.innerHTML = "";
+  Object.keys(lib).forEach(k => {
+    const o = document.createElement("option");
+    o.value = k; o.textContent = k;
+    sel.appendChild(o);
+  });
+}
 
+$("btnSaveField") && $("btnSaveField").addEventListener("click", () => {
+  const name = $("fldName").value.trim();
+  if (!name) return alert("Please enter a field name first.");
+
+  const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+  lib[name] = {
+    name,
+    crop:    $("fldCrop").value,
+    variety: $("fldVariety").value,
+    boundary: {
+      points: state.boundary.points.slice(),
+      acres:  state.boundary.acres,
+    },
+    savedAt: new Date().toISOString(),
+  };
+  localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
+  state.loadedFieldKey = name;
+  $("fldStatus").textContent = `Saved field: ${name} (${lib[name].boundary.acres.toFixed(2)} ac)`;
+  loadFieldsList();
+});
+
+$("btnLoadField") && $("btnLoadField").addEventListener("click", () => {
+  const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+  const k = $("fldLoad").value;
+  if (!k || !lib[k]) return;
+  const f = lib[k];
+
+  // Populate form
+  $("fldName").value    = f.name;
+  $("fldCrop").value    = f.crop || "Corn";
+  $("fldVariety").value = f.variety || "";
+  state.field = { name: f.name, crop: f.crop, variety: f.variety };
+
+  // Restore boundary
+  if (state.boundary.poly) { state.boundary.poly.setMap(null); state.boundary.poly = null; }
+  state.boundary.points = (f.boundary && f.boundary.points) || [];
+  state.boundary.acres  = (f.boundary && f.boundary.acres)  || 0;
+  if (state.boundary.points.length >= 3 && state.map) {
+    drawBoundaryFinal();
+    // Zoom to the field
+    const bounds = new google.maps.LatLngBounds();
+    state.boundary.points.forEach(p => bounds.extend(p));
+    state.map.fitBounds(bounds);
+  }
+  $("boundAcres").textContent = state.boundary.acres.toFixed(2);
+  $("fldStatus").textContent = `Loaded: ${f.name} (${state.boundary.acres.toFixed(2)} ac)`;
+  state.loadedFieldKey = k;
+});
+
+$("btnDeleteField") && $("btnDeleteField").addEventListener("click", () => {
+  const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+  const k = $("fldLoad").value;
+  if (!k) return;
+  if (!confirm(`Delete field "${k}"?`)) return;
+  delete lib[k];
+  localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
+  loadFieldsList();
+  $("fldStatus").textContent = `Deleted: ${k}`;
+});
 // ============================================================
 // INIT
 // ============================================================
