@@ -113,14 +113,7 @@ document.querySelectorAll(".tab").forEach((t) => {
 // MAP INIT
 // ============================================================
 function initMap() {
-  state.map = new google.maps.Map($("map"), {
-    center: { lat: 41.5868, lng: -93.625 },
-    zoom: 17,
-    mapTypeId: "satellite",
-    tilt: 0,
-    disableDefaultUI: true,
-    zoomControl: true,
-  });
+state.map = new google.maps.
 
   state.machineMarker = new google.maps.Marker({
     map: state.map,
