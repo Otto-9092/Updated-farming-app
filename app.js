@@ -23,10 +23,15 @@ const state = {
   abLine: { a: null, b: null, poly: null },
   boundary: { active: false, points: [], poly: null, acres: 0 },
   coveragePolys: [],          // painted polygons
-  field: { name: "", crop: "Corn", variety: "" },
+    field: { name: "", crop: "Corn", variety: "" },
   equipment: { name: "", type: "sprayer", width: 90 }, // width in ft
   sprayer: { gpa: 15, nozzle: 20, target: 12 },
   sessionStart: null,
+  // 🆕 Map view options
+  headingUp: false,       // true = rotate map to travel direction
+  autoZoom: true,         // true = zoom changes based on speed
+  currentHeading: 0,      // last known heading
+  lastZoom: 19,           // remembered zoom so we don't fight the user
 };
 
 // ===== Constants =====
