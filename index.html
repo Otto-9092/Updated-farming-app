@@ -213,7 +213,33 @@
         <button id="btnDeleteEq" class="btn btn-ghost">🗑 Delete</button>
       </div>
     </div>
+    <!-- ============================================== -->
+    <!-- DATA BACKUP & SYNC                              -->
+    <!-- ============================================== -->
+    <div class="card">
+      <div class="card-title">💾 Backup & Sync</div>
 
+      <div class="hint" id="dataStats">
+        Loading data summary…
+      </div>
+
+      <div class="btn-row">
+        <button id="btnExportAll" class="btn btn-primary">📤 Export All Data</button>
+      </div>
+
+      <div class="btn-row">
+        <button id="btnImportAll" class="btn">📥 Import Data</button>
+        <input type="file" id="importFileInput" accept=".json,application/json" style="display:none" />
+      </div>
+
+      <div class="hint">
+        <b>How to sync between devices:</b><br>
+        1. On your computer: tap <b>Export All Data</b> — a file downloads<br>
+        2. AirDrop or email the file to your phone<br>
+        3. On your phone: tap <b>Import Data</b> → pick the file<br>
+        4. Choose <b>Merge</b> (safe — adds new) or <b>Replace</b> (wipes existing first)
+      </div>
+    </div>
   </section>
 
 <!-- ===== REPORTS TAB ===== -->
