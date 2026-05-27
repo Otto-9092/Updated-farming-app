@@ -8,4 +8,4 @@
 // IMPORTANT: For production, restrict your key by HTTP referrer
 // (e.g. https://YOUR-GITHUB-USERNAME.github.io/*)
 // ============================================================
-window.GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY_HERE";
+window.GOOGLE_MAPS_API_KEY = "AIzaSyCkhKfboH2vsdIF4p1zb6ObrWWD3Z8gqZ8";
