@@ -57,7 +57,7 @@ document.querySelectorAll(".tab").forEach((t) => {
 // ============================================================
 function initMap() {
   state.map = new google.maps.Map($("map"), {
-    center: { lat: 41.5868, lng: -93.625 }, // Iowa default
+    center: { lat: 41.5868, lng: -93.625 }, // temporary default
     zoom: 17,
     mapTypeId: "satellite",
     tilt: 0,
@@ -73,6 +73,21 @@ function initMap() {
       strokeColor: "#1a1a1a", strokeWeight: 2,
     },
   });
+
+  // 🆕 Snap to user's current location ASAP
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        state.map.setCenter(here);
+        state.map.setZoom(19);
+        state.machineMarker.setPosition(here);
+        setGpsPill(true);
+      },
+      (err) => console.warn("Initial GPS:", err),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
 }
 
 // ============================================================
