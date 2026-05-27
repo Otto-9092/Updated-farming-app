@@ -239,7 +239,15 @@ $("btnResetPaint").addEventListener("click", () => {
   state.efficiencyHits = 0;
   state.efficiencyAttempts = 0;
   // Refresh metrics
-  $
+  $("mAcres").textContent = "0.00";
+  $("mBu").textContent = "0";
+  $("mGal").textContent = "0.0";
+  $("mEff").textContent = "0";
+  $("mAcresLeft").textContent = state.boundary.acres > 0
+    ? state.boundary.acres.toFixed(2)
+    : "—";
+  $("mETA").textContent = "—";
+});
 // 🆕 North-Up / Heading-Up toggle
 $("btnOrient").addEventListener("click", () => {
   state.headingUp = !state.headingUp;
