@@ -256,11 +256,16 @@ function onPos(pos) {
   // Update marker
   state.machineMarker.setPosition({ lat, lng });
   if (heading != null && !isNaN(heading)) {
+    state.currentHeading = heading;
     const icon = state.machineMarker.getIcon();
-    icon.rotation = heading;
+    // In heading-up mode the map rotates, so the arrow icon stays "up"
+    icon.rotation = state.headingUp ? 0 : heading;
     state.machineMarker.setIcon(icon);
   }
   state.map.panTo({ lat, lng });
+
+  // 🆕 Apply auto-zoom + heading-up
+  applyMapView(smoothMph);
 
   // Boundary mode → store only, no painting
   if (state.boundary.active) {
