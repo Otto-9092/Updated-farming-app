@@ -746,13 +746,19 @@ function startLocationFollow() {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       setGpsPill(true);
-      // Always move marker + recenter map on user
+           // Always move marker + recenter map on user
       if (state.machineMarker) {
         state.machineMarker.setPosition({ lat, lng });
       }
       if (state.map) {
         state.map.panTo({ lat, lng });
       }
+      // 🆕 Apply zoom/rotation even when not in a session
+      const mph = pos.coords.speed != null ? pos.coords.speed * MPS_TO_MPH : 0;
+      if (pos.coords.heading != null && !isNaN(pos.coords.heading)) {
+        state.currentHeading = pos.coords.heading;
+      }
+      applyMapView(mph);
       // If a session isn't running, still update lastPos so A-B works
       if (!state.running) {
         state.lastPos = { lat, lng, ts: pos.timestamp || Date.now() };
