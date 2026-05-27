@@ -215,21 +215,53 @@
     </div>
   </section>
 
-  <!-- ===== REPORTS TAB ===== -->
-  <section id="tab-reports" class="tab-panel">
-    <div class="card">
-      <div class="card-title">Saved Reports</div>
-      <label>Session
-        <select id="repSelect"></select>
-      </label>
-      <div class="btn-row">
-        <button id="btnViewRep"   class="btn">View</button>
-        <button id="btnPdfRep"    class="btn btn-primary">📄 Export PDF</button>
-        <button id="btnDeleteRep" class="btn btn-ghost">Delete</button>
+<!-- ===== REPORTS TAB ===== -->
+<section id="tab-reports" class="tab-panel">
+  <div class="card">
+    <div class="card-title">Saved Reports</div>
+
+    <!-- Search + Filters -->
+    <div class="report-filters">
+      <input
+        type="text"
+        id="repSearch"
+        placeholder="🔍 Search by name, field, crop, equipment…"
+        class="report-search"
+      />
+      <div class="report-filter-row">
+        <select id="repDateFilter" class="report-filter">
+          <option value="all">All dates</option>
+          <option value="today">Today</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="year">This year</option>
+        </select>
+        <select id="repSort" class="report-filter">
+          <option value="date_desc">Newest first</option>
+          <option value="date_asc">Oldest first</option>
+          <option value="name_asc">Name A–Z</option>
+          <option value="acres_desc">Most acres</option>
+        </select>
       </div>
-      <pre id="repBody" class="report-body">Select a report…</pre>
+      <div id="repCount" class="report-count">—</div>
     </div>
-  </section>
+
+    <!-- Report List -->
+    <label>Session
+      <select id="repSelect" size="8" class="report-list"></select>
+    </label>
+
+    <!-- Action Buttons -->
+    <div class="btn-row">
+      <button id="btnViewRep"   class="btn">👁️ View</button>
+      <button id="btnRenameRep" class="btn">✏️ Rename</button>
+      <button id="btnPdfRep"    class="btn btn-primary">📄 Export PDF</button>
+      <button id="btnDeleteRep" class="btn btn-ghost">🗑️ Delete</button>
+    </div>
+
+    <pre id="repBody" class="report-body">Select a report…</pre>
+  </div>
+</section>
 
 </main>
 
