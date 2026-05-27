@@ -1425,10 +1425,189 @@ function extendLine(a, b, meters) {
   const back = (brg + 180) % 360;
   return [ offsetMeters(a.lat, a.lng, back, meters), offsetMeters(b.lat, b.lng, brg, meters) ];
 }
+// ============================================================
+// DATA EXPORT / IMPORT — sync between devices
+// ============================================================
+const BACKUP_VERSION = 1;
+const LS_BACKUP_ROLLBACK = "dof_last_rollback";
 
-// ============================================================
-// INIT
-// ============================================================
+// Summary text for the Backup card
+function updateDataStats() {
+  const el = $("dataStats");
+  if (!el) return;
+  const fields = Object.keys(JSON.parse(localStorage.getItem(LS_FIELDS) || "{}")).length;
+  const equip  = Object.keys(JSON.parse(localStorage.getItem(LS_EQ)     || "{}")).length;
+  const reps   = Object.keys(JSON.parse(localStorage.getItem(LS_REPS)   || "{}")).length;
+  el.innerHTML = `Currently stored on this device:<br>
+    <b>${fields}</b> field${fields !== 1 ? "s" : ""} ·
+    <b>${equip}</b> machine${equip !== 1 ? "s" : ""} ·
+    <b>${reps}</b> report${reps !== 1 ? "s" : ""}`;
+}
+
+// Build the full backup object
+function buildBackup() {
+  return {
+    app: "Diamond O Farms — Data Systems Pro",
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    fields:    JSON.parse(localStorage.getItem(LS_FIELDS) || "{}"),
+    equipment: JSON.parse(localStorage.getItem(LS_EQ)     || "{}"),
+    reports:   JSON.parse(localStorage.getItem(LS_REPS)   || "{}"),
+  };
+}
+
+// ===== Export =====
+$("btnExportAll")?.addEventListener("click", () => {
+  const backup = buildBackup();
+  const ts = new Date().toISOString().slice(0, 10);   // YYYY-MM-DD
+  const filename = `diamond-o-backup-${ts}.json`;
+  const json = JSON.stringify(backup, null, 2);
+  downloadFile(filename, json, "application/json");
+
+  const totals = {
+    fields:    Object.keys(backup.fields).length,
+    equipment: Object.keys(backup.equipment).length,
+    reports:   Object.keys(backup.reports).length,
+  };
+  alert(`✅ Exported successfully!\n\n` +
+        `${totals.fields} fields\n` +
+        `${totals.equipment} machines\n` +
+        `${totals.reports} reports\n\n` +
+        `File: ${filename}`);
+});
+
+// ===== Import =====
+$("btnImportAll")?.addEventListener("click", () => {
+  $("importFileInput").click();   // proxy click to hidden file input
+});
+
+$("importFileInput")?.addEventListener("change", (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      handleImport(data);
+    } catch (err) {
+      alert("❌ That doesn't look like a valid backup file.\n\nError: " + err.message);
+    } finally {
+      // Reset the input so the same file can be picked again later
+      e.target.value = "";
+    }
+  };
+  reader.readAsText(file);
+});
+
+// Validate + ask user → merge or replace
+function handleImport(data) {
+  // Basic validation
+  if (!data || typeof data !== "object") {
+    return alert("❌ Invalid backup file: not a JSON object.");
+  }
+  if (data.app !== "Diamond O Farms — Data Systems Pro") {
+    return alert("❌ This file isn't a Diamond O Farms backup.");
+  }
+  if (typeof data.version !== "number") {
+    return alert("❌ Backup file is missing version info.");
+  }
+  if (data.version > BACKUP_VERSION) {
+    return alert(`❌ This backup was created by a newer version of the app (v${data.version}).\nUpdate the app and try again.`);
+  }
+
+  const incoming = {
+    fields:    Object.keys(data.fields    || {}).length,
+    equipment: Object.keys(data.equipment || {}).length,
+    reports:   Object.keys(data.reports   || {}).length,
+  };
+  const current = {
+    fields:    Object.keys(JSON.parse(localStorage.getItem(LS_FIELDS) || "{}")).length,
+    equipment: Object.keys(JSON.parse(localStorage.getItem(LS_EQ)     || "{}")).length,
+    reports:   Object.keys(JSON.parse(localStorage.getItem(LS_REPS)   || "{}")).length,
+  };
+
+  const summary =
+    `📥 Backup file contents:\n` +
+    `  • ${incoming.fields} fields\n` +
+    `  • ${incoming.equipment} machines\n` +
+    `  • ${incoming.reports} reports\n\n` +
+    `Currently on this device:\n` +
+    `  • ${current.fields} fields\n` +
+    `  • ${current.equipment} machines\n` +
+    `  • ${current.reports} reports\n\n` +
+    `Choose how to import:\n` +
+    `  OK  → MERGE (safe, adds incoming, keeps yours)\n` +
+    `  Cancel → choose REPLACE on next prompt`;
+
+  const mergeChoice = confirm(summary);
+
+  if (mergeChoice) {
+    performImport(data, "merge");
+  } else {
+    const replaceConfirmed = confirm(
+      "⚠️ REPLACE will DELETE all existing fields, machines, and reports on this device, " +
+      "then load the backup file's data.\n\n" +
+      "Your current data will be saved as a one-time rollback you can restore via the console.\n\n" +
+      "Are you sure you want to REPLACE?"
+    );
+    if (replaceConfirmed) performImport(data, "replace");
+  }
+}
+
+// Actually do the import
+function performImport(data, mode) {
+  // 1. Snapshot current state as rollback
+  const rollback = buildBackup();
+  localStorage.setItem(LS_BACKUP_ROLLBACK, JSON.stringify(rollback));
+
+  // 2. Merge or replace each library
+  if (mode === "replace") {
+    localStorage.setItem(LS_FIELDS, JSON.stringify(data.fields    || {}));
+    localStorage.setItem(LS_EQ,     JSON.stringify(data.equipment || {}));
+    localStorage.setItem(LS_REPS,   JSON.stringify(data.reports   || {}));
+  } else {
+    // merge: incoming keys win on conflict
+    const mergeLib = (lsKey, incoming) => {
+      const existing = JSON.parse(localStorage.getItem(lsKey) || "{}");
+      const merged = { ...existing, ...(incoming || {}) };
+      localStorage.setItem(lsKey, JSON.stringify(merged));
+    };
+    mergeLib(LS_FIELDS, data.fields);
+    mergeLib(LS_EQ,     data.equipment);
+    mergeLib(LS_REPS,   data.reports);
+  }
+
+  // 3. Reload all UI
+  loadFieldsList();
+  loadEquipmentList();
+  loadReportsList();
+  updateDataStats();
+
+  alert(`✅ Import complete (${mode === "replace" ? "REPLACED" : "MERGED"})!\n\n` +
+        `Your previous data is saved as a rollback in case you need it.\n` +
+        `To restore, open the browser console and run:\n\n` +
+        `  restoreRollback()`);
+}
+
+// Console-accessible rollback (in case the user regrets a replace)
+window.restoreRollback = function () {
+  const raw = localStorage.getItem(LS_BACKUP_ROLLBACK);
+  if (!raw) return alert("No rollback available.");
+  try {
+    const data = JSON.parse(raw);
+    if (!confirm("Restore previous data? This will OVERWRITE current fields/equipment/reports.")) return;
+    localStorage.setItem(LS_FIELDS, JSON.stringify(data.fields    || {}));
+    localStorage.setItem(LS_EQ,     JSON.stringify(data.equipment || {}));
+    localStorage.setItem(LS_REPS,   JSON.stringify(data.reports   || {}));
+    loadFieldsList();
+    loadEquipmentList();
+    loadReportsList();
+    updateDataStats();
+    alert("✅ Rollback restored.");
+  } catch (e) {
+    alert("Rollback file is corrupted: " + e.message);
+  }
+};
 window.addEventListener("DOMContentLoaded", () => {
   loadEquipmentList();
   loadReportsList();
@@ -1436,8 +1615,8 @@ window.addEventListener("DOMContentLoaded", () => {
   applyEquipmentUI();
   renderSectionButtons();
   startLocationFollow();
-  // Initialize the equipment sub-menu visibility + summary text
   showEqSubmenu($("eqType").value);
   updateEqSummary();
   updatePlanterCalcWidth();
+  updateDataStats();                    // ← initialize backup card summary
 });
