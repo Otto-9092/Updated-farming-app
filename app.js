@@ -1074,9 +1074,10 @@ $("btnDeleteField") && $("btnDeleteField").addEventListener("click", () => {
 window.addEventListener("DOMContentLoaded", () => {
   loadEquipmentList();
   loadReportsList();
+  loadFieldsList();      // 🆕 multi-field dropdown
   applyEquipmentUI();
   renderSectionButtons();
-  startLocationFollow();   // 🆕 start following GPS right away
+  startLocationFollow();
 });
 
 // 🆕 Follow user location even when not in a session
