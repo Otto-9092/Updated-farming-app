@@ -876,16 +876,16 @@ $("btnSaveEq").addEventListener("click", () => {
   readFormsIntoState();
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const type = state.equipment.type;
-  // Save core equipment fields + the per-type params object
   lib[state.equipment.name] = {
     name:  state.equipment.name,
     type:  type,
     width: state.equipment.width,
-    params: readEqParams(type).values,   // raw DOM values for the active sub-menu
+    params: readEqParams(type).values,
   };
   localStorage.setItem(LS_EQ, JSON.stringify(lib));
   loadEquipmentList();
   alert(`Saved: ${state.equipment.name}`);
+  if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
 
 $("btnLoadEq").addEventListener("click", () => {
@@ -917,6 +917,7 @@ $("btnDeleteEq").addEventListener("click", () => {
   delete lib[k];
   localStorage.setItem(LS_EQ, JSON.stringify(lib));
   loadEquipmentList();
+  if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
 
 // ============================================================
@@ -948,6 +949,7 @@ if ($("btnSaveField")) $("btnSaveField").addEventListener("click", () => {
   state.loadedFieldKey = name;
   if ($("fldStatus")) $("fldStatus").textContent = `Saved field: ${name} (${lib[name].boundary.acres.toFixed(2)} ac)`;
   loadFieldsList();
+  if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
 if ($("btnLoadField")) $("btnLoadField").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
@@ -980,6 +982,7 @@ if ($("btnDeleteField")) $("btnDeleteField").addEventListener("click", () => {
   localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
   loadFieldsList();
   if ($("fldStatus")) $("fldStatus").textContent = `Deleted: ${k}`;
+  if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
 
 // ============================================================
@@ -1119,7 +1122,7 @@ $("btnSave").addEventListener("click", () => {
   const defaultName = state.field.name || "Untitled Field";
   const rep = {
     id,
-    name: defaultName,                        // editable display name
+    name: defaultName,
     date: new Date().toISOString(),
     field: { ...state.field },
     equipment: { ...state.equipment },
@@ -1138,6 +1141,7 @@ $("btnSave").addEventListener("click", () => {
   localStorage.setItem(LS_REPS, JSON.stringify(all));
   loadReportsList();
   alert("Report saved: " + defaultName);
+  if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
 
 // Get all reports as an array, applying search + filter + sort
@@ -1269,6 +1273,7 @@ $("btnDeleteRep").addEventListener("click", () => {
   localStorage.setItem(LS_REPS, JSON.stringify(all));
   loadReportsList();
   $("repBody").textContent = "Select a report…";
+  if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
 
 // Print to PDF — with mobile-friendly back button
