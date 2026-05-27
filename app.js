@@ -32,6 +32,10 @@ const state = {
   autoZoom: true,         // true = zoom changes based on speed
   currentHeading: 0,      // last known heading
   lastZoom: 19,           // remembered zoom so we don't fight the user
+  // 🆕 Trail + speed coloring
+  trailEnabled: true,
+  trailSegments: [],      // array of google.maps.Polyline objects
+  lastSpeedTier: null,    // "slow" | "ok" | "fast"
 };
 
 // ===== Constants =====
