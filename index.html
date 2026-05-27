@@ -79,8 +79,20 @@
     <button id="btnOrient" class="btn">🧭 North-Up</button>
     <button id="btnAutoZoom" class="btn active-toggle">🔍 Auto-Zoom: ON</button>
   </div>
+  <div class="btn-row">
+    <button id="btnTrail" class="btn active-toggle">📍 Trail: ON</button>
+    <button id="btnClearTrail" class="btn btn-ghost">Clear Trail</button>
+  </div>
   <div class="hint">North-Up keeps the map fixed. Heading-Up rotates so your travel direction is always at the top.</div>
   <div class="hint">Auto-Zoom: zooms out as you speed up, zooms in when slow or stopped.</div>
+  <div class="hint">Trail: draws a breadcrumb line of where you've been (color = speed).</div>
+
+  <!-- 🆕 Speed legend -->
+  <div class="speed-legend">
+    <div><span class="dot dot-slow"></span> &lt; target − 2 mph (slow)</div>
+    <div><span class="dot dot-ok"></span> at target speed</div>
+    <div><span class="dot dot-fast"></span> &gt; target + 2 mph (fast)</div>
+  </div>
 </div>
     <!-- Boundary -->
     <div class="card">
