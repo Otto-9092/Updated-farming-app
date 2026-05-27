@@ -192,79 +192,27 @@
   </label>
   <label>Working Width (ft) <input id="eqWidth" type="number" value="90" min="1" step="0.5" /></label>
 
-  <!-- ============================================== -->
-  <!-- DYNAMIC SUB-MENUS — only one shows at a time   -->
-  <!-- ============================================== -->
-
-  <!-- 🚿 SPRAYER -->
-  <div id="subSprayer" class="eq-submenu">
-    <div class="sub-title">🚿 Sprayer Calibration</div>
-    <label>GPA (gallons/acre) <input id="spGPA" type="number" value="15" step="0.1" min="0" /></label>
-    <label>Nozzle Spacing (in) <input id="spNoz" type="number" value="20" step="0.5" min="1" /></label>
-    <label>Target Speed (mph) <input id="spTgt" type="number" value="12" step="0.1" min="0" /></label>
-    <label>Tank Capacity (gal) <input id="spTank" type="number" value="1200" step="10" min="0" /></label>
-    <label>Current Product <input id="spProduct" type="text" placeholder="e.g. Roundup PowerMax" /></label>
-    <div class="hint">GPM = (GPA × Speed × Width<sub>ft</sub>) ÷ 495</div>
+  <!-- Button to re-open the modal for the currently selected type -->
+  <div class="btn-row">
+    <button id="btnEditEqParams" class="btn">⚙️ Edit <span id="btnEditEqLabel">Sprayer</span> Settings</button>
   </div>
 
-  <!-- 🌾 COMBINE -->
-  <div id="subCombine" class="eq-submenu hidden">
-    <div class="sub-title">🌾 Combine Settings</div>
-    <label>Expected Yield (bu/ac) <input id="cmYield" type="number" value="180" step="1" min="0" /></label>
-    <label>Grain Tank Capacity (bu) <input id="cmTank" type="number" value="350" step="10" min="0" /></label>
-    <label>Current Moisture (%) <input id="cmMoisture" type="number" value="15.0" step="0.1" min="0" max="40" /></label>
-    <div class="hint">Tip: Header width is the "Working Width" above. Crop comes from Field Setup.</div>
+  <!-- Live summary of what's been set -->
+  <div class="hint" id="eqParamSummary">Sprayer: 15 GPA, 20" nozzles, target 12 mph</div>
+
+  <!-- Save / Load -->
+  <div class="btn-row">
+    <button id="btnSaveEq" class="btn btn-primary">💾 Save Machine</button>
   </div>
 
-  <!-- 🚜 PLANTER -->
-  <div id="subPlanter" class="eq-submenu hidden">
-    <div class="sub-title">🚜 Planter Settings</div>
-    <label>Row Spacing (in) <input id="plRowSpacing" type="number" value="30" step="1" min="1" /></label>
-    <label>Rows in Use <input id="plRows" type="number" value="16" step="1" min="1" /></label>
-    <label>Population (seeds/ac) <input id="plPopulation" type="number" value="34000" step="500" min="0" /></label>
-    <label>Seed Variety <input id="plVariety" type="text" placeholder="e.g. P1197AM" /></label>
-    <label>Downforce (lbs) <input id="plDownforce" type="number" value="150" step="10" min="0" /></label>
-    <div class="hint">Working Width auto-suggested: Rows × Spacing ÷ 12 = <b id="plCalcWidth">40.0</b> ft</div>
+  <label>Load Saved Machine
+    <select id="eqLoad"></select>
+  </label>
+  <div class="btn-row">
+    <button id="btnLoadEq"   class="btn">📂 Load</button>
+    <button id="btnDeleteEq" class="btn btn-ghost">🗑 Delete</button>
   </div>
-
-  <!-- 🍂 TILLAGE -->
-  <div id="subTillage" class="eq-submenu hidden">
-    <div class="sub-title">🍂 Tillage Settings</div>
-    <label>Working Depth (in) <input id="tlDepth" type="number" value="6" step="0.5" min="0" max="24" /></label>
-    <label>Pass Type
-      <select id="tlPassType">
-        <option value="primary">Primary (deep, residue burial)</option>
-        <option value="secondary">Secondary (medium, seedbed prep)</option>
-        <option value="finishing">Finishing (shallow, smoothing)</option>
-      </select>
-    </label>
-    <label>Implement Notes <input id="tlNotes" type="text" placeholder="e.g. disk ripper, vertical till" /></label>
-  </div>
-
-  <!-- 🟫 SPREADER -->
-  <div id="subSpreader" class="eq-submenu hidden">
-    <div class="sub-title">🟫 Spreader Settings</div>
-    <label>Product Type
-      <select id="sdProductType">
-        <option value="dry_fert">Dry Fertilizer</option>
-        <option value="lime">Lime</option>
-        <option value="potash">Potash</option>
-        <option value="urea">Urea</option>
-        <option value="manure">Manure</option>
-        <option value="seed">Cover Seed</option>
-        <option value="other">Other</option>
-      </select>
-    </label>
-    <label>Rate (lbs/ac) <input id="sdRate" type="number" value="200" step="5" min="0" /></label>
-    <label>Bin Capacity (lbs) <input id="sdBin" type="number" value="8000" step="100" min="0" /></label>
-    <label>Product Name <input id="sdProductName" type="text" placeholder="e.g. 28-0-0" /></label>
-  </div>
-
-  <!-- ❓ OTHER -->
-  <div id="subOther" class="eq-submenu hidden">
-    <div class="sub-title">❓ Other Equipment</div>
-    <label>Notes <textarea id="otNotes" rows="3" placeholder="Describe the implement, purpose, settings…"></textarea></label>
-  </div>
+</div>
 
   <!-- ============================================== -->
   <!-- SAVE / LOAD                                     -->
@@ -332,7 +280,90 @@
 </section>
 
 </main>
+<!-- ============================================== -->
+<!-- EQUIPMENT PARAMETERS MODAL                     -->
+<!-- ============================================== -->
+<div id="eqModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title" id="eqModalTitle">Equipment Settings</div>
+      <button class="modal-close" id="btnEqModalClose" aria-label="Close">✕</button>
+    </div>
 
+    <div class="modal-body">
+
+      <!-- 🚿 SPRAYER -->
+      <div id="subSprayer" class="eq-submenu">
+        <label>GPA (gallons/acre) <input id="spGPA" type="number" value="15" step="0.1" min="0" /></label>
+        <label>Nozzle Spacing (in) <input id="spNoz" type="number" value="20" step="0.5" min="1" /></label>
+        <label>Target Speed (mph) <input id="spTgt" type="number" value="12" step="0.1" min="0" /></label>
+        <label>Tank Capacity (gal) <input id="spTank" type="number" value="1200" step="10" min="0" /></label>
+        <label>Current Product <input id="spProduct" type="text" placeholder="e.g. Roundup PowerMax" /></label>
+        <div class="hint">GPM = (GPA × Speed × Width<sub>ft</sub>) ÷ 495</div>
+      </div>
+
+      <!-- 🌾 COMBINE -->
+      <div id="subCombine" class="eq-submenu hidden">
+        <label>Expected Yield (bu/ac) <input id="cmYield" type="number" value="180" step="1" min="0" /></label>
+        <label>Grain Tank Capacity (bu) <input id="cmTank" type="number" value="350" step="10" min="0" /></label>
+        <label>Current Moisture (%) <input id="cmMoisture" type="number" value="15.0" step="0.1" min="0" max="40" /></label>
+        <div class="hint">Header width is set as "Working Width" on the main screen. Crop comes from Field Setup.</div>
+      </div>
+
+      <!-- 🚜 PLANTER -->
+      <div id="subPlanter" class="eq-submenu hidden">
+        <label>Row Spacing (in) <input id="plRowSpacing" type="number" value="30" step="1" min="1" /></label>
+        <label>Rows in Use <input id="plRows" type="number" value="16" step="1" min="1" /></label>
+        <label>Population (seeds/ac) <input id="plPopulation" type="number" value="34000" step="500" min="0" /></label>
+        <label>Seed Variety <input id="plVariety" type="text" placeholder="e.g. P1197AM" /></label>
+        <label>Downforce (lbs) <input id="plDownforce" type="number" value="150" step="10" min="0" /></label>
+        <div class="hint">Suggested Working Width: Rows × Spacing ÷ 12 = <b id="plCalcWidth">40.0</b> ft</div>
+      </div>
+
+      <!-- 🍂 TILLAGE -->
+      <div id="subTillage" class="eq-submenu hidden">
+        <label>Working Depth (in) <input id="tlDepth" type="number" value="6" step="0.5" min="0" max="24" /></label>
+        <label>Pass Type
+          <select id="tlPassType">
+            <option value="primary">Primary (deep, residue burial)</option>
+            <option value="secondary">Secondary (medium, seedbed prep)</option>
+            <option value="finishing">Finishing (shallow, smoothing)</option>
+          </select>
+        </label>
+        <label>Implement Notes <input id="tlNotes" type="text" placeholder="e.g. disk ripper, vertical till" /></label>
+      </div>
+
+      <!-- 🟫 SPREADER -->
+      <div id="subSpreader" class="eq-submenu hidden">
+        <label>Product Type
+          <select id="sdProductType">
+            <option value="dry_fert">Dry Fertilizer</option>
+            <option value="lime">Lime</option>
+            <option value="potash">Potash</option>
+            <option value="urea">Urea</option>
+            <option value="manure">Manure</option>
+            <option value="seed">Cover Seed</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label>Rate (lbs/ac) <input id="sdRate" type="number" value="200" step="5" min="0" /></label>
+        <label>Bin Capacity (lbs) <input id="sdBin" type="number" value="8000" step="100" min="0" /></label>
+        <label>Product Name <input id="sdProductName" type="text" placeholder="e.g. 28-0-0" /></label>
+      </div>
+
+      <!-- ❓ OTHER -->
+      <div id="subOther" class="eq-submenu hidden">
+        <label>Notes <textarea id="otNotes" rows="4" placeholder="Describe the implement, purpose, settings…"></textarea></label>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button id="btnEqModalCancel" class="btn btn-ghost">Cancel</button>
+      <button id="btnEqModalSave"   class="btn btn-primary">✓ Save & Close</button>
+    </div>
+  </div>
+</div>
 <!-- ============== CONFIG ============== -->
 <!-- Put your Google Maps API key in config.js -->
 <script src="config.js"></script>
