@@ -129,6 +129,12 @@ $("secRight").addEventListener("click", () => toggleSection("right"));
 // ============================================================
 $("btnStart").addEventListener("click", startSession);
 $("btnStop").addEventListener("click", stopSession);
+$("btnRecenter").addEventListener("click", () => {
+  if (state.lastPos && state.map) {
+    state.map.panTo({ lat: state.lastPos.lat, lng: state.lastPos.lng });
+    state.map.setZoom(19);
+  }
+});
 
 function startSession() {
   if (!navigator.geolocation) { alert("Geolocation not supported on this device."); return; }
