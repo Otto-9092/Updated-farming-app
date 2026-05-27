@@ -2,8 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>Diamond O Farms — Data Systems Pro</title>
+
+<!-- iOS / iPad app-like behavior -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Diamond O Farms" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0f1115" />
+<meta name="format-detection" content="telephone=no" />
+
+<!-- Prevent iOS zoom on form focus -->
+<meta name="HandheldFriendly" content="true" />
+
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-180.png" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -46,6 +60,7 @@
   <div class="metric"><div class="m-label">Max Speed</div><div class="m-val"><span id="mMaxSpeed">0.0</span> <small>mph</small></div></div>
   <div class="metric"><div class="m-label">Acres</div><div class="m-val"><span id="mAcres">0.00</span></div></div>
   <div class="metric"><div class="m-label">Acres Left</div><div class="m-val"><span id="mAcresLeft">—</span></div></div>
+  <div class="metric"><div class="m-label">ETA</div><div class="m-val"><span id="mETA">—</span></div></div>
   <div class="metric"><div class="m-label">Acres/hr</div><div class="m-val"><span id="mAcHr">0.0</span></div></div>
   <div class="metric"><div class="m-label">Efficiency</div><div class="m-val"><span id="mEff">0</span><small>%</small></div></div>
   <div class="metric" id="mBuBox"><div class="m-label">Bushels</div><div class="m-val"><span id="mBu">0</span></div></div>
@@ -72,6 +87,10 @@
     <button id="btnSave"    class="btn">💾 Save Report</button>
     <button id="btnRecenter" class="btn">🎯 Recenter</button>
   </div>
+  <div class="btn-row">
+    <button id="btnResetPaint" class="btn btn-ghost">🧹 Reset Painted Area</button>
+  </div>
+  <div class="hint">Reset clears coverage paint + acres while keeping your GPS, trail, and boundary intact.</div>
 </div>
 
 <!-- 🆕 Map View -->
@@ -127,16 +146,29 @@
   <!-- ===== SETUP TAB ===== -->
   <section id="tab-setup" class="tab-panel">
     <div class="card">
-      <div class="card-title">Field Setup</div>
-      <label>Field Name <input id="fldName" type="text" placeholder="e.g. North 80" /></label>
-      <label>Crop
-        <select id="fldCrop">
-          <option>Corn</option><option>Soybeans</option><option>Wheat</option>
-          <option>Cotton</option><option>Sorghum</option><option>Other</option>
-        </select>
-      </label>
-      <label>Variety <input id="fldVariety" type="text" placeholder="e.g. P1197AM" /></label>
-    </div>
+  <div class="card-title">Field Setup</div>
+  <label>Field Name <input id="fldName" type="text" placeholder="e.g. North 80" /></label>
+  <label>Crop
+    <select id="fldCrop">
+      <option>Corn</option><option>Soybeans</option><option>Wheat</option>
+      <option>Cotton</option><option>Sorghum</option><option>Other</option>
+    </select>
+  </label>
+  <label>Variety <input id="fldVariety" type="text" placeholder="e.g. P1197AM" /></label>
+
+  <div class="btn-row">
+    <button id="btnSaveField" class="btn btn-primary">💾 Save Field</button>
+  </div>
+
+  <label>Load Saved Field
+    <select id="fldLoad"></select>
+  </label>
+  <div class="btn-row">
+    <button id="btnLoadField"   class="btn">📂 Load</button>
+    <button id="btnDeleteField" class="btn btn-ghost">🗑 Delete</button>
+  </div>
+  <div class="hint" id="fldStatus">No field loaded.</div>
+</div>
 
     <div class="card">
       <div class="card-title">Equipment Library</div>
