@@ -45,7 +45,6 @@
 <nav class="tabs">
   <button class="tab active" data-tab="operate">Operate</button>
   <button class="tab" data-tab="setup">Field & Equipment</button>
-  <button class="tab" data-tab="sprayer">Sprayer</button>
   <button class="tab" data-tab="reports">Reports</button>
 </nav>
 
@@ -69,7 +68,8 @@
   <div class="metric"><div class="m-label">Efficiency</div><div class="m-val"><span id="mEff">0</span><small>%</small></div></div>
   <div class="metric" id="mBuBox"><div class="m-label">Bushels</div><div class="m-val"><span id="mBu">0</span></div></div>
   <div class="metric hidden" id="mGalBox"><div class="m-label">Gallons</div><div class="m-val"><span id="mGal">0.0</span></div></div>
-  <div class="metric hidden" id="mGpmBox"><div class="m-label">GPM</div><div class="m-val"><span id="mGpm">0.0</span></div></div>
+  <div class="metric hidden" id="mGpmBox"><div class="m-label">Total GPM</div><div class="m-val"><span id="mGpm">0.0</span></div></div>
+  <div class="metric hidden" id="mNozGpmBox"><div class="m-label">Nozzle GPM</div><div class="m-val"><span id="mNozGpm">0.00</span></div></div>
 </div>
       
     <!-- Section Control -->
@@ -199,19 +199,6 @@
         <button id="btnLoadEq"   class="btn">Load</button>
         <button id="btnDeleteEq" class="btn btn-ghost">Delete</button>
       </div>
-    </div>
-  </section>
-
-  <!-- ===== SPRAYER TAB ===== -->
-  <section id="tab-sprayer" class="tab-panel">
-    <div class="card">
-      <div class="card-title">Sprayer Calibration</div>
-      <label>GPA (gallons / acre) <input id="spGPA" type="number" value="15" step="0.1" /></label>
-      <label>Nozzle Spacing (in) <input id="spNoz" type="number" value="20" step="0.5" /></label>
-      <label>Target Speed (mph) <input id="spTgt" type="number" value="12" step="0.1" /></label>
-      <div class="hint">GPM = (GPA × Speed × Width<sub>ft</sub>) / 495</div>
-      <div class="hint">Live GPM: <b id="spLiveGpm">0.0</b></div>
-      <div class="hint">Per-nozzle GPM: <b id="spNozGpm">0.00</b></div>
     </div>
   </section>
 
