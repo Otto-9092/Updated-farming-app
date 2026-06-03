@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.03 · 16:33";
+window.APP_VERSION = "2026.06.03 · 17:05";
 try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -122,6 +122,7 @@ document.querySelectorAll(".tab").forEach((t) => {
     $("tab-" + t.dataset.tab).classList.add("active");
     if (state.map) setTimeout(() => google.maps.event.trigger(state.map, "resize"), 100);
     if (t.dataset.tab === "setup") { seedMixCalcFromState(); seedCostAcresFromState(); }   // ← refresh calc inputs
+    if (t.dataset.tab === "season") renderSeason();   // ← refresh season dashboard
   });
 });
 
@@ -2624,6 +2625,145 @@ window.restoreRollback = async function () {
     appAlert("Rollback file is corrupted: " + e.message, "Error");
   }
 };
+// ============================================================
+// SEASON SUMMARY DASHBOARD — added feature
+// Aggregates all saved reports by crop and field, with a year filter.
+// ============================================================
+function seasonAllReports() {
+  return Object.values(JSON.parse(localStorage.getItem(LS_REPS) || "{}"));
+}
+
+function seasonYearsAvailable(reps) {
+  var years = {};
+  reps.forEach(function (r) {
+    if (r.date) years[new Date(r.date).getFullYear()] = true;
+  });
+  return Object.keys(years).map(Number).sort(function (a, b) { return b - a; });
+}
+
+function populateSeasonYears() {
+  var sel = $("seasonYear");
+  if (!sel) return;
+  var prev = sel.value;
+  var years = seasonYearsAvailable(seasonAllReports());
+  sel.innerHTML = '<option value="all">All Years</option>' +
+    years.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join("");
+  // keep prior selection if still valid
+  if (prev && (prev === "all" || years.indexOf(Number(prev)) >= 0)) sel.value = prev;
+}
+
+function seasonFiltered() {
+  var sel = $("seasonYear");
+  var yr = sel ? sel.value : "all";
+  var reps = seasonAllReports();
+  if (yr && yr !== "all") {
+    reps = reps.filter(function (r) { return r.date && String(new Date(r.date).getFullYear()) === String(yr); });
+  }
+  return reps;
+}
+
+// Sum helper that pulls numeric metrics safely
+function sNum(v) { return (typeof v === "number" && !isNaN(v)) ? v : 0; }
+
+function aggregateBy(reps, keyFn) {
+  var groups = {};
+  reps.forEach(function (r) {
+    var k = keyFn(r) || "(unspecified)";
+    if (!groups[k]) groups[k] = { key: k, reports: 0, acres: 0, bushels: 0, gallons: 0, loads: 0, profit: 0, hasProfit: false };
+    var g = groups[k];
+    g.reports += 1;
+    g.acres   += sNum(r.acres);
+    g.bushels += sNum(r.bushels);
+    g.gallons += sNum(r.gallons);
+    g.loads   += sNum(r.loads);
+    if (r.cost && r.cost.summary && r.cost.summary.totalProfit != null) {
+      g.profit += sNum(r.cost.summary.totalProfit);
+      g.hasProfit = true;
+    }
+  });
+  return Object.values(groups).sort(function (a, b) { return b.acres - a.acres; });
+}
+
+function renderSeason() {
+  populateSeasonYears();
+  var reps = seasonFiltered();
+
+  // ---- Totals ----
+  var tot = { reports: reps.length, acres: 0, bushels: 0, gallons: 0, loads: 0, profit: 0, hasProfit: false };
+  reps.forEach(function (r) {
+    tot.acres += sNum(r.acres); tot.bushels += sNum(r.bushels);
+    tot.gallons += sNum(r.gallons); tot.loads += sNum(r.loads);
+    if (r.cost && r.cost.summary && r.cost.summary.totalProfit != null) { tot.profit += sNum(r.cost.summary.totalProfit); tot.hasProfit = true; }
+  });
+
+  var totalsEl = $("seasonTotals");
+  if (totalsEl) {
+    if (!reps.length) {
+      totalsEl.innerHTML = '<div class="hint">No reports yet for this period. Save some sessions to see your season summary.</div>';
+      if ($("seasonCropChart")) $("seasonCropChart").innerHTML = "";
+      if ($("seasonCropTable")) $("seasonCropTable").innerHTML = "";
+      if ($("seasonFieldTable")) $("seasonFieldTable").innerHTML = "";
+      return;
+    }
+    var stat = function (val, lab) { return '<div class="season-stat"><div class="s-val">' + val + '</div><div class="s-lab">' + lab + '</div></div>'; };
+    totalsEl.innerHTML =
+      stat(tot.reports, "Reports") +
+      stat(tot.acres.toFixed(1), "Acres") +
+      stat(Math.round(tot.bushels).toLocaleString(), "Bushels") +
+      stat(tot.gallons.toFixed(0), "Gallons") +
+      stat(tot.loads, "Loads") +
+      (tot.hasProfit ? stat('<span class="' + (tot.profit >= 0 ? "profit-pos" : "profit-neg") + '">' + fmtMoney(tot.profit) + '</span>', "Profit") : "");
+  }
+
+  // ---- By Crop: bar chart (acres) + table ----
+  var byCrop = aggregateBy(reps, function (r) { return r.field && r.field.crop; });
+  var chartEl = $("seasonCropChart");
+  if (chartEl) {
+    var maxAcres = Math.max.apply(null, byCrop.map(function (g) { return g.acres; }).concat([1]));
+    chartEl.innerHTML = byCrop.map(function (g) {
+      var pct = Math.round((g.acres / maxAcres) * 100);
+      return '<div class="sbar-row"><span>' + escHtml(g.key) + '</span>' +
+             '<span class="sbar-track"><span class="sbar-fill" style="width:' + pct + '%"></span></span>' +
+             '<span class="num">' + g.acres.toFixed(1) + ' ac</span></div>';
+    }).join("");
+  }
+  if ($("seasonCropTable")) $("seasonCropTable").innerHTML = seasonTable(byCrop, "Crop", tot);
+  if ($("seasonFieldTable")) {
+    var byField = aggregateBy(reps, function (r) { return r.field && r.field.name; });
+    $("seasonFieldTable").innerHTML = seasonTable(byField, "Field", tot);
+  }
+}
+
+function seasonTable(groups, label, tot) {
+  var anyProfit = groups.some(function (g) { return g.hasProfit; });
+  var head = '<table class="season-table"><thead><tr>' +
+    '<th>' + label + '</th><th class="num">Reports</th><th class="num">Acres</th>' +
+    '<th class="num">Bushels</th><th class="num">Gallons</th><th class="num">Loads</th>' +
+    (anyProfit ? '<th class="num">Profit</th>' : '') + '</tr></thead><tbody>';
+  var body = groups.map(function (g) {
+    return '<tr><td>' + escHtml(g.key) + '</td>' +
+      '<td class="num">' + g.reports + '</td>' +
+      '<td class="num">' + g.acres.toFixed(1) + '</td>' +
+      '<td class="num">' + Math.round(g.bushels).toLocaleString() + '</td>' +
+      '<td class="num">' + g.gallons.toFixed(0) + '</td>' +
+      '<td class="num">' + g.loads + '</td>' +
+      (anyProfit ? '<td class="num ' + (g.hasProfit ? (g.profit >= 0 ? "profit-pos" : "profit-neg") : "") + '">' + (g.hasProfit ? fmtMoney(g.profit) : "\u2014") + '</td>' : '') +
+      '</tr>';
+  }).join("");
+  var foot = '<tfoot><tr><td>Total</td>' +
+    '<td class="num">' + tot.reports + '</td>' +
+    '<td class="num">' + tot.acres.toFixed(1) + '</td>' +
+    '<td class="num">' + Math.round(tot.bushels).toLocaleString() + '</td>' +
+    '<td class="num">' + tot.gallons.toFixed(0) + '</td>' +
+    '<td class="num">' + tot.loads + '</td>' +
+    (anyProfit ? '<td class="num ' + (tot.profit >= 0 ? "profit-pos" : "profit-neg") + '">' + (tot.hasProfit ? fmtMoney(tot.profit) : "\u2014") + '</td>' : '') +
+    '</tr></tfoot>';
+  return head + body + '</tbody>' + foot + '</table>';
+}
+
+if ($("seasonYear")) $("seasonYear").addEventListener("change", renderSeason);
+if ($("btnSeasonRefresh")) $("btnSeasonRefresh").addEventListener("click", renderSeason);
+
 window.addEventListener("DOMContentLoaded", () => {
   loadEquipmentList();
   loadReportsList();
@@ -2637,6 +2777,7 @@ window.addEventListener("DOMContentLoaded", () => {
   updateEqSummary();
   updatePlanterCalcWidth();
   updateDataStats();                    // ← initialize backup card summary
+  populateSeasonYears();                // ← seed season year filter
 });
 
 // ============================================================
