@@ -28,6 +28,20 @@
   /* Low-tank warning: tile turns red when <=15% remaining */
   .metric.low-tank { background: #b3261e !important; color: #fff !important; }
   .metric.low-tank .m-label, .metric.low-tank .m-val, .metric.low-tank small { color: #fff !important; }
+  /* Mix calculator */
+  .mix-grid2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .mix-grid2 label { display: flex; flex-direction: column; font-size: 13px; gap: 3px; }
+  .mix-products { margin: 10px 0; }
+  .mix-row { display: grid; grid-template-columns: 2fr 1fr 1.1fr; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .mix-row.mix-head { font-size: 11px; opacity: 0.6; text-transform: uppercase; margin-bottom: 2px; }
+  .mix-row input, .mix-row select { width: 100%; }
+  .mix-results { margin-top: 10px; }
+  .mix-results table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .mix-results th, .mix-results td { padding: 6px 8px; border-bottom: 1px solid rgba(128,128,128,0.25); text-align: left; }
+  .mix-results th { font-size: 11px; text-transform: uppercase; opacity: 0.65; }
+  .mix-results td.num, .mix-results th.num { text-align: right; }
+  .mix-results .mix-total td { font-weight: bold; border-top: 2px solid rgba(128,128,128,0.4); }
+  @media (max-width: 480px) { .mix-grid2 { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -38,7 +52,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.03 · 15:18</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.03 · 15:42</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -270,6 +284,72 @@
         3. On your phone: tap <b>Import Data</b> → pick the file<br>
         4. Choose <b>Merge</b> (safe — adds new) or <b>Replace</b> (wipes existing first)
       </div>
+    </div>
+
+    <!-- ===== PRODUCT / CHEMICAL MIX CALCULATOR (sprayer) ===== -->
+    <div class="card" id="mixCalcCard">
+      <div class="card-title">🧪 Mix Calculator</div>
+      <div class="hint">Auto-fills tank size &amp; field acres from your sprayer/field — edit either to override.</div>
+
+      <div class="mix-grid2">
+        <label>Tank Size (gal)
+          <input id="mixTank" type="number" step="1" min="0" inputmode="decimal" placeholder="e.g. 1200" />
+        </label>
+        <label>Carrier Rate (GPA)
+          <input id="mixGPA" type="number" step="0.1" min="0" inputmode="decimal" placeholder="e.g. 15" />
+        </label>
+        <label>Field Acres
+          <input id="mixAcres" type="number" step="0.01" min="0" inputmode="decimal" placeholder="e.g. 80" />
+        </label>
+      </div>
+
+      <div class="mix-products">
+        <div class="mix-row mix-head">
+          <span class="mix-name">Product</span>
+          <span class="mix-rate">Rate</span>
+          <span class="mix-unit">Unit</span>
+        </div>
+        <div class="mix-row">
+          <input id="mixName1" type="text" class="mix-name" placeholder="Product 1 name" />
+          <input id="mixRate1" type="number" class="mix-rate" placeholder="rate" step="0.01" min="0" inputmode="decimal" />
+          <select id="mixUnit1" class="mix-unit">
+            <option value="oz">oz/ac</option>
+            <option value="pt">pt/ac</option>
+            <option value="qt">qt/ac</option>
+            <option value="gal">gal/ac</option>
+            <option value="lb">lb/ac</option>
+          </select>
+        </div>
+        <div class="mix-row">
+          <input id="mixName2" type="text" class="mix-name" placeholder="Product 2 name" />
+          <input id="mixRate2" type="number" class="mix-rate" placeholder="rate" step="0.01" min="0" inputmode="decimal" />
+          <select id="mixUnit2" class="mix-unit">
+            <option value="oz">oz/ac</option>
+            <option value="pt">pt/ac</option>
+            <option value="qt">qt/ac</option>
+            <option value="gal">gal/ac</option>
+            <option value="lb">lb/ac</option>
+          </select>
+        </div>
+        <div class="mix-row">
+          <input id="mixName3" type="text" class="mix-name" placeholder="Product 3 name" />
+          <input id="mixRate3" type="number" class="mix-rate" placeholder="rate" step="0.01" min="0" inputmode="decimal" />
+          <select id="mixUnit3" class="mix-unit">
+            <option value="oz">oz/ac</option>
+            <option value="pt">pt/ac</option>
+            <option value="qt">qt/ac</option>
+            <option value="gal">gal/ac</option>
+            <option value="lb">lb/ac</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button id="btnMixCalc" class="btn btn-primary">Calculate</button>
+        <button id="btnMixReset" class="btn btn-ghost">Clear</button>
+      </div>
+
+      <div id="mixResults" class="mix-results"></div>
     </div>
   </section>
 
@@ -559,8 +639,8 @@
 
 <!-- ============== CONFIG ============== -->
 <!-- Put your Google Maps API key in config.js -->
-<script src="config.js?v=20260603-1518"></script>
-<script src="app.js?v=20260603-1518"></script>
+<script src="config.js?v=20260603-1542"></script>
+<script src="app.js?v=20260603-1542"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
