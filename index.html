@@ -48,6 +48,23 @@
   .profit-pos { color: #1a7f37; font-weight: bold; }
   .profit-neg { color: #b3261e; font-weight: bold; }
   @media (max-width: 480px) { .cost-grid { grid-template-columns: 1fr 1fr; } }
+  /* Season dashboard */
+  .season-controls { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 10px; }
+  .season-controls label { display: flex; flex-direction: column; font-size: 13px; gap: 3px; }
+  .season-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+  .season-stat { background: rgba(128,128,128,0.10); border-radius: 8px; padding: 10px; text-align: center; }
+  .season-stat .s-val { font-size: 20px; font-weight: bold; }
+  .season-stat .s-lab { font-size: 11px; text-transform: uppercase; opacity: 0.65; margin-top: 2px; }
+  .season-chart { margin: 6px 0 12px; }
+  .sbar-row { display: grid; grid-template-columns: 90px 1fr 70px; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+  .sbar-track { background: rgba(128,128,128,0.18); border-radius: 5px; height: 18px; overflow: hidden; }
+  .sbar-fill { height: 100%; background: #3a7d44; border-radius: 5px; }
+  .season-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .season-table th, .season-table td { padding: 6px 8px; border-bottom: 1px solid rgba(128,128,128,0.25); text-align: left; }
+  .season-table th { font-size: 11px; text-transform: uppercase; opacity: 0.65; }
+  .season-table td.num, .season-table th.num { text-align: right; }
+  .season-table tfoot td { font-weight: bold; border-top: 2px solid rgba(128,128,128,0.4); }
+  .profit-pos { color: #1a7f37; font-weight: bold; } .profit-neg { color: #b3261e; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -58,7 +75,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.03 · 16:33</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.03 · 17:05</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -73,6 +90,7 @@
   <button class="tab active" data-tab="operate">Operate</button>
   <button class="tab" data-tab="setup">Field & Equipment</button>
   <button class="tab" data-tab="reports">Reports</button>
+  <button class="tab" data-tab="season">Season</button>
 </nav>
 
 <!-- ============== MAIN ============== -->
@@ -468,6 +486,31 @@
   </div>
 </section>
 
+<!-- ===== SEASON DASHBOARD TAB ===== -->
+<section id="tab-season" class="tab-panel">
+  <div class="card">
+    <div class="card-title">📊 Season Summary</div>
+    <div class="season-controls">
+      <label>Year
+        <select id="seasonYear"></select>
+      </label>
+      <button id="btnSeasonRefresh" class="btn btn-ghost">↻ Refresh</button>
+    </div>
+    <div id="seasonTotals" class="season-totals"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">By Crop</div>
+    <div id="seasonCropChart" class="season-chart"></div>
+    <div id="seasonCropTable"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">By Field</div>
+    <div id="seasonFieldTable"></div>
+  </div>
+</section>
+
 </main>
 <!-- ============================================== -->
 <!-- EQUIPMENT PARAMETERS MODAL                     -->
@@ -705,8 +748,8 @@
 
 <!-- ============== CONFIG ============== -->
 <!-- Put your Google Maps API key in config.js -->
-<script src="config.js?v=20260603-1633"></script>
-<script src="app.js?v=20260603-1633"></script>
+<script src="config.js?v=20260603-1705"></script>
+<script src="app.js?v=20260603-1705"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
