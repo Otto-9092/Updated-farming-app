@@ -276,7 +276,7 @@ function closeDlg(overlayId) {
 //  - Harvest Setup at session start: expected yield + start moisture
 //  - Harvest Update every 5 min: timestamped yield/moisture/quality log
 // ============================================================
-const HARVEST_UPDATE_MS = 30 * 1000;   // 5 minutes
+const HARVEST_UPDATE_MS = 5 * 60 * 1000;   // 5 minutes
 const HARVEST_AUTODISMISS_MS = 60 * 1000;  // auto-close after 60s
 
 // Setup dialog. Resolves true once handled (always proceeds; Skip just
@@ -351,6 +351,7 @@ function showHarvestUpdateDialog() {
     if (reading.yield || reading.moisture || reading.quality) {
       state.harvest.log = state.harvest.log || [];
       state.harvest.log.push(reading);
+      updateHarvestTile();   // ← refresh live tile
     }
     closeDlg("harvestUpdateDlg"); cleanup();
   }
@@ -595,6 +596,7 @@ async function startSession() {
   if (state.equipment.type === "combine") {
     await showHarvestStartDialog();
   }
+  updateHarvestTile();   // ← seed live tile with baseline
 
   state.running = true;
   state.sessionStart = Date.now();
@@ -970,6 +972,26 @@ function applyEquipmentUI() {
 
   // Bushels is the combine/harvest metric — shown for non-sprayers.
   $("mBuBox").classList.toggle("hidden",   isSprayer);
+
+  // Live harvest tiles (latest yield/moisture) — combines only.
+  const isCombine = state.equipment.type === "combine";
+  const yBox = $("mYieldBox"), mBox = $("mMoistBox");
+  if (yBox) yBox.classList.toggle("hidden", !isCombine);
+  if (mBox) mBox.classList.toggle("hidden", !isCombine);
+  updateHarvestTile();
+}
+
+// Refresh the live Yield/Moisture tiles from the latest harvest reading
+// (falls back to the harvest baseline if no readings logged yet).
+function updateHarvestTile() {
+  const h = state.harvest || {};
+  const log = h.log || [];
+  const last = log.length ? log[log.length - 1] : null;
+  const yieldVal = last && last.yield     ? last.yield     : (h.expectedYield || "");
+  const moistVal = last && last.moisture  ? last.moisture  : (h.startMoisture || "");
+  const yEl = $("mYield"), mEl = $("mMoist");
+  if (yEl) yEl.textContent = yieldVal !== "" ? yieldVal : "\u2014";
+  if (mEl) mEl.textContent = moistVal !== "" ? moistVal : "\u2014";
 }
 
 // ============================================================
