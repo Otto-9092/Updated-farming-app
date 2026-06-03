@@ -252,73 +252,139 @@ $("btnStop").addEventListener("click", stopSession);
 // WEATHER CAPTURE (spray records) — added feature
 // Prompts once at session start. Fully skippable; never blocks.
 // ============================================================
-function captureWeatherForSession() {
-  try {
+function $id(id){ return document.getElementById(id); }
+
+// Open a themed dialog overlay and trap focus on its first input.
+function openDlg(overlayId, firstFieldId) {
+  var ov = $id(overlayId);
+  if (!ov) return;
+  ov.classList.remove("hidden");
+  setTimeout(function(){
+    var el = firstFieldId ? $id(firstFieldId) : null;
+    if (el && el.focus) { try { el.focus(); } catch(e){} }
+  }, 50);
+}
+function closeDlg(overlayId) {
+  var ov = $id(overlayId);
+  if (ov) ov.classList.add("hidden");
+}
+
+// ============================================================
+// START-SESSION DIALOG (themed) — field check + weather in one popup.
+// Returns a Promise that resolves true (start) or false (cancel).
+// ============================================================
+function showStartDialog() {
+  return new Promise(function (resolve) {
+    var f = state.field || {};
+    var e = state.equipment || {};
     var w = state.weather || {};
-    var windSpeed = prompt("Wind speed (mph)?  (leave blank to skip weather)", w.windSpeed || "");
-    if (windSpeed === null) { return; } // Cancel = skip weather entirely
-    var windDir = prompt("Wind direction? (e.g. NW, S, 270)", w.windDir || "");
-    if (windDir === null) windDir = "";
-    var temp = prompt("Temperature (\u00B0F)?", w.temp || "");
-    if (temp === null) temp = "";
-    var sky = prompt("Sky / conditions? (e.g. clear, overcast)", w.sky || "");
-    if (sky === null) sky = "";
-    state.weather = {
-      windSpeed: (windSpeed || "").trim(),
-      windDir:   (windDir   || "").trim(),
-      temp:      (temp      || "").trim(),
-      sky:       (sky       || "").trim(),
-      capturedAt: new Date().toISOString()
-    };
-  } catch (e) {
-    console.warn("Weather capture skipped:", e);
-  }
+    var hasField = !!(f.name && f.name.trim() !== "");
+
+    // Build the summary / warning block
+    var summary = $id("startDlgSummary");
+    if (summary) {
+      if (hasField) {
+        var bAcres = (state.boundary && state.boundary.acres > 0)
+          ? state.boundary.acres.toFixed(2) + " ac" : "no boundary set";
+        var machine = e.name ? e.name : "\u2014";
+        if (e.type)  machine += " \u2013 " + e.type;
+        if (e.width) machine += "  " + e.width + " ft";
+        summary.innerHTML =
+          '<div class="dlg-summary">' +
+            '<div class="row"><span class="lab">\uD83D\uDCCD Field</span><span class="val">' + escHtml(f.name) + '</span></div>' +
+            '<div class="row"><span class="lab">\uD83C\uDF3D Crop</span><span class="val">' + escHtml(f.crop || "\u2014") + (f.variety ? " (" + escHtml(f.variety) + ")" : "") + '</span></div>' +
+            '<div class="row"><span class="lab">\uD83D\uDCD0 Boundary</span><span class="val">' + bAcres + '</span></div>' +
+            '<div class="row"><span class="lab">\uD83D\uDE9C Machine</span><span class="val">' + escHtml(machine) + '</span></div>' +
+          '</div>' +
+          '<div class="hint">Not the right field? Tap Cancel, then load it on the \u201CField & Equipment\u201D tab.</div>';
+      } else {
+        summary.innerHTML =
+          '<div class="dlg-warn">\u26A0\uFE0F <b>No field is loaded.</b><br>' +
+          'Go to \u201CField & Equipment\u201D to set up or load a field first, ' +
+          'or press Start to record an <b>untitled</b> session anyway.</div>';
+      }
+    }
+
+    // Pre-fill weather with last-used values
+    if ($id("dlgWindSpeed")) $id("dlgWindSpeed").value = w.windSpeed || "";
+    if ($id("dlgWindDir"))   $id("dlgWindDir").value   = w.windDir   || "";
+    if ($id("dlgTemp"))      $id("dlgTemp").value      = w.temp      || "";
+    if ($id("dlgSky"))       $id("dlgSky").value       = w.sky       || "";
+
+    openDlg("startDlg", "dlgWindSpeed");
+
+    function cleanup() {
+      $id("startDlgGo").removeEventListener("click", onGo);
+      $id("startDlgCancel").removeEventListener("click", onCancel);
+      $id("startDlg").removeEventListener("click", onBackdrop);
+    }
+    function onGo() {
+      // Save weather from the fields
+      state.weather = {
+        windSpeed: ($id("dlgWindSpeed").value || "").trim(),
+        windDir:   ($id("dlgWindDir").value   || "").trim(),
+        temp:      ($id("dlgTemp").value      || "").trim(),
+        sky:       ($id("dlgSky").value       || "").trim(),
+        capturedAt: new Date().toISOString()
+      };
+      closeDlg("startDlg"); cleanup(); resolve(true);
+    }
+    function onCancel() { closeDlg("startDlg"); cleanup(); resolve(false); }
+    function onBackdrop(ev) { if (ev.target === $id("startDlg")) onCancel(); }
+
+    $id("startDlgGo").addEventListener("click", onGo);
+    $id("startDlgCancel").addEventListener("click", onCancel);
+    $id("startDlg").addEventListener("click", onBackdrop);
+  });
 }
 
 // ============================================================
-// FIELD CONFIRMATION (before a session) — added feature
-// Makes sure you're set up in the right field before tracking begins.
+// REPORT TITLE DIALOG (themed). Resolves to a string title, or
+// null if the operator cancels.
 // ============================================================
-function confirmFieldBeforeStart() {
-  var f = state.field || {};
-  var e = state.equipment || {};
-  var hasField = f.name && f.name.trim() !== "";
+function showTitleDialog(suggested) {
+  return new Promise(function (resolve) {
+    var input = $id("dlgReportTitle");
+    if (input) input.value = suggested || "";
+    openDlg("titleDlg", "dlgReportTitle");
+    if (input) { try { input.select(); } catch(e){} }
 
-  if (!hasField) {
-    // No field loaded — warn and let them bail out to set one up.
-    return confirm(
-      "\u26A0\uFE0F No field is loaded.\n\n" +
-      "Go to \u201CField & Equipment\u201D to set up or load a field first,\n" +
-      "or press OK to start an UNTITLED session anyway."
-    );
-  }
+    function cleanup() {
+      $id("titleDlgSave").removeEventListener("click", onSave);
+      $id("titleDlgCancel").removeEventListener("click", onCancel);
+      $id("titleDlg").removeEventListener("click", onBackdrop);
+      if (input) input.removeEventListener("keydown", onKey);
+    }
+    function onSave() {
+      var val = (input && input.value ? input.value : "").trim();
+      closeDlg("titleDlg"); cleanup();
+      resolve(val || (suggested || "Untitled"));
+    }
+    function onCancel() { closeDlg("titleDlg"); cleanup(); resolve(null); }
+    function onBackdrop(ev) { if (ev.target === $id("titleDlg")) onCancel(); }
+    function onKey(ev) { if (ev.key === "Enter") { ev.preventDefault(); onSave(); } }
 
-  var bAcres = (state.boundary && state.boundary.acres > 0)
-    ? state.boundary.acres.toFixed(2) + " ac"
-    : "no boundary set";
-
-  var msg =
-    "Start session in this field?\n\n" +
-    "\uD83D\uDCCD Field:    " + f.name + "\n" +
-    "\uD83C\uDF3D Crop:     " + (f.crop || "\u2014") +
-        (f.variety ? "  (" + f.variety + ")" : "") + "\n" +
-    "\uD83D\uDCD0 Boundary: " + bAcres + "\n" +
-    "\uD83D\uDE9C Machine:  " + (e.name ? e.name : "\u2014") +
-        (e.type ? "  \u2013 " + e.type : "") +
-        (e.width ? "  " + e.width + " ft" : "") + "\n\n" +
-    "OK = start    \u2022    Cancel = go fix setup";
-
-  return confirm(msg);
+    $id("titleDlgSave").addEventListener("click", onSave);
+    $id("titleDlgCancel").addEventListener("click", onCancel);
+    $id("titleDlg").addEventListener("click", onBackdrop);
+    if (input) input.addEventListener("keydown", onKey);
+  });
 }
 
-function startSession() {
+// Tiny HTML-escaper for values injected into dialog markup
+function escHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function startSession() {
   if (!navigator.geolocation) { alert("Geolocation not supported on this device."); return; }
   readFormsIntoState();
 
-  // ← NEW: confirm the operator is set up in the correct field before starting
-  if (!confirmFieldBeforeStart()) { return; }
-
-  captureWeatherForSession();  // ← spray-record weather
+  // ← NEW: themed field-check + weather dialog before starting
+  const proceed = await showStartDialog();
+  if (!proceed) { return; }
 
   state.running = true;
   state.sessionStart = Date.now();
@@ -1265,12 +1331,12 @@ function buildSuggestedReportName() {
 }
 
 // Save current session as a new report
-$("btnSave").addEventListener("click", () => {
+$("btnSave").addEventListener("click", async () => {
   const id = "REP-" + Date.now();
 
-  // ← NEW: prompt the operator to title the report (with a smart default)
+  // ← NEW: themed dialog to title the report (with a smart default)
   const suggested = buildSuggestedReportName();
-  const titled = prompt("Title this report:", suggested);
+  const titled = await showTitleDialog(suggested);
   if (titled === null) { return; }            // Cancel = don't save
   const defaultName = (titled.trim() || suggested);
 
