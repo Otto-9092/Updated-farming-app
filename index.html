@@ -439,6 +439,25 @@
   </div>
 </div>
 
+<!-- Rename report dialog -->
+<div id="renameDlg" class="dlg-overlay hidden" role="dialog" aria-modal="true">
+  <div class="dlg-card">
+    <div class="dlg-header">
+      <div class="dlg-title">Rename Report</div>
+    </div>
+    <div class="dlg-body">
+      <label>New report name
+        <input id="dlgRenameInput" type="text" placeholder="Enter a new name" />
+      </label>
+      <div class="hint">This only changes the title — the data stays the same.</div>
+    </div>
+    <div class="dlg-footer">
+      <button id="renameDlgCancel" class="btn btn-ghost">Cancel</button>
+      <button id="renameDlgSave" class="btn btn-primary">✏️ Rename</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============== CONFIG ============== -->
 <!-- Put your Google Maps API key in config.js -->
 <script src="config.js"></script>
