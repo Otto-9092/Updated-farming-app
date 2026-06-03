@@ -28,6 +28,8 @@ const state = {
   equipment: { name: "", type: "sprayer", width: 90 },
   sprayer:  { gpa: 15, nozzle: 20, target: 12, tank: 1200, product: "" },
   combine:  { expectedYield: 180, tankCapacity: 350, moisture: 15.0 },
+  harvest:  { expectedYield: "", startMoisture: "", log: [] },  // per-session harvest readings
+  harvestTimer: null,
   planter:  { rowSpacing: 30, rows: 16, population: 34000, variety: "", downforce: 150 },
   tillage:  { depth: 6, passType: "primary", notes: "" },
   spreader: { productType: "dry_fert", rate: 200, bin: 8000, productName: "" },
@@ -270,6 +272,109 @@ function closeDlg(overlayId) {
 }
 
 // ============================================================
+// HARVEST DIALOGS (combine only) — added feature
+//  - Harvest Setup at session start: expected yield + start moisture
+//  - Harvest Update every 5 min: timestamped yield/moisture/quality log
+// ============================================================
+const HARVEST_UPDATE_MS = 5 * 60 * 1000;   // 5 minutes
+const HARVEST_AUTODISMISS_MS = 60 * 1000;  // auto-close after 60s
+
+// Setup dialog. Resolves true once handled (always proceeds; Skip just
+// leaves the baseline blank). Cancel-by-backdrop is treated as Skip.
+function showHarvestStartDialog() {
+  return new Promise(function (resolve) {
+    var h = state.harvest || {};
+    if ($id("hsExpYield")) $id("hsExpYield").value = h.expectedYield || "";
+    if ($id("hsMoisture")) $id("hsMoisture").value = h.startMoisture || "";
+    openDlg("harvestStartDlg", "hsExpYield");
+
+    function cleanup() {
+      $id("harvestStartGo").removeEventListener("click", onGo);
+      $id("harvestStartSkip").removeEventListener("click", onSkip);
+      $id("harvestStartDlg").removeEventListener("click", onBackdrop);
+    }
+    function commit(save) {
+      if (save) {
+        state.harvest.expectedYield = ($id("hsExpYield").value || "").trim();
+        state.harvest.startMoisture = ($id("hsMoisture").value || "").trim();
+      }
+      closeDlg("harvestStartDlg"); cleanup(); resolve(true);
+    }
+    function onGo()   { commit(true); }
+    function onSkip() { commit(false); }
+    function onBackdrop(ev) { if (ev.target === $id("harvestStartDlg")) onSkip(); }
+
+    $id("harvestStartGo").addEventListener("click", onGo);
+    $id("harvestStartSkip").addEventListener("click", onSkip);
+    $id("harvestStartDlg").addEventListener("click", onBackdrop);
+  });
+}
+
+// Recurring update dialog. Logs a timestamped reading on Save; Skip/auto
+// just dismisses. Never blocks the session.
+function showHarvestUpdateDialog() {
+  // Don't stack dialogs if one is already open
+  if ($id("harvestUpdateDlg") && !$id("harvestUpdateDlg").classList.contains("hidden")) return;
+
+  var meta = $id("harvestUpdateMeta");
+  if (meta) {
+    var mins = state.sessionStart ? Math.round((Date.now() - state.sessionStart) / 60000) : 0;
+    var n = (state.harvest && state.harvest.log) ? state.harvest.log.length : 0;
+    meta.textContent = "Session " + mins + " min in \u2022 " + n + " reading" + (n === 1 ? "" : "s") + " logged so far";
+  }
+  // Pre-fill with last reading (or baseline) for quick edits
+  var last = (state.harvest && state.harvest.log && state.harvest.log.length)
+    ? state.harvest.log[state.harvest.log.length - 1] : null;
+  if ($id("huYield"))   $id("huYield").value   = last ? last.yield   : (state.harvest.expectedYield || "");
+  if ($id("huMoisture"))$id("huMoisture").value= last ? last.moisture: (state.harvest.startMoisture || "");
+  if ($id("huQuality")) $id("huQuality").value = "";
+
+  openDlg("harvestUpdateDlg", "huYield");
+
+  var autoTimer = setTimeout(function () { onSkip(); }, HARVEST_AUTODISMISS_MS);
+
+  function cleanup() {
+    clearTimeout(autoTimer);
+    $id("harvestUpdateSave").removeEventListener("click", onSave);
+    $id("harvestUpdateSkip").removeEventListener("click", onSkip);
+    $id("harvestUpdateDlg").removeEventListener("click", onBackdrop);
+  }
+  function onSave() {
+    var reading = {
+      t: new Date().toISOString(),
+      minsIn: state.sessionStart ? Math.round((Date.now() - state.sessionStart) / 60000) : 0,
+      yield:    ($id("huYield").value    || "").trim(),
+      moisture: ($id("huMoisture").value || "").trim(),
+      quality:  ($id("huQuality").value  || "").trim()
+    };
+    // Only log if at least one value entered
+    if (reading.yield || reading.moisture || reading.quality) {
+      state.harvest.log = state.harvest.log || [];
+      state.harvest.log.push(reading);
+    }
+    closeDlg("harvestUpdateDlg"); cleanup();
+  }
+  function onSkip() { closeDlg("harvestUpdateDlg"); cleanup(); }
+  function onBackdrop(ev) { if (ev.target === $id("harvestUpdateDlg")) onSkip(); }
+
+  $id("harvestUpdateSave").addEventListener("click", onSave);
+  $id("harvestUpdateSkip").addEventListener("click", onSkip);
+  $id("harvestUpdateDlg").addEventListener("click", onBackdrop);
+}
+
+function startHarvestTimer() {
+  stopHarvestTimer();
+  state.harvestTimer = setInterval(function () {
+    if (state.running && state.equipment.type === "combine") {
+      showHarvestUpdateDialog();
+    }
+  }, HARVEST_UPDATE_MS);
+}
+function stopHarvestTimer() {
+  if (state.harvestTimer != null) { clearInterval(state.harvestTimer); state.harvestTimer = null; }
+}
+
+// ============================================================
 // START-SESSION DIALOG (themed) — field check + weather in one popup.
 // Returns a Promise that resolves true (start) or false (cancel).
 // ============================================================
@@ -485,6 +590,12 @@ async function startSession() {
   const proceed = await showStartDialog();
   if (!proceed) { return; }
 
+  // ← NEW: harvest setup (combine only) — expected yield + start moisture
+  state.harvest = { expectedYield: "", startMoisture: "", log: [] };
+  if (state.equipment.type === "combine") {
+    await showHarvestStartDialog();
+  }
+
   state.running = true;
   state.sessionStart = Date.now();
   state.acres = 0; state.bushels = 0; state.gallons = 0;
@@ -520,10 +631,14 @@ async function startSession() {
   );
 
   requestWakeLock();
+
+  // ← NEW: kick off recurring harvest update prompts for combines
+  if (state.equipment.type === "combine") startHarvestTimer();
 }
 
 function stopSession() {
   state.running = false;
+  stopHarvestTimer();   // ← NEW: end recurring harvest prompts
   if (state.watchId != null) navigator.geolocation.clearWatch(state.watchId);
   state.watchId = null;
   $("btnStart").disabled = false;
@@ -959,7 +1074,7 @@ const EQ_TYPES = {
     label: "Combine",
     emoji: "🌾",
     subId: "subCombine",
-    fields: ["cmYield", "cmTank", "cmMoisture"],
+    fields: ["cmTank"],
   },
   planter: {
     label: "Planter",
@@ -1068,9 +1183,8 @@ function applyEqParamsToState(type, values) {
     state.sprayer.product = values.spProduct || "";
   } else if (type === "combine") {
     state.combine = state.combine || {};
-    state.combine.expectedYield = parseFloat(values.cmYield)    || 0;
-    state.combine.tankCapacity  = parseFloat(values.cmTank)     || 0;
-    state.combine.moisture      = parseFloat(values.cmMoisture) || 0;
+    state.combine.tankCapacity  = parseFloat(values.cmTank) || 0;
+    // expectedYield + moisture now come from the Harvest Setup dialog at start
   } else if (type === "planter") {
     state.planter = state.planter || {};
     state.planter.rowSpacing = parseFloat(values.plRowSpacing) || 30;
@@ -1109,7 +1223,7 @@ function updateEqSummary() {
     text = `Sprayer: ${state.sprayer.gpa} GPA, ${state.sprayer.nozzle}" nozzles, target ${state.sprayer.target} mph${state.sprayer.tank ? `, ${state.sprayer.tank} gal tank` : ""}${state.sprayer.product ? ` — ${state.sprayer.product}` : ""}`;
   } else if (type === "combine") {
     const c = state.combine || {};
-    text = `Combine: ${c.expectedYield || "?"} bu/ac expected, ${c.tankCapacity || "?"} bu tank, ${c.moisture || "?"}% moisture`;
+    text = `Combine: ${c.tankCapacity || "?"} bu grain tank (yield & moisture set at harvest start)`;
   } else if (type === "planter") {
     const p = state.planter || {};
     const suggestedWidth = (p.rows && p.rowSpacing) ? (p.rows * p.rowSpacing / 12).toFixed(1) : "?";
@@ -1462,6 +1576,11 @@ $("btnSave").addEventListener("click", async () => {
     avgSpeed: state.speedCount > 0 ? +(state.speedSum / state.speedCount).toFixed(1) : 0,
     maxSpeed: +state.speedMax.toFixed(1),
     weather: { ...(state.weather || {}) },   // ← NEW: spray-record weather
+    harvest: (state.equipment.type === "combine")
+      ? { expectedYield: state.harvest.expectedYield,
+          startMoisture: state.harvest.startMoisture,
+          log: (state.harvest.log || []).slice() }
+      : null,                                 // ← NEW: harvest readings log
   };
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   all[id] = rep;
@@ -1683,6 +1802,25 @@ $("btnPdfRep").addEventListener("click", () => {
       <tr><td>Target Speed</td><td>${r.sprayer.target} mph</td></tr>
     </table>` : ""}
 
+    ${r.harvest ? `
+    <h2>🌾 Harvest Record</h2><table>
+      <tr><td>Expected Yield</td><td>${r.harvest.expectedYield ? r.harvest.expectedYield + " bu/ac" : "—"}</td></tr>
+      <tr><td>Start Moisture</td><td>${r.harvest.startMoisture ? r.harvest.startMoisture + " %" : "—"}</td></tr>
+    </table>
+    ${(r.harvest.log && r.harvest.log.length) ? `
+    <h3>Readings (${r.harvest.log.length})</h3>
+    <table>
+      <tr><th>#</th><th>Time</th><th>Yield (bu/ac)</th><th>Moisture (%)</th><th>Quality / notes</th></tr>
+      ${r.harvest.log.map((x, i) => `<tr>
+        <td>${i + 1}</td>
+        <td>${x.minsIn != null ? x.minsIn + " min" : new Date(x.t).toLocaleTimeString()}</td>
+        <td>${x.yield || "—"}</td>
+        <td>${x.moisture || "—"}</td>
+        <td>${x.quality || "—"}</td>
+      </tr>`).join("")}
+    </table>` : `<p>No readings logged.</p>`}
+    ` : ""}
+
     </body></html>`;
   const w = window.open("", "_blank");
   w.document.write(html);
@@ -1707,7 +1845,34 @@ function formatReport(r) {
     `Wind:      ${(r.weather && (r.weather.windSpeed || r.weather.windDir)) ? ((r.weather.windSpeed ? r.weather.windSpeed + " mph " : "") + (r.weather.windDir || "")).trim() : "\u2014"}`,
     `Temp:      ${(r.weather && r.weather.temp) ? r.weather.temp + " \u00B0F" : "\u2014"}`,
     `Sky:       ${(r.weather && r.weather.sky) ? r.weather.sky : "\u2014"}`,
-  ].join("\n");
+  ].concat(formatHarvestLines(r)).join("\n");
+}
+
+// Build the harvest section lines for a report (empty if not a combine session)
+function formatHarvestLines(r) {
+  if (!r.harvest) return [];
+  const h = r.harvest;
+  const lines = [
+    ``,
+    `--- Harvest record ---`,
+    `Expected Yield: ${h.expectedYield ? h.expectedYield + " bu/ac" : "\u2014"}`,
+    `Start Moisture: ${h.startMoisture ? h.startMoisture + " %" : "\u2014"}`,
+  ];
+  const log = h.log || [];
+  if (!log.length) {
+    lines.push(`Readings:       (none logged)`);
+  } else {
+    lines.push(`Readings (${log.length}):`);
+    log.forEach((x, i) => {
+      const parts = [];
+      if (x.yield)    parts.push(x.yield + " bu/ac");
+      if (x.moisture) parts.push(x.moisture + "% moist");
+      if (x.quality)  parts.push(x.quality);
+      const when = (x.minsIn != null ? x.minsIn + " min" : new Date(x.t).toLocaleTimeString());
+      lines.push(`  ${String(i + 1).padStart(2)}. [${when}] ${parts.join(" \u2022 ") || "\u2014"}`);
+    });
+  }
+  return lines;
 }
 
 // ============================================================
@@ -1730,7 +1895,10 @@ function reportsToCSV() {
     "Machine", "Type", "Width (ft)",
     "Acres", "Boundary Acres", "Coverage %",
     "Avg Speed (mph)", "Max Speed (mph)", "Bushels", "Gallons",
-    "Wind Speed (mph)", "Wind Dir", "Temp (F)", "Sky", "Weather Time", "Report ID"
+    "Wind Speed (mph)", "Wind Dir", "Temp (F)", "Sky", "Weather Time",
+    "Exp Yield (bu/ac)", "Start Moisture (%)", "Harvest Readings",
+    "Last Yield (bu/ac)", "Last Moisture (%)", "Last Quality",
+    "Report ID"
   ];
   var rows = [headers.map(csvEscape).join(",")];
 
@@ -1750,6 +1918,12 @@ function reportsToCSV() {
       (r.gallons != null ? r.gallons : ""),
       w.windSpeed || "", w.windDir || "", w.temp || "", w.sky || "",
       w.capturedAt ? new Date(w.capturedAt).toLocaleString() : "",
+      (r.harvest && r.harvest.expectedYield) || "",
+      (r.harvest && r.harvest.startMoisture) || "",
+      (r.harvest && r.harvest.log) ? r.harvest.log.length : "",
+      (r.harvest && r.harvest.log && r.harvest.log.length) ? r.harvest.log[r.harvest.log.length-1].yield : "",
+      (r.harvest && r.harvest.log && r.harvest.log.length) ? r.harvest.log[r.harvest.log.length-1].moisture : "",
+      (r.harvest && r.harvest.log && r.harvest.log.length) ? r.harvest.log[r.harvest.log.length-1].quality : "",
       r.id || ""
     ];
     rows.push(row.map(csvEscape).join(","));
