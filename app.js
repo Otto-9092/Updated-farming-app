@@ -371,6 +371,39 @@ function showTitleDialog(suggested) {
   });
 }
 
+// ============================================================
+// RENAME REPORT DIALOG (themed). Resolves to the new name string,
+// or null if cancelled.
+// ============================================================
+function showRenameDialog(current) {
+  return new Promise(function (resolve) {
+    var input = $id("dlgRenameInput");
+    if (input) input.value = current || "";
+    openDlg("renameDlg", "dlgRenameInput");
+    if (input) { try { input.select(); } catch (e) {} }
+
+    function cleanup() {
+      $id("renameDlgSave").removeEventListener("click", onSave);
+      $id("renameDlgCancel").removeEventListener("click", onCancel);
+      $id("renameDlg").removeEventListener("click", onBackdrop);
+      if (input) input.removeEventListener("keydown", onKey);
+    }
+    function onSave() {
+      var val = (input && input.value ? input.value : "").trim();
+      closeDlg("renameDlg"); cleanup();
+      resolve(val);   // may be "" -> caller treats empty as invalid
+    }
+    function onCancel() { closeDlg("renameDlg"); cleanup(); resolve(null); }
+    function onBackdrop(ev) { if (ev.target === $id("renameDlg")) onCancel(); }
+    function onKey(ev) { if (ev.key === "Enter") { ev.preventDefault(); onSave(); } }
+
+    $id("renameDlgSave").addEventListener("click", onSave);
+    $id("renameDlgCancel").addEventListener("click", onCancel);
+    $id("renameDlg").addEventListener("click", onBackdrop);
+    if (input) input.addEventListener("keydown", onKey);
+  });
+}
+
 // Tiny HTML-escaper for values injected into dialog markup
 function escHtml(s) {
   return String(s == null ? "" : s)
@@ -1466,13 +1499,13 @@ $("btnViewRep").addEventListener("click", () => {
 });
 
 // Rename — NEW
-if ($("btnRenameRep")) $("btnRenameRep").addEventListener("click", () => {
+if ($("btnRenameRep")) $("btnRenameRep").addEventListener("click", async () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   const id = $("repSelect").value;
   const r = all[id];
   if (!r) return alert("Select a report to rename.");
   const current = r.name || (r.field && r.field.name) || id;
-  const next = prompt("New report name:", current);
+  const next = await showRenameDialog(current);   // themed dialog
   if (next == null) return;                       // user hit cancel
   const trimmed = next.trim();
   if (!trimmed) return alert("Name cannot be empty.");
