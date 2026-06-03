@@ -6,7 +6,7 @@
   --muted: #9aa3b2;
   --accent: #ffb703;
   --green: #2ecc71;
-  --red: #e74c3c;
+  --red: #e74c3c;a
   --blue: #3498db;
   --border: #262c3a;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -108,9 +108,57 @@ input, textarea, .report-body, pre { -webkit-user-select: text; user-select: tex
   gap: 12px;
   align-items: stretch;
 }
+.operate-layout .map-col {
+  flex: 1 1 auto;   /* map column takes remaining width */
+  min-width: 0;     /* allow it to shrink properly inside flex */
+  position: relative;
+}
 .operate-layout #map {
-  flex: 1 1 auto;   /* map takes remaining width */
-  min-width: 0;     /* allow map to shrink properly inside flex */
+  width: 100%;
+}
+
+/* Toggle button bar (sits above the map) */
+.map-toggle-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.map-toggle-btn {
+  padding: 8px 12px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 40px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.map-toggle-btn:active { transform: scale(0.97); }
+
+/* When metrics are collapsed, hide the panel entirely */
+.operate-layout.metrics-collapsed .metrics { display: none; }
+
+/* ===== CSS-based fullscreen (works on iOS where the native API does not) ===== */
+.map-col.map-expanded {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 2000;
+  margin: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+.map-col.map-expanded #map {
+  flex: 1 1 auto;
+  height: auto !important;   /* override the vh heights while expanded */
+  border-radius: 0;
+}
+.map-col.map-expanded .map-toggle-bar {
+  margin: 8px;
 }
 
 /* ===== Metrics — now a side panel beside the map (was an overlay) ===== */
