@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.03 · 14:47";
+window.APP_VERSION = "2026.06.03 · 15:18";
 try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -37,6 +37,10 @@ const state = {
   combine:  { expectedYield: 180, tankCapacity: 350, moisture: 15.0 },
   harvest:  { expectedYield: "", startMoisture: "", log: [] },  // per-session harvest readings
   harvestTimer: null,
+  // Tank + load tracking (reset per session)
+  tankGallonsAtRefill: 0,   // state.gallons value at the last refill (sprayer)
+  loads: 0,                 // sprayer refills OR combine unloads this session
+  loadLog: [],              // timestamped load events
   planter:  { rowSpacing: 30, rows: 16, population: 34000, variety: "", downforce: 150 },
   tillage:  { depth: 6, passType: "primary", notes: "" },
   spreader: { productType: "dry_fert", rate: 200, bin: 8000, productName: "" },
@@ -604,10 +608,15 @@ async function startSession() {
     await showHarvestStartDialog();
   }
   updateHarvestTile();   // ← seed live tile with baseline
+  updateTankAndLoads();  // ← seed tank/load tiles
 
   state.running = true;
   state.sessionStart = Date.now();
   state.acres = 0; state.bushels = 0; state.gallons = 0;
+  // Reset tank + load tracking for the new session
+  state.tankGallonsAtRefill = 0;
+  state.loads = 0;
+  state.loadLog = [];
   state.coverageCells.clear();
   state.efficiencyHits = 0; state.efficiencyAttempts = 0;
   state.coveragePolys.forEach(p => p.setMap(null));
@@ -952,6 +961,9 @@ function updateMetrics(mph) {
   $("mBu").textContent  = Math.round(state.bushels);
   $("mGal").textContent = state.gallons.toFixed(1);
 
+  // keep tank-remaining / countdown / loads tiles live
+  updateTankAndLoads();
+
   if (state.equipment.type === "sprayer") {
   const gpm = (state.sprayer.gpa * mph * state.equipment.width) / 495;
   state.liveGPM = gpm;
@@ -990,6 +1002,97 @@ function applyEquipmentUI() {
   // Section Control is a sprayer-only feature — hide it otherwise.
   const secCard = $("sectionControlCard");
   if (secCard) secCard.classList.toggle("hidden", !isSprayer);
+
+  // Tank Remaining + Refill countdown tiles — sprayer only
+  ["mTankLeftBox","mAcToEmptyBox","mMinToEmptyBox"].forEach(function(id){
+    var el = $(id); if (el) el.classList.toggle("hidden", !isSprayer);
+  });
+  // Loads tile — sprayer (refills) or combine (unloads)
+  var loadsBox = $("mLoadsBox");
+  if (loadsBox) loadsBox.classList.toggle("hidden", !(isSprayer || isCombine));
+
+  // Tank & Loads card + its two buttons
+  var tlCard = $("tankLoadsCard");
+  if (tlCard) tlCard.classList.toggle("hidden", !(isSprayer || isCombine));
+  var refillBtn = $("btnRefill"), unloadBtn = $("btnUnload");
+  if (refillBtn) refillBtn.classList.toggle("hidden", !isSprayer);
+  if (unloadBtn) unloadBtn.classList.toggle("hidden", !isCombine);
+  var tlTitle = $("tankLoadsTitle");
+  if (tlTitle) tlTitle.textContent = isCombine ? "Grain Loads" : "Tank & Loads";
+
+  updateTankAndLoads();
+}
+
+// ============================================================
+// TANK REMAINING + REFILL COUNTDOWN (sprayer) + LOAD COUNTER
+// ============================================================
+const LOW_TANK_FRAC = 0.15;   // warn at 15% remaining
+
+function updateTankAndLoads() {
+  const isSprayer = state.equipment.type === "sprayer";
+  const isCombine = state.equipment.type === "combine";
+
+  const loadsEl = $("mLoads");
+  if (loadsEl) loadsEl.textContent = state.loads || 0;
+
+  if (!isSprayer) return;
+
+  const cap = parseFloat(state.sprayer.tank) || 0;
+  const usedSinceRefill = Math.max(0, state.gallons - (state.tankGallonsAtRefill || 0));
+  const remaining = cap > 0 ? Math.max(0, cap - usedSinceRefill) : 0;
+
+  const tankEl = $("mTankLeft");
+  if (tankEl) tankEl.textContent = cap > 0 ? remaining.toFixed(0) : "\u2014";
+
+  const gpa = parseFloat(state.sprayer.gpa) || 0;
+  const acToEmpty = (cap > 0 && gpa > 0) ? remaining / gpa : null;
+  const acEl = $("mAcToEmpty");
+  if (acEl) acEl.textContent = acToEmpty != null ? acToEmpty.toFixed(1) : "\u2014";
+
+  const gpm = state.liveGPM || 0;
+  const minEl = $("mMinToEmpty");
+  if (minEl) {
+    if (cap > 0 && gpm > 0.05) minEl.textContent = Math.round(remaining / gpm);
+    else minEl.textContent = "\u2014";
+  }
+
+  const low = cap > 0 && remaining <= cap * LOW_TANK_FRAC;
+  ["mTankLeftBox","mAcToEmptyBox","mMinToEmptyBox"].forEach(function(id){
+    var box = $(id); if (box) box.classList.toggle("low-tank", low);
+  });
+}
+
+function doRefill() {
+  if (state.equipment.type !== "sprayer") return;
+  state.tankGallonsAtRefill = state.gallons;
+  state.loads = (state.loads || 0) + 1;
+  state.loadLog = state.loadLog || [];
+  state.loadLog.push({
+    t: new Date().toISOString(),
+    minsIn: state.sessionStart ? Math.round((Date.now() - state.sessionStart) / 60000) : 0,
+    type: "refill",
+    n: state.loads,
+    acresAt: +state.acres.toFixed(2),
+    gallonsAt: +state.gallons.toFixed(1)
+  });
+  updateTankAndLoads();
+  appAlert("Tank refilled \u2014 load #" + state.loads + " started.", "\uD83D\uDEB0 Refill logged");
+}
+
+function doUnload() {
+  if (state.equipment.type !== "combine") return;
+  state.loads = (state.loads || 0) + 1;
+  state.loadLog = state.loadLog || [];
+  state.loadLog.push({
+    t: new Date().toISOString(),
+    minsIn: state.sessionStart ? Math.round((Date.now() - state.sessionStart) / 60000) : 0,
+    type: "unload",
+    n: state.loads,
+    acresAt: +state.acres.toFixed(2),
+    bushelsAt: Math.round(state.bushels)
+  });
+  updateTankAndLoads();
+  appAlert("Grain unloaded \u2014 load #" + state.loads + " recorded.", "\uD83D\uDCE4 Unload logged");
 }
 
 // Refresh the live Yield/Moisture tiles from the latest harvest reading
@@ -1509,6 +1612,10 @@ if ($("btnTrail")) $("btnTrail").addEventListener("click", () => {
 });
 if ($("btnClearTrail")) $("btnClearTrail").addEventListener("click", clearTrail);
 
+// Tank refill (sprayer) + grain unload (combine)
+if ($("btnRefill")) $("btnRefill").addEventListener("click", doRefill);
+if ($("btnUnload")) $("btnUnload").addEventListener("click", doUnload);
+
 // ============================================================
 // EXPORT — KML / GPX
 // ============================================================
@@ -1616,6 +1723,8 @@ $("btnSave").addEventListener("click", async () => {
           startMoisture: state.harvest.startMoisture,
           log: (state.harvest.log || []).slice() }
       : null,                                 // ← NEW: harvest readings log
+    loads: state.loads || 0,                  // ← NEW: refill/unload count
+    loadLog: (state.loadLog || []).slice(),   // ← NEW: timestamped load events
   };
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   all[id] = rep;
@@ -1856,6 +1965,18 @@ $("btnPdfRep").addEventListener("click", () => {
     </table>` : `<p>No readings logged.</p>`}
     ` : ""}
 
+    ${(r.loadLog && r.loadLog.length) ? `
+    <h2>${r.equipment && r.equipment.type === "combine" ? "📤 Grain Unloads" : "🚰 Tank Refills"} (${r.loads || r.loadLog.length})</h2>
+    <table>
+      <tr><th>#</th><th>Time</th><th>Acres</th><th>${r.equipment && r.equipment.type === "combine" ? "Bushels" : "Gallons"}</th></tr>
+      ${r.loadLog.map((x) => `<tr>
+        <td>${x.n}</td>
+        <td>${x.minsIn != null ? x.minsIn + " min" : new Date(x.t).toLocaleTimeString()}</td>
+        <td>${x.acresAt != null ? x.acresAt : "—"}</td>
+        <td>${x.bushelsAt != null ? x.bushelsAt : (x.gallonsAt != null ? x.gallonsAt : "—")}</td>
+      </tr>`).join("")}
+    </table>` : (r.loads ? `<h2>Loads</h2><table><tr><td>Total</td><td>${r.loads}</td></tr></table>` : "")}
+
     </body></html>`;
   const w = window.open("", "_blank");
   w.document.write(html);
@@ -1880,7 +2001,25 @@ function formatReport(r) {
     `Wind:      ${(r.weather && (r.weather.windSpeed || r.weather.windDir)) ? ((r.weather.windSpeed ? r.weather.windSpeed + " mph " : "") + (r.weather.windDir || "")).trim() : "\u2014"}`,
     `Temp:      ${(r.weather && r.weather.temp) ? r.weather.temp + " \u00B0F" : "\u2014"}`,
     `Sky:       ${(r.weather && r.weather.sky) ? r.weather.sky : "\u2014"}`,
-  ].concat(formatHarvestLines(r)).join("\n");
+  ].concat(formatHarvestLines(r)).concat(formatLoadLines(r)).join("\n");
+}
+
+// Build load-counter lines for a report (refills for sprayer / unloads for combine)
+function formatLoadLines(r) {
+  if (!r.loadLog || !r.loadLog.length) {
+    if (r.loads) return [``, `Loads:     ${r.loads}`];
+    return [];
+  }
+  const isUnload = r.equipment && r.equipment.type === "combine";
+  const lines = [``, `--- ${isUnload ? "Grain unloads" : "Tank refills"} (${r.loads || r.loadLog.length}) ---`];
+  r.loadLog.forEach((x) => {
+    const when = (x.minsIn != null ? x.minsIn + " min" : new Date(x.t).toLocaleTimeString());
+    const extra = isUnload
+      ? (x.bushelsAt != null ? `${x.bushelsAt} bu total` : "")
+      : (x.gallonsAt != null ? `${x.gallonsAt} gal total` : "");
+    lines.push(`  #${x.n}  [${when}]  ${x.acresAt != null ? x.acresAt + " ac" : ""}${extra ? "  \u2022  " + extra : ""}`);
+  });
+  return lines;
 }
 
 // Build the harvest section lines for a report (empty if not a combine session)
@@ -1933,6 +2072,7 @@ function reportsToCSV() {
     "Wind Speed (mph)", "Wind Dir", "Temp (F)", "Sky", "Weather Time",
     "Exp Yield (bu/ac)", "Start Moisture (%)", "Harvest Readings",
     "Last Yield (bu/ac)", "Last Moisture (%)", "Last Quality",
+    "Loads", "Load Events",
     "Report ID"
   ];
   var rows = [headers.map(csvEscape).join(",")];
@@ -1959,6 +2099,8 @@ function reportsToCSV() {
       (r.harvest && r.harvest.log && r.harvest.log.length) ? r.harvest.log[r.harvest.log.length-1].yield : "",
       (r.harvest && r.harvest.log && r.harvest.log.length) ? r.harvest.log[r.harvest.log.length-1].moisture : "",
       (r.harvest && r.harvest.log && r.harvest.log.length) ? r.harvest.log[r.harvest.log.length-1].quality : "",
+      r.loads || 0,
+      (r.loadLog && r.loadLog.length) ? r.loadLog.map(function(x){ return "#"+x.n+"@"+(x.minsIn!=null?x.minsIn+"min":"")+(x.acresAt!=null?" "+x.acresAt+"ac":""); }).join("; ") : "",
       r.id || ""
     ];
     rows.push(row.map(csvEscape).join(","));
