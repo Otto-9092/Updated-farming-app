@@ -276,7 +276,7 @@ function closeDlg(overlayId) {
 //  - Harvest Setup at session start: expected yield + start moisture
 //  - Harvest Update every 5 min: timestamped yield/moisture/quality log
 // ============================================================
-const HARVEST_UPDATE_MS = 5 * 60 * 1000;   // 5 minutes
+const HARVEST_UPDATE_MS = 30 * 1000;   // 5 minutes
 const HARVEST_AUTODISMISS_MS = 60 * 1000;  // auto-close after 60s
 
 // Setup dialog. Resolves true once handled (always proceeds; Skip just
