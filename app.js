@@ -830,10 +830,17 @@ function updateMetrics(mph) {
 
 function applyEquipmentUI() {
   const isSprayer = state.equipment.type === "sprayer";
+
+  // Sprayer-only metrics: Efficiency, Gallons, Total GPM, Nozzle GPM.
+  // Hidden for every other equipment type since they don't apply.
+  const effBox = $("mEffBox");
+  if (effBox) effBox.classList.toggle("hidden", !isSprayer);
   $("mGalBox").classList.toggle("hidden", !isSprayer);
   $("mGpmBox").classList.toggle("hidden", !isSprayer);
   const nozBox = $("mNozGpmBox");
   if (nozBox) nozBox.classList.toggle("hidden", !isSprayer);
+
+  // Bushels is the combine/harvest metric — shown for non-sprayers.
   $("mBuBox").classList.toggle("hidden",   isSprayer);
 }
 
