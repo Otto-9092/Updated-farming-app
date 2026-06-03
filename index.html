@@ -458,6 +458,37 @@
   </div>
 </div>
 
+<!-- Generic notice (themed alert) -->
+<div id="noticeDlg" class="dlg-overlay hidden" role="dialog" aria-modal="true">
+  <div class="dlg-card">
+    <div class="dlg-header">
+      <div class="dlg-title" id="noticeDlgTitle">Notice</div>
+    </div>
+    <div class="dlg-body">
+      <div id="noticeDlgMsg" class="dlg-message"></div>
+    </div>
+    <div class="dlg-footer">
+      <button id="noticeDlgOk" class="btn btn-primary">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic confirm (themed yes/no) -->
+<div id="confirmDlg" class="dlg-overlay hidden" role="dialog" aria-modal="true">
+  <div class="dlg-card">
+    <div class="dlg-header">
+      <div class="dlg-title" id="confirmDlgTitle">Please confirm</div>
+    </div>
+    <div class="dlg-body">
+      <div id="confirmDlgMsg" class="dlg-message"></div>
+    </div>
+    <div class="dlg-footer">
+      <button id="confirmDlgCancel" class="btn btn-ghost">Cancel</button>
+      <button id="confirmDlgOk" class="btn btn-primary">OK</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============== CONFIG ============== -->
 <!-- Put your Google Maps API key in config.js -->
 <script src="config.js"></script>
