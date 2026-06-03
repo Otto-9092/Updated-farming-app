@@ -1745,3 +1745,46 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 })();
+
+// ============================================================
+// DAY / NIGHT THEME TOGGLE
+// ☀️ Day = cream (default), 🌙 Night = dark. Remembers your choice.
+// Added feature — does not modify existing logic.
+// ============================================================
+(function setupThemeToggle() {
+  function ready(fn) {
+    if (document.readyState !== "loading") fn();
+    else document.addEventListener("DOMContentLoaded", fn);
+  }
+  ready(function () {
+    const btn = document.getElementById("btnThemeToggle");
+    const body = document.body;
+
+    function applyTheme(night) {
+      if (night) {
+        body.classList.add("night-mode");
+        if (btn) btn.textContent = "☀️ Day";
+      } else {
+        body.classList.remove("night-mode");
+        if (btn) btn.textContent = "🌙 Night";
+      }
+      // Redraw the Google map so any themed UI stays crisp
+      if (state.map && window.google && google.maps) {
+        setTimeout(() => google.maps.event.trigger(state.map, "resize"), 60);
+      }
+    }
+
+    // Restore saved preference (default = day/cream)
+    let night = false;
+    try { night = localStorage.getItem("theme") === "night"; } catch (e) {}
+    applyTheme(night);
+
+    if (btn) {
+      btn.addEventListener("click", function () {
+        const isNight = !body.classList.contains("night-mode");
+        applyTheme(isNight);
+        try { localStorage.setItem("theme", isNight ? "night" : "day"); } catch (e) {}
+      });
+    }
+  });
+})();
