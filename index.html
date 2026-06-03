@@ -385,6 +385,60 @@
     </div>
   </div>
 </div>
+<!-- ============================================== -->
+<!-- THEMED DIALOGS (field check / report title)    -->
+<!-- ============================================== -->
+
+<!-- Field confirmation + weather, shown at session start -->
+<div id="startDlg" class="dlg-overlay hidden" role="dialog" aria-modal="true">
+  <div class="dlg-card">
+    <div class="dlg-header">
+      <div class="dlg-title">Start Session</div>
+    </div>
+    <div class="dlg-body">
+      <div id="startDlgSummary"></div>
+      <div id="startDlgWeatherWrap">
+        <label>Wind speed (mph)
+          <input id="dlgWindSpeed" type="text" inputmode="decimal" placeholder="e.g. 8" />
+        </label>
+        <label>Wind direction
+          <input id="dlgWindDir" type="text" placeholder="e.g. NW, S, 270" />
+        </label>
+        <label>Temperature (°F)
+          <input id="dlgTemp" type="text" inputmode="decimal" placeholder="e.g. 72" />
+        </label>
+        <label>Sky / conditions
+          <input id="dlgSky" type="text" placeholder="e.g. clear, overcast" />
+        </label>
+        <div class="hint">Weather is optional — leave blank to skip. Saved into this report.</div>
+      </div>
+    </div>
+    <div class="dlg-footer">
+      <button id="startDlgCancel" class="btn btn-ghost">Cancel</button>
+      <button id="startDlgGo" class="btn btn-primary">▶ Start</button>
+    </div>
+  </div>
+</div>
+
+<!-- Report title prompt, shown when saving -->
+<div id="titleDlg" class="dlg-overlay hidden" role="dialog" aria-modal="true">
+  <div class="dlg-card">
+    <div class="dlg-header">
+      <div class="dlg-title">Save Report</div>
+    </div>
+    <div class="dlg-body">
+      <label>Report title
+        <input id="dlgReportTitle" type="text" placeholder="Title this report" />
+      </label>
+      <div class="hint">A clear title makes reports easy to find later.</div>
+    </div>
+    <div class="dlg-footer">
+      <button id="titleDlgCancel" class="btn btn-ghost">Cancel</button>
+      <button id="titleDlgSave" class="btn btn-primary">💾 Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============== CONFIG ============== -->
 <!-- Put your Google Maps API key in config.js -->
 <script src="config.js"></script>
