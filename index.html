@@ -23,6 +23,9 @@
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
 <link rel="stylesheet" href="styles.css" />
+<style>
+  .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
+</style>
 </head>
 <body>
 
@@ -32,7 +35,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro</div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.03</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -539,8 +542,8 @@
 
 <!-- ============== CONFIG ============== -->
 <!-- Put your Google Maps API key in config.js -->
-<script src="config.js"></script>
-<script src="app.js"></script>
+<script src="config.js?v=2026.06.03"></script>
+<script src="app.js?v=2026.06.03"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
