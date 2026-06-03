@@ -15,6 +15,36 @@
   --safe-right: env(safe-area-inset-right, 0px);
 }
 
+/* ===== NIGHT MODE: restores the original dark theme ===== */
+body.night-mode {
+  --bg: #0f1115;
+  --panel: #161a22;
+  --panel-2: #1d2230;
+  --text: #e8ecf1;
+  --muted: #9aa3b2;
+  --accent: #ffb703;
+  --green: #2ecc71;
+  --red: #e74c3c;
+  --blue: #3498db;
+  --border: #262c3a;
+}
+/* In night mode, give metric tiles a touch of translucency back */
+body.night-mode .metric {
+  background: rgba(15,17,21,0.85);
+}
+
+/* Day/Night toggle button in the header */
+.theme-toggle {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 600;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.theme-toggle:active { transform: scale(0.96); }
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   margin: 0; padding: 0;
