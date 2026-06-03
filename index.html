@@ -42,6 +42,12 @@
   .mix-results td.num, .mix-results th.num { text-align: right; }
   .mix-results .mix-total td { font-weight: bold; border-top: 2px solid rgba(128,128,128,0.4); }
   @media (max-width: 480px) { .mix-grid2 { grid-template-columns: 1fr; } }
+  /* Cost & profit */
+  .cost-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .cost-grid label { display: flex; flex-direction: column; font-size: 13px; gap: 3px; }
+  .profit-pos { color: #1a7f37; font-weight: bold; }
+  .profit-neg { color: #b3261e; font-weight: bold; }
+  @media (max-width: 480px) { .cost-grid { grid-template-columns: 1fr 1fr; } }
 </style>
 </head>
 <body>
@@ -52,7 +58,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.03 · 15:42</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.03 · 16:33</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -342,6 +348,39 @@
             <option value="lb">lb/ac</option>
           </select>
         </div>
+        <div class="mix-row">
+          <input id="mixName4" type="text" class="mix-name" placeholder="Product 4 name" />
+          <input id="mixRate4" type="number" class="mix-rate" placeholder="rate" step="0.01" min="0" inputmode="decimal" />
+          <select id="mixUnit4" class="mix-unit">
+            <option value="oz">oz/ac</option>
+            <option value="pt">pt/ac</option>
+            <option value="qt">qt/ac</option>
+            <option value="gal">gal/ac</option>
+            <option value="lb">lb/ac</option>
+          </select>
+        </div>
+        <div class="mix-row">
+          <input id="mixName5" type="text" class="mix-name" placeholder="Product 5 name" />
+          <input id="mixRate5" type="number" class="mix-rate" placeholder="rate" step="0.01" min="0" inputmode="decimal" />
+          <select id="mixUnit5" class="mix-unit">
+            <option value="oz">oz/ac</option>
+            <option value="pt">pt/ac</option>
+            <option value="qt">qt/ac</option>
+            <option value="gal">gal/ac</option>
+            <option value="lb">lb/ac</option>
+          </select>
+        </div>
+        <div class="mix-row">
+          <input id="mixName6" type="text" class="mix-name" placeholder="Product 6 name" />
+          <input id="mixRate6" type="number" class="mix-rate" placeholder="rate" step="0.01" min="0" inputmode="decimal" />
+          <select id="mixUnit6" class="mix-unit">
+            <option value="oz">oz/ac</option>
+            <option value="pt">pt/ac</option>
+            <option value="qt">qt/ac</option>
+            <option value="gal">gal/ac</option>
+            <option value="lb">lb/ac</option>
+          </select>
+        </div>
       </div>
 
       <div class="btn-row">
@@ -350,6 +389,33 @@
       </div>
 
       <div id="mixResults" class="mix-results"></div>
+    </div>
+
+    <!-- ===== COST & PROFIT (per field) ===== -->
+    <div class="card" id="costProfitCard">
+      <div class="card-title">💰 Cost &amp; Profit</div>
+      <div class="hint">Per-acre costs save with the field. Enter yield &amp; grain price to see profit.</div>
+
+      <div class="cost-grid">
+        <label>Seed ($/ac) <input id="costSeed" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0" /></label>
+        <label>Chemical ($/ac) <input id="costChem" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0" /></label>
+        <label>Fertilizer ($/ac) <input id="costFert" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0" /></label>
+        <label>Fuel ($/ac) <input id="costFuel" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0" /></label>
+        <label>Other ($/ac) <input id="costOther" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0" /></label>
+      </div>
+
+      <div class="cost-grid">
+        <label>Yield (bu/ac) <input id="costYield" type="number" step="0.1" min="0" inputmode="decimal" placeholder="e.g. 180" /></label>
+        <label>Grain Price ($/bu) <input id="costPrice" type="number" step="0.01" min="0" inputmode="decimal" placeholder="e.g. 4.50" /></label>
+        <label>Acres <input id="costAcres" type="number" step="0.01" min="0" inputmode="decimal" placeholder="auto from field" /></label>
+      </div>
+
+      <div class="btn-row">
+        <button id="btnCostCalc" class="btn btn-primary">Calculate</button>
+        <button id="btnCostReset" class="btn btn-ghost">Clear</button>
+      </div>
+
+      <div id="costResults" class="mix-results"></div>
     </div>
   </section>
 
@@ -639,8 +705,8 @@
 
 <!-- ============== CONFIG ============== -->
 <!-- Put your Google Maps API key in config.js -->
-<script src="config.js?v=20260603-1542"></script>
-<script src="app.js?v=20260603-1542"></script>
+<script src="config.js?v=20260603-1633"></script>
+<script src="app.js?v=20260603-1633"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
