@@ -114,7 +114,7 @@ document.querySelectorAll(".tab").forEach((t) => {
 // ============================================================
 function initMap() {
   state.map = new google.maps.Map($("map"), {
-    center: { lat: 41.5868, lng: -93.625 },
+    center: getStartCenter(),       // last known location, or Iowa fallback
     zoom: 17,
     mapTypeId: "satellite",
     tilt: 0,
@@ -133,19 +133,56 @@ function initMap() {
   });
 
   // Snap to user location ASAP
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        state.map.setCenter(here);
-        state.map.setZoom(19);
-        state.machineMarker.setPosition(here);
-        setGpsPill(true);
-      },
-      (err) => console.warn("Initial GPS:", err),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+  snapToCurrentLocation();
+}
+
+// Centers the map on the user's current location. Saves it for next launch.
+// Shows a clear message if the browser blocks or can't determine location
+// (common on desktops with no GPS — they guess from Wi-Fi/IP and can be way off).
+function snapToCurrentLocation() {
+  if (!navigator.geolocation) {
+    setGpsPill(false);
+    console.warn("Geolocation not supported by this browser.");
+    return;
   }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      state.map.setCenter(here);
+      state.map.setZoom(19);
+      state.machineMarker.setPosition(here);
+      setGpsPill(true, pos.coords.accuracy);
+      // Remember this location so the next launch starts here, not the Iowa fallback.
+      try {
+        localStorage.setItem("lastKnownCenter", JSON.stringify(here));
+      } catch (e) { /* storage might be full or blocked; ignore */ }
+    },
+    (err) => {
+      setGpsPill(false);
+      console.warn("Initial GPS:", err);
+      // Surface the most common desktop problem in plain language.
+      if (err && err.code === err.PERMISSION_DENIED) {
+        console.warn("Location permission denied. Click the lock/location icon " +
+                     "in the address bar and allow location, then tap Recenter.");
+      } else if (err && err.code === err.POSITION_UNAVAILABLE) {
+        console.warn("Location unavailable. Desktop browsers estimate location " +
+                     "from Wi-Fi/IP and may be inaccurate.");
+      }
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+
+// Returns the saved last-known center if we have one, else the Iowa fallback.
+function getStartCenter() {
+  try {
+    const saved = localStorage.getItem("lastKnownCenter");
+    if (saved) {
+      const c = JSON.parse(saved);
+      if (c && typeof c.lat === "number" && typeof c.lng === "number") return c;
+    }
+  } catch (e) { /* ignore parse/storage errors */ }
+  return { lat: 41.5868, lng: -93.625 }; // Des Moines, Iowa fallback
 }
 // Make initMap visible to the Google Maps callback loader
 window.initMap = initMap;
@@ -990,6 +1027,9 @@ if ($("btnDeleteField")) $("btnDeleteField").addEventListener("click", () => {
 // RECENTER / RESET PAINTED / VIEW TOGGLES
 // ============================================================
 if ($("btnRecenter")) $("btnRecenter").addEventListener("click", () => {
+  // If we don't yet have a live position, re-request it (helps desktop after
+  // the user grants location permission).
+  if (!state.lastPos) { snapToCurrentLocation(); return; }
   if (state.lastPos && state.map) {
     state.map.panTo({ lat: state.lastPos.lat, lng: state.lastPos.lng });
     state.map.setZoom(19);
