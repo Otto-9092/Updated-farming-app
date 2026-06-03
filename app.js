@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.03 · 17:05";
+window.APP_VERSION = "2026.06.03 · 17:48";
 try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -41,6 +41,8 @@ const state = {
   tankGallonsAtRefill: 0,   // state.gallons value at the last refill (sprayer)
   loads: 0,                 // sprayer refills OR combine unloads this session
   loadLog: [],              // timestamped load events
+  notes: [],                // field notes (text + optional photo, GPS-tagged)
+  _stagedPhoto: null,       // compressed dataURL staged in the Add Note dialog
   planter:  { rowSpacing: 30, rows: 16, population: 34000, variety: "", downforce: 150 },
   tillage:  { depth: 6, passType: "primary", notes: "" },
   spreader: { productType: "dry_fert", rate: 200, bin: 8000, productName: "" },
@@ -327,6 +329,138 @@ function resetCost() {
 
 if ($("btnCostCalc"))  $("btnCostCalc").addEventListener("click", calcCost);
 if ($("btnCostReset")) $("btnCostReset").addEventListener("click", resetCost);
+
+// ============================================================
+// FIELD NOTES (text + optional photo, GPS-tagged) — added feature
+// ============================================================
+// Compress/resize an image File into a small JPEG dataURL for localStorage.
+function compressImage(file, maxDim, quality) {
+  maxDim = maxDim || 800; quality = quality || 0.6;
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        var w = img.width, h = img.height;
+        if (w > h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else if (h >= w && h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
+        var canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        try { resolve(canvas.toDataURL("image/jpeg", quality)); }
+        catch (err) { reject(err); }
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Format a GPS coordinate for display
+function fmtGps(loc) {
+  if (!loc || loc.lat == null) return "no GPS fix";
+  return loc.lat.toFixed(5) + ", " + loc.lng.toFixed(5);
+}
+
+// Open the Add Note dialog
+function openNoteDialog() {
+  state._stagedPhoto = null;
+  if ($("noteText")) $("noteText").value = "";
+  if ($("notePhoto")) $("notePhoto").value = "";
+  if ($("notePreview")) $("notePreview").innerHTML = "";
+  var hint = $("noteGpsHint");
+  if (hint) {
+    hint.textContent = state.lastPos
+      ? "\uD83D\uDCCD Will tag: " + fmtGps(state.lastPos)
+      : "\u26A0\uFE0F No GPS fix yet \u2014 note will save without a location.";
+  }
+  openDlg("noteDlg", "noteText");
+}
+
+// Photo chosen → compress + preview
+if ($("notePhoto")) $("notePhoto").addEventListener("change", function (e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file) { state._stagedPhoto = null; if ($("notePreview")) $("notePreview").innerHTML = ""; return; }
+  if ($("notePreview")) $("notePreview").innerHTML = '<div class="hint">Processing photo\u2026</div>';
+  compressImage(file, 800, 0.6).then(function (dataUrl) {
+    state._stagedPhoto = dataUrl;
+    if ($("notePreview")) $("notePreview").innerHTML = '<img src="' + dataUrl + '" alt="preview" />';
+  }).catch(function () {
+    state._stagedPhoto = null;
+    if ($("notePreview")) $("notePreview").innerHTML = '<div class="hint">Could not process that image.</div>';
+  });
+});
+
+// Save the staged note
+function saveNote() {
+  var text = ($("noteText") && $("noteText").value || "").trim();
+  if (!text && !state._stagedPhoto) {
+    appAlert("Add some text or a photo first.", "Empty note");
+    return;
+  }
+  var loc = state.lastPos ? { lat: state.lastPos.lat, lng: state.lastPos.lng } : null;
+  state.notes = state.notes || [];
+  state.notes.push({
+    t: new Date().toISOString(),
+    minsIn: state.sessionStart ? Math.round((Date.now() - state.sessionStart) / 60000) : null,
+    text: text,
+    photo: state._stagedPhoto || null,
+    loc: loc
+  });
+  state._stagedPhoto = null;
+  closeDlg("noteDlg");
+  renderNotes();
+}
+
+// Render the notes list under the card
+function renderNotes() {
+  var list = $("notesList");
+  if (!list) return;
+  var notes = state.notes || [];
+  if (!notes.length) {
+    list.innerHTML = '<div class="note-empty">No notes yet this session.</div>';
+    return;
+  }
+  list.innerHTML = notes.map(function (n, i) {
+    var when = new Date(n.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    var thumb = n.photo ? '<img src="' + n.photo + '" alt="note photo" data-noteimg="' + i + '" />' : "";
+    var gps = n.loc ? "\uD83D\uDCCD " + fmtGps(n.loc) : "no GPS";
+    return '<div class="note-item">' + thumb +
+      '<div class="note-body">' +
+        '<div class="note-text">' + escHtml(n.text || "(photo only)") + '</div>' +
+        '<div class="note-meta">' + when + " \u2022 " + gps + '</div>' +
+      '</div>' +
+      '<button class="note-del" data-notedel="' + i + '" title="Delete">\u2715</button>' +
+    '</div>';
+  }).join("");
+}
+
+// Delegated clicks: delete note / open photo full-size
+if ($("notesList")) $("notesList").addEventListener("click", async function (e) {
+  var del = e.target.getAttribute && e.target.getAttribute("data-notedel");
+  if (del != null) {
+    var idx = parseInt(del, 10);
+    if (await appConfirm("Delete this note?", { title: "Delete note", okLabel: "Delete", danger: true })) {
+      state.notes.splice(idx, 1);
+      renderNotes();
+    }
+    return;
+  }
+  var img = e.target.getAttribute && e.target.getAttribute("data-noteimg");
+  if (img != null) {
+    var n = state.notes[parseInt(img, 10)];
+    if (n && n.photo) {
+      var w = window.open();
+      if (w) w.document.write('<img src="' + n.photo + '" style="max-width:100%" />');
+    }
+  }
+});
+
+if ($("btnAddNote")) $("btnAddNote").addEventListener("click", openNoteDialog);
+if ($("noteSave"))   $("noteSave").addEventListener("click", saveNote);
+if ($("noteCancel")) $("noteCancel").addEventListener("click", function () { state._stagedPhoto = null; closeDlg("noteDlg"); });
 
 // ============================================================
 // MAP INIT
@@ -821,6 +955,8 @@ async function startSession() {
   state.tankGallonsAtRefill = 0;
   state.loads = 0;
   state.loadLog = [];
+  state.notes = [];            // ← reset field notes for the new session
+  renderNotes();
   state.coverageCells.clear();
   state.efficiencyHits = 0; state.efficiencyAttempts = 0;
   state.coveragePolys.forEach(p => p.setMap(null));
@@ -1936,6 +2072,7 @@ $("btnSave").addEventListener("click", async () => {
       if (!ci.acres) ci.acres = +state.acres.toFixed(2) || +state.boundary.acres.toFixed(2) || 0;
       return { inputs: ci, summary: computeCostSummary(ci) };
     })(),
+    notes: (state.notes || []).slice(),       // ← NEW: field notes (GPS-tagged)
   };
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   all[id] = rep;
@@ -2202,6 +2339,19 @@ $("btnPdfRep").addEventListener("click", () => {
       ${r.cost.summary.breakeven != null ? `<tr><td>Break-even Price</td><td>${pdfMoney(r.cost.summary.breakeven)}/bu</td></tr>` : ""}
     </table>` : ""}
 
+    ${(r.notes && r.notes.length) ? `
+    <h2>📝 Field Notes (${r.notes.length})</h2>
+    ${r.notes.map((n, i) => `
+      <div style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #ccc;">
+        <div style="font-size:12px; color:#666;">
+          #${i + 1} &bull; ${n.minsIn != null ? n.minsIn + " min" : new Date(n.t).toLocaleTimeString()}
+          ${n.loc ? "&bull; 📍 " + n.loc.lat.toFixed(5) + ", " + n.loc.lng.toFixed(5) : "&bull; no GPS"}
+        </div>
+        ${n.text ? `<div style="margin:4px 0;">${escHtml(n.text)}</div>` : ""}
+        ${n.photo ? `<img src="${n.photo}" style="max-width:320px; max-height:240px; border-radius:6px; margin-top:4px;" />` : ""}
+      </div>`).join("")}
+    ` : ""}
+
     </body></html>`;
   const w = window.open("", "_blank");
   w.document.write(html);
@@ -2226,7 +2376,21 @@ function formatReport(r) {
     `Wind:      ${(r.weather && (r.weather.windSpeed || r.weather.windDir)) ? ((r.weather.windSpeed ? r.weather.windSpeed + " mph " : "") + (r.weather.windDir || "")).trim() : "\u2014"}`,
     `Temp:      ${(r.weather && r.weather.temp) ? r.weather.temp + " \u00B0F" : "\u2014"}`,
     `Sky:       ${(r.weather && r.weather.sky) ? r.weather.sky : "\u2014"}`,
-  ].concat(formatHarvestLines(r)).concat(formatLoadLines(r)).concat(formatCostLines(r)).join("\n");
+  ].concat(formatHarvestLines(r)).concat(formatLoadLines(r)).concat(formatCostLines(r)).concat(formatNoteLines(r)).join("\n");
+}
+
+// Build field-note lines for a report (text + GPS; photos shown only in PDF)
+function formatNoteLines(r) {
+  if (!r.notes || !r.notes.length) return [];
+  var lines = ["", "--- Field Notes (" + r.notes.length + ") ---"];
+  r.notes.forEach(function (n, i) {
+    var when = n.minsIn != null ? (n.minsIn + " min") : new Date(n.t).toLocaleTimeString();
+    var gps = n.loc ? (n.loc.lat.toFixed(5) + ", " + n.loc.lng.toFixed(5)) : "no GPS";
+    var photo = n.photo ? " [photo]" : "";
+    lines.push("  #" + (i + 1) + "  [" + when + "]  \uD83D\uDCCD " + gps + photo);
+    if (n.text) lines.push("     " + n.text);
+  });
+  return lines;
 }
 
 // Small money formatter for the PDF template
@@ -2778,6 +2942,7 @@ window.addEventListener("DOMContentLoaded", () => {
   updatePlanterCalcWidth();
   updateDataStats();                    // ← initialize backup card summary
   populateSeasonYears();                // ← seed season year filter
+  renderNotes();                        // ← seed empty notes list
 });
 
 // ============================================================
