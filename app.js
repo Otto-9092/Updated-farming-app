@@ -1166,9 +1166,11 @@ function cancelEqModal() {
 
 function saveEqModal() {
   const type = $("eqType").value;
+  state.equipment.type = type;               // ← ensure type is current
   // Pull values from the visible sub-menu into state
   const values = readEqParams(type).values;
   applyEqParamsToState(type, values);
+  applyEquipmentUI();                        // ← refresh which metric tiles show
   updateEqSummary();
   closeEqModal();
 }
