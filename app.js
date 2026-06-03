@@ -275,10 +275,50 @@ function captureWeatherForSession() {
   }
 }
 
+// ============================================================
+// FIELD CONFIRMATION (before a session) — added feature
+// Makes sure you're set up in the right field before tracking begins.
+// ============================================================
+function confirmFieldBeforeStart() {
+  var f = state.field || {};
+  var e = state.equipment || {};
+  var hasField = f.name && f.name.trim() !== "";
+
+  if (!hasField) {
+    // No field loaded — warn and let them bail out to set one up.
+    return confirm(
+      "\u26A0\uFE0F No field is loaded.\n\n" +
+      "Go to \u201CField & Equipment\u201D to set up or load a field first,\n" +
+      "or press OK to start an UNTITLED session anyway."
+    );
+  }
+
+  var bAcres = (state.boundary && state.boundary.acres > 0)
+    ? state.boundary.acres.toFixed(2) + " ac"
+    : "no boundary set";
+
+  var msg =
+    "Start session in this field?\n\n" +
+    "\uD83D\uDCCD Field:    " + f.name + "\n" +
+    "\uD83C\uDF3D Crop:     " + (f.crop || "\u2014") +
+        (f.variety ? "  (" + f.variety + ")" : "") + "\n" +
+    "\uD83D\uDCD0 Boundary: " + bAcres + "\n" +
+    "\uD83D\uDE9C Machine:  " + (e.name ? e.name : "\u2014") +
+        (e.type ? "  \u2013 " + e.type : "") +
+        (e.width ? "  " + e.width + " ft" : "") + "\n\n" +
+    "OK = start    \u2022    Cancel = go fix setup";
+
+  return confirm(msg);
+}
+
 function startSession() {
   if (!navigator.geolocation) { alert("Geolocation not supported on this device."); return; }
   readFormsIntoState();
-  captureWeatherForSession();  // ← NEW: spray-record weather
+
+  // ← NEW: confirm the operator is set up in the correct field before starting
+  if (!confirmFieldBeforeStart()) { return; }
+
+  captureWeatherForSession();  // ← spray-record weather
 
   state.running = true;
   state.sessionStart = Date.now();
@@ -1214,10 +1254,26 @@ function downloadFile(filename, content, mime) {
 // REPORTS — with rename, search, filter, sort
 // ============================================================
 
+// Build a sensible default report title: "Field - Crop - M/D" (added feature)
+function buildSuggestedReportName() {
+  var f = state.field || {};
+  var base = (f.name && f.name.trim()) ? f.name.trim() : "Untitled Field";
+  var crop = (f.crop && f.crop.trim()) ? f.crop.trim() : "";
+  var d = new Date();
+  var dateStr = (d.getMonth() + 1) + "/" + d.getDate();
+  return base + (crop ? " \u2013 " + crop : "") + " \u2013 " + dateStr;
+}
+
 // Save current session as a new report
 $("btnSave").addEventListener("click", () => {
   const id = "REP-" + Date.now();
-  const defaultName = state.field.name || "Untitled Field";
+
+  // ← NEW: prompt the operator to title the report (with a smart default)
+  const suggested = buildSuggestedReportName();
+  const titled = prompt("Title this report:", suggested);
+  if (titled === null) { return; }            // Cancel = don't save
+  const defaultName = (titled.trim() || suggested);
+
   const rep = {
     id,
     name: defaultName,
