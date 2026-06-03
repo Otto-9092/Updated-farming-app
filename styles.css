@@ -541,3 +541,19 @@ input, select {
   from { transform: translateY(20px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
+
+
+/* ============================================================
+   FIX: keep the day/night toggle visible on iPad & all sizes.
+   The three header pills (GPS / IDLE / Night) previously could
+   not wrap, so the last one (the toggle) was pushed off-screen
+   and clipped by overflow-x:hidden. Allowing wrap + nowrap text
+   guarantees the button is always shown.
+   ============================================================ */
+.status-pills {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.theme-toggle {
+  white-space: nowrap;
+}
