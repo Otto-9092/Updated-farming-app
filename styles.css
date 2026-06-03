@@ -618,3 +618,10 @@ input, select {
   border-radius: 8px; padding: 12px 14px; margin-bottom: 12px;
   color: var(--text); font-size: 14px; line-height: 1.4;
 }
+
+
+/* Generic dialog message text */
+.dlg-message {
+  font-size: 15px; line-height: 1.5; color: var(--text);
+  white-space: pre-wrap;   /* respect line breaks passed in the message */
+}
