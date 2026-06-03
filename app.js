@@ -31,7 +31,9 @@ const state = {
   planter:  { rowSpacing: 30, rows: 16, population: 34000, variety: "", downforce: 150 },
   tillage:  { depth: 6, passType: "primary", notes: "" },
   spreader: { productType: "dry_fert", rate: 200, bin: 8000, productName: "" },
-  other:    { notes: "" },  sessionStart: null,
+  other:    { notes: "" },
+  weather:  { windSpeed: "", windDir: "", temp: "", sky: "", capturedAt: "" },
+  sessionStart: null,
   // Map view options
   headingUp: false,
   autoZoom: true,
@@ -246,9 +248,37 @@ $("secRight").addEventListener("click", () => toggleSection("right"));
 $("btnStart").addEventListener("click", startSession);
 $("btnStop").addEventListener("click", stopSession);
 
+// ============================================================
+// WEATHER CAPTURE (spray records) — added feature
+// Prompts once at session start. Fully skippable; never blocks.
+// ============================================================
+function captureWeatherForSession() {
+  try {
+    var w = state.weather || {};
+    var windSpeed = prompt("Wind speed (mph)?  (leave blank to skip weather)", w.windSpeed || "");
+    if (windSpeed === null) { return; } // Cancel = skip weather entirely
+    var windDir = prompt("Wind direction? (e.g. NW, S, 270)", w.windDir || "");
+    if (windDir === null) windDir = "";
+    var temp = prompt("Temperature (\u00B0F)?", w.temp || "");
+    if (temp === null) temp = "";
+    var sky = prompt("Sky / conditions? (e.g. clear, overcast)", w.sky || "");
+    if (sky === null) sky = "";
+    state.weather = {
+      windSpeed: (windSpeed || "").trim(),
+      windDir:   (windDir   || "").trim(),
+      temp:      (temp      || "").trim(),
+      sky:       (sky       || "").trim(),
+      capturedAt: new Date().toISOString()
+    };
+  } catch (e) {
+    console.warn("Weather capture skipped:", e);
+  }
+}
+
 function startSession() {
   if (!navigator.geolocation) { alert("Geolocation not supported on this device."); return; }
   readFormsIntoState();
+  captureWeatherForSession();  // ← NEW: spray-record weather
 
   state.running = true;
   state.sessionStart = Date.now();
@@ -1203,6 +1233,7 @@ $("btnSave").addEventListener("click", () => {
       ? +((state.acres / state.boundary.acres) * 100).toFixed(1) : null,
     avgSpeed: state.speedCount > 0 ? +(state.speedSum / state.speedCount).toFixed(1) : 0,
     maxSpeed: +state.speedMax.toFixed(1),
+    weather: { ...(state.weather || {}) },   // ← NEW: spray-record weather
   };
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   all[id] = rep;
@@ -1443,8 +1474,71 @@ function formatReport(r) {
     `Max Speed: ${r.maxSpeed} mph`,
     `Bushels:   ${r.bushels}`,
     `Gallons:   ${r.gallons}`,
+    ``,
+    `--- Weather (spray record) ---`,
+    `Wind:      ${(r.weather && (r.weather.windSpeed || r.weather.windDir)) ? ((r.weather.windSpeed ? r.weather.windSpeed + " mph " : "") + (r.weather.windDir || "")).trim() : "\u2014"}`,
+    `Temp:      ${(r.weather && r.weather.temp) ? r.weather.temp + " \u00B0F" : "\u2014"}`,
+    `Sky:       ${(r.weather && r.weather.sky) ? r.weather.sky : "\u2014"}`,
   ].join("\n");
 }
+
+// ============================================================
+// EXPORT ALL REPORTS AS CSV (spreadsheet-ready) — added feature
+// ============================================================
+function csvEscape(val) {
+  if (val === null || val === undefined) return "";
+  var s = String(val);
+  if (/[",\n\r]/.test(s)) { s = '"' + s.replace(/"/g, '""') + '"'; }
+  return s;
+}
+
+function reportsToCSV() {
+  var all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
+  var list = Object.values(all);
+  list.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
+
+  var headers = [
+    "Date", "Name", "Field", "Crop", "Variety",
+    "Machine", "Type", "Width (ft)",
+    "Acres", "Boundary Acres", "Coverage %",
+    "Avg Speed (mph)", "Max Speed (mph)", "Bushels", "Gallons",
+    "Wind Speed (mph)", "Wind Dir", "Temp (F)", "Sky", "Weather Time", "Report ID"
+  ];
+  var rows = [headers.map(csvEscape).join(",")];
+
+  list.forEach(function (r) {
+    var f = r.field || {}, e = r.equipment || {}, w = r.weather || {};
+    var row = [
+      r.date ? new Date(r.date).toLocaleString() : "",
+      r.name || "",
+      f.name || "", f.crop || "", f.variety || "",
+      e.name || "", e.type || "", (e.width != null ? e.width : ""),
+      (r.acres != null ? r.acres : ""),
+      (r.boundaryAcres != null ? r.boundaryAcres : ""),
+      (r.coverage != null ? r.coverage : ""),
+      (r.avgSpeed != null ? r.avgSpeed : ""),
+      (r.maxSpeed != null ? r.maxSpeed : ""),
+      (r.bushels != null ? r.bushels : ""),
+      (r.gallons != null ? r.gallons : ""),
+      w.windSpeed || "", w.windDir || "", w.temp || "", w.sky || "",
+      w.capturedAt ? new Date(w.capturedAt).toLocaleString() : "",
+      r.id || ""
+    ];
+    rows.push(row.map(csvEscape).join(","));
+  });
+  return rows.join("\r\n");
+}
+
+if ($("btnExportReportsCSV")) {
+  $("btnExportReportsCSV").addEventListener("click", function () {
+    var all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
+    if (!Object.keys(all).length) { alert("No reports to export yet."); return; }
+    var csv = reportsToCSV();
+    var ts = new Date().toISOString().slice(0, 10);
+    downloadFile("DiamondO_Reports_" + ts + ".csv", "\ufeff" + csv, "text/csv;charset=utf-8");
+  });
+}
+
 // ============================================================
 // UTILITIES
 // ============================================================
