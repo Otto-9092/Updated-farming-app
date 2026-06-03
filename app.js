@@ -1693,3 +1693,55 @@ window.addEventListener("DOMContentLoaded", () => {
   updatePlanterCalcWidth();
   updateDataStats();                    // ← initialize backup card summary
 });
+
+// ============================================================
+// METRICS PANEL TOGGLE + iOS-FRIENDLY "EXPAND MAP" (CSS fullscreen)
+// Added feature — does not modify existing logic.
+// ============================================================
+(function setupMapToggles() {
+  function ready(fn) {
+    if (document.readyState !== "loading") fn();
+    else document.addEventListener("DOMContentLoaded", fn);
+  }
+  ready(function () {
+    const layout = document.querySelector(".operate-layout");
+    const mapCol = document.querySelector(".map-col");
+    const btnMetrics = document.getElementById("btnToggleMetrics");
+    const btnExpand = document.getElementById("btnExpandMap");
+
+    // Nudge Google Maps to redraw after the container size changes.
+    function resizeMap() {
+      if (state.map && window.google && google.maps) {
+        setTimeout(() => google.maps.event.trigger(state.map, "resize"), 60);
+      }
+    }
+
+    // --- Show / Hide the metrics side panel ---
+    if (btnMetrics && layout) {
+      // Restore last choice
+      try {
+        if (localStorage.getItem("metricsCollapsed") === "1") {
+          layout.classList.add("metrics-collapsed");
+          btnMetrics.textContent = "📊 Show Metrics";
+        }
+      } catch (e) {}
+      btnMetrics.addEventListener("click", function () {
+        const collapsed = layout.classList.toggle("metrics-collapsed");
+        btnMetrics.textContent = collapsed ? "📊 Show Metrics" : "📊 Hide Metrics";
+        try { localStorage.setItem("metricsCollapsed", collapsed ? "1" : "0"); } catch (e) {}
+        resizeMap();
+      });
+    }
+
+    // --- Expand map to full screen (CSS-based, works on iOS) ---
+    if (btnExpand && mapCol) {
+      btnExpand.addEventListener("click", function () {
+        const expanded = mapCol.classList.toggle("map-expanded");
+        btnExpand.textContent = expanded ? "🗗 Exit Full Map" : "⛶ Expand Map";
+        // Prevent body scroll while the map is fullscreen
+        document.body.style.overflow = expanded ? "hidden" : "";
+        resizeMap();
+      });
+    }
+  });
+})();
