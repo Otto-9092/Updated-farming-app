@@ -305,13 +305,21 @@ function showStartDialog() {
       }
     }
 
-    // Pre-fill weather with last-used values
-    if ($id("dlgWindSpeed")) $id("dlgWindSpeed").value = w.windSpeed || "";
-    if ($id("dlgWindDir"))   $id("dlgWindDir").value   = w.windDir   || "";
-    if ($id("dlgTemp"))      $id("dlgTemp").value      = w.temp      || "";
-    if ($id("dlgSky"))       $id("dlgSky").value       = w.sky       || "";
+    // Weather is only relevant for spraying — show those fields for
+    // sprayers only; hide them for every other equipment type.
+    var isSprayer = (e.type === "sprayer");
+    var weatherWrap = $id("startDlgWeatherWrap");
+    if (weatherWrap) weatherWrap.classList.toggle("hidden", !isSprayer);
 
-    openDlg("startDlg", "dlgWindSpeed");
+    if (isSprayer) {
+      // Pre-fill weather with last-used values
+      if ($id("dlgWindSpeed")) $id("dlgWindSpeed").value = w.windSpeed || "";
+      if ($id("dlgWindDir"))   $id("dlgWindDir").value   = w.windDir   || "";
+      if ($id("dlgTemp"))      $id("dlgTemp").value      = w.temp      || "";
+      if ($id("dlgSky"))       $id("dlgSky").value       = w.sky       || "";
+    }
+
+    openDlg("startDlg", isSprayer ? "dlgWindSpeed" : "startDlgGo");
 
     function cleanup() {
       $id("startDlgGo").removeEventListener("click", onGo);
@@ -319,14 +327,19 @@ function showStartDialog() {
       $id("startDlg").removeEventListener("click", onBackdrop);
     }
     function onGo() {
-      // Save weather from the fields
-      state.weather = {
-        windSpeed: ($id("dlgWindSpeed").value || "").trim(),
-        windDir:   ($id("dlgWindDir").value   || "").trim(),
-        temp:      ($id("dlgTemp").value      || "").trim(),
-        sky:       ($id("dlgSky").value       || "").trim(),
-        capturedAt: new Date().toISOString()
-      };
+      // Save weather only for sprayers; clear it for other equipment so
+      // non-spray reports don't carry weather data that doesn't apply.
+      if (isSprayer) {
+        state.weather = {
+          windSpeed: ($id("dlgWindSpeed").value || "").trim(),
+          windDir:   ($id("dlgWindDir").value   || "").trim(),
+          temp:      ($id("dlgTemp").value      || "").trim(),
+          sky:       ($id("dlgSky").value       || "").trim(),
+          capturedAt: new Date().toISOString()
+        };
+      } else {
+        state.weather = { windSpeed: "", windDir: "", temp: "", sky: "", capturedAt: "" };
+      }
       closeDlg("startDlg"); cleanup(); resolve(true);
     }
     function onCancel() { closeDlg("startDlg"); cleanup(); resolve(false); }
