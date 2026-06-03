@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.03 · 15:18";
+window.APP_VERSION = "2026.06.03 · 15:42";
 try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -121,8 +121,118 @@ document.querySelectorAll(".tab").forEach((t) => {
     t.classList.add("active");
     $("tab-" + t.dataset.tab).classList.add("active");
     if (state.map) setTimeout(() => google.maps.event.trigger(state.map, "resize"), 100);
+    if (t.dataset.tab === "setup") seedMixCalcFromState();   // ← refresh mix calc inputs
   });
 });
+
+// ============================================================
+// PRODUCT / CHEMICAL MIX CALCULATOR (sprayer) — added feature
+// Computes per-tank and whole-field product amounts.
+// ============================================================
+// Conversions to a base "fluid ounces" for liquids; lb handled separately.
+const MIX_TO_OZ = { oz: 1, pt: 16, qt: 32, gal: 128 };
+
+// Pull live tank size, GPA, and field acres into the calc inputs (only if
+// the user hasn't already typed something there).
+function seedMixCalcFromState() {
+  var tankEl = $("mixTank"), gpaEl = $("mixGPA"), acEl = $("mixAcres");
+  if (tankEl && !tankEl.value) {
+    var t = parseFloat(state.sprayer && state.sprayer.tank);
+    if (t > 0) tankEl.value = t;
+  }
+  if (gpaEl && !gpaEl.value) {
+    var g = parseFloat(state.sprayer && state.sprayer.gpa);
+    if (g > 0) gpaEl.value = g;
+  }
+  if (acEl && !acEl.value) {
+    var a = (state.boundary && state.boundary.acres > 0) ? state.boundary.acres : 0;
+    if (a > 0) acEl.value = +a.toFixed(2);
+  }
+}
+
+function readMixProducts() {
+  var out = [];
+  for (var i = 1; i <= 3; i++) {
+    var name = ($("mixName" + i) && $("mixName" + i).value || "").trim();
+    var rate = parseFloat($("mixRate" + i) && $("mixRate" + i).value) || 0;
+    var unit = ($("mixUnit" + i) && $("mixUnit" + i).value) || "oz";
+    if (rate > 0) out.push({ name: name || ("Product " + i), rate: rate, unit: unit });
+  }
+  return out;
+}
+
+// Format a fluid-ounce amount into the friendliest unit (oz / pt / qt / gal)
+function prettyFluid(oz) {
+  if (oz >= 128) return (oz / 128).toFixed(2) + " gal";
+  if (oz >= 32)  return (oz / 32).toFixed(2) + " qt";
+  if (oz >= 16)  return (oz / 16).toFixed(2) + " pt";
+  return oz.toFixed(1) + " oz";
+}
+
+function calcMix() {
+  var tank  = parseFloat($("mixTank").value)  || 0;
+  var gpa   = parseFloat($("mixGPA").value)   || 0;
+  var acres = parseFloat($("mixAcres").value) || 0;
+  var products = readMixProducts();
+  var resEl = $("mixResults");
+  if (!resEl) return;
+
+  if (!products.length) {
+    resEl.innerHTML = '<div class="hint">Enter at least one product rate, then tap Calculate.</div>';
+    return;
+  }
+  if (gpa <= 0 || tank <= 0) {
+    resEl.innerHTML = '<div class="hint">Enter a Tank Size and Carrier Rate (GPA) to calculate per-tank amounts.</div>';
+    return;
+  }
+
+  // Acres one full tank can cover at this carrier rate
+  var acresPerTank = tank / gpa;
+
+  var rows = products.map(function (p) {
+    var perTank, perField, isDry = (p.unit === "lb");
+    if (isDry) {
+      // lb/ac → per tank = rate * acresPerTank ; field = rate * acres
+      perTank  = p.rate * acresPerTank;
+      perField = acres > 0 ? p.rate * acres : null;
+      var perTankStr  = perTank.toFixed(2) + " lb";
+      var perFieldStr = perField != null ? perField.toFixed(2) + " lb" : "\u2014";
+    } else {
+      var ozPerAc = p.rate * (MIX_TO_OZ[p.unit] || 1);
+      perTank  = ozPerAc * acresPerTank;          // in oz
+      perField = acres > 0 ? ozPerAc * acres : null;
+      var perTankStr  = prettyFluid(perTank);
+      var perFieldStr = perField != null ? prettyFluid(perField) : "\u2014";
+    }
+    return '<tr><td>' + escHtml(p.name) + '</td><td>' + p.rate + " " + p.unit + '/ac</td>' +
+           '<td class="num">' + perTankStr + '</td>' +
+           '<td class="num">' + perFieldStr + '</td></tr>';
+  }).join("");
+
+  // Tanks needed for the whole field
+  var tanksNeeded = (acres > 0) ? acres / acresPerTank : null;
+
+  var meta = '<div class="hint" style="margin-bottom:8px;">' +
+    'One tank (' + tank + ' gal @ ' + gpa + ' GPA) covers <b>' + acresPerTank.toFixed(1) + ' ac</b>' +
+    (tanksNeeded != null ? ' \u2022 Field needs <b>' + tanksNeeded.toFixed(1) + ' tank' + (tanksNeeded >= 1.05 ? 's' : '') + '</b>' : '') +
+    '</div>';
+
+  resEl.innerHTML = meta +
+    '<table><tr><th>Product</th><th>Rate</th><th class="num">Per Tank</th><th class="num">Whole Field</th></tr>' +
+    rows + '</table>';
+}
+
+function resetMix() {
+  for (var i = 1; i <= 3; i++) {
+    if ($("mixName" + i)) $("mixName" + i).value = "";
+    if ($("mixRate" + i)) $("mixRate" + i).value = "";
+    if ($("mixUnit" + i)) $("mixUnit" + i).value = "oz";
+  }
+  if ($("mixResults")) $("mixResults").innerHTML = "";
+}
+
+if ($("btnMixCalc"))  $("btnMixCalc").addEventListener("click", calcMix);
+if ($("btnMixReset")) $("btnMixReset").addEventListener("click", resetMix);
 
 // ============================================================
 // MAP INIT
