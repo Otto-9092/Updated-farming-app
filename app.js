@@ -1757,34 +1757,43 @@ window.addEventListener("DOMContentLoaded", () => {
     else document.addEventListener("DOMContentLoaded", fn);
   }
   ready(function () {
-    const btn = document.getElementById("btnThemeToggle");
-    const body = document.body;
+    try {
+      var btn = document.getElementById("btnThemeToggle");
+      var body = document.body;
 
-    function applyTheme(night) {
-      if (night) {
-        body.classList.add("night-mode");
-        if (btn) btn.textContent = "☀️ Day";
-      } else {
-        body.classList.remove("night-mode");
-        if (btn) btn.textContent = "🌙 Night";
+      function applyTheme(night) {
+        if (night) {
+          body.classList.add("night-mode");
+          if (btn) btn.textContent = "☀️ Day";
+        } else {
+          body.classList.remove("night-mode");
+          if (btn) btn.textContent = "🌙 Night";
+        }
+        // Redraw the Google map ONLY if it actually exists. Guarded so a
+        // missing/failed Google Maps load can never break the toggle.
+        try {
+          if (typeof state !== "undefined" && state.map && window.google && google.maps) {
+            setTimeout(function () {
+              google.maps.event.trigger(state.map, "resize");
+            }, 60);
+          }
+        } catch (e) { /* map not ready - ignore */ }
       }
-      // Redraw the Google map so any themed UI stays crisp
-      if (state.map && window.google && google.maps) {
-        setTimeout(() => google.maps.event.trigger(state.map, "resize"), 60);
+
+      // Restore saved preference (default = day/cream)
+      var night = false;
+      try { night = localStorage.getItem("theme") === "night"; } catch (e) {}
+      applyTheme(night);
+
+      if (btn) {
+        btn.addEventListener("click", function () {
+          var isNight = !body.classList.contains("night-mode");
+          applyTheme(isNight);
+          try { localStorage.setItem("theme", isNight ? "night" : "day"); } catch (e) {}
+        });
       }
-    }
-
-    // Restore saved preference (default = day/cream)
-    let night = false;
-    try { night = localStorage.getItem("theme") === "night"; } catch (e) {}
-    applyTheme(night);
-
-    if (btn) {
-      btn.addEventListener("click", function () {
-        const isNight = !body.classList.contains("night-mode");
-        applyTheme(isNight);
-        try { localStorage.setItem("theme", isNight ? "night" : "day"); } catch (e) {}
-      });
+    } catch (err) {
+      try { console.error("Theme toggle setup failed:", err); } catch (e) {}
     }
   });
 })();
