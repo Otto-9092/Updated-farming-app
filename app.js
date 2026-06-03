@@ -411,8 +411,61 @@ function escHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+// ============================================================
+// GENERIC THEMED ALERT + CONFIRM (replace native browser boxes)
+// appAlert(message[, title])  -> Promise<void>
+// appConfirm(message[, opts]) -> Promise<boolean>
+//   opts: { title, okLabel, cancelLabel, danger }
+// ============================================================
+function appAlert(message, title) {
+  return new Promise(function (resolve) {
+    var msgEl = $id("noticeDlgMsg");
+    var titleEl = $id("noticeDlgTitle");
+    if (titleEl) titleEl.textContent = title || "Notice";
+    if (msgEl) msgEl.textContent = (message == null ? "" : String(message));
+    openDlg("noticeDlg", "noticeDlgOk");
+    function cleanup() {
+      $id("noticeDlgOk").removeEventListener("click", onOk);
+      $id("noticeDlg").removeEventListener("click", onBackdrop);
+    }
+    function onOk() { closeDlg("noticeDlg"); cleanup(); resolve(); }
+    function onBackdrop(ev) { if (ev.target === $id("noticeDlg")) onOk(); }
+    $id("noticeDlgOk").addEventListener("click", onOk);
+    $id("noticeDlg").addEventListener("click", onBackdrop);
+  });
+}
+
+function appConfirm(message, opts) {
+  opts = opts || {};
+  return new Promise(function (resolve) {
+    var msgEl = $id("confirmDlgMsg");
+    var titleEl = $id("confirmDlgTitle");
+    var okBtn = $id("confirmDlgOk");
+    var cancelBtn = $id("confirmDlgCancel");
+    if (titleEl) titleEl.textContent = opts.title || "Please confirm";
+    if (msgEl) msgEl.textContent = (message == null ? "" : String(message));
+    if (okBtn) {
+      okBtn.textContent = opts.okLabel || "OK";
+      okBtn.className = "btn " + (opts.danger ? "btn-danger" : "btn-primary");
+    }
+    if (cancelBtn) cancelBtn.textContent = opts.cancelLabel || "Cancel";
+    openDlg("confirmDlg", "confirmDlgCancel");
+    function cleanup() {
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      $id("confirmDlg").removeEventListener("click", onBackdrop);
+    }
+    function onOk() { closeDlg("confirmDlg"); cleanup(); resolve(true); }
+    function onCancel() { closeDlg("confirmDlg"); cleanup(); resolve(false); }
+    function onBackdrop(ev) { if (ev.target === $id("confirmDlg")) onCancel(); }
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    $id("confirmDlg").addEventListener("click", onBackdrop);
+  });
+}
+
 async function startSession() {
-  if (!navigator.geolocation) { alert("Geolocation not supported on this device."); return; }
+  if (!navigator.geolocation) { appAlert("Geolocation not supported on this device.", "GPS unavailable"); return; }
   readFormsIntoState();
 
   // ← NEW: themed field-check + weather dialog before starting
@@ -832,12 +885,12 @@ function drawBoundaryFinal() {
 // A-B GUIDANCE
 // ============================================================
 $("btnSetA").addEventListener("click", () => {
-  if (!state.lastPos) return alert("Need GPS fix first.");
+  if (!state.lastPos) { appAlert("Need GPS fix first."); return; }
   state.abLine.a = { lat: state.lastPos.lat, lng: state.lastPos.lng };
   renderAB();
 });
 $("btnSetB").addEventListener("click", () => {
-  if (!state.lastPos) return alert("Need GPS fix first.");
+  if (!state.lastPos) { appAlert("Need GPS fix first."); return; }
   state.abLine.b = { lat: state.lastPos.lat, lng: state.lastPos.lng };
   renderAB();
 });
@@ -1118,7 +1171,7 @@ $("btnSaveEq").addEventListener("click", () => {
   };
   localStorage.setItem(LS_EQ, JSON.stringify(lib));
   loadEquipmentList();
-  alert(`Saved: ${state.equipment.name}`);
+  appAlert(`Saved: ${state.equipment.name}`, "Saved");
   if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
 
@@ -1143,11 +1196,11 @@ $("btnLoadEq").addEventListener("click", () => {
   if (rec.type === "planter") updatePlanterCalcWidth();
 });
 
-$("btnDeleteEq").addEventListener("click", () => {
+$("btnDeleteEq").addEventListener("click", async () => {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const k = $("eqLoad").value;
   if (!k) return;
-  if (!confirm(`Delete machine "${k}"?`)) return;
+  if (!(await appConfirm(`Delete machine "${k}"?`, { title: "Delete machine", okLabel: "Delete", danger: true }))) return;
   delete lib[k];
   localStorage.setItem(LS_EQ, JSON.stringify(lib));
   loadEquipmentList();
@@ -1170,7 +1223,7 @@ function loadFieldsList() {
 }
 if ($("btnSaveField")) $("btnSaveField").addEventListener("click", () => {
   const name = $("fldName").value.trim();
-  if (!name) return alert("Please enter a field name first.");
+  if (!name) { appAlert("Please enter a field name first."); return; }
   const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
   lib[name] = {
     name,
@@ -1207,11 +1260,11 @@ if ($("btnLoadField")) $("btnLoadField").addEventListener("click", () => {
   if ($("fldStatus")) $("fldStatus").textContent = `Loaded: ${f.name} (${state.boundary.acres.toFixed(2)} ac)`;
   state.loadedFieldKey = k;
 });
-if ($("btnDeleteField")) $("btnDeleteField").addEventListener("click", () => {
+if ($("btnDeleteField")) $("btnDeleteField").addEventListener("click", async () => {
   const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
   const k = $("fldLoad").value;
   if (!k) return;
-  if (!confirm(`Delete field "${k}"?`)) return;
+  if (!(await appConfirm(`Delete field "${k}"?`, { title: "Delete field", okLabel: "Delete", danger: true }))) return;
   delete lib[k];
   localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
   loadFieldsList();
@@ -1232,8 +1285,8 @@ if ($("btnRecenter")) $("btnRecenter").addEventListener("click", () => {
   }
 });
 
-if ($("btnResetPaint")) $("btnResetPaint").addEventListener("click", () => {
-  if (!confirm("Clear all painted coverage and reset acres? Boundary and trail will be kept.")) return;
+if ($("btnResetPaint")) $("btnResetPaint").addEventListener("click", async () => {
+  if (!(await appConfirm("Clear all painted coverage and reset acres? Boundary and trail will be kept.", { title: "Reset painted area", okLabel: "Reset", danger: true }))) return;
   state.coveragePolys.forEach(p => p.setMap(null));
   state.coveragePolys = [];
   state.coverageCells.clear();
@@ -1291,7 +1344,7 @@ if ($("btnClearTrail")) $("btnClearTrail").addEventListener("click", clearTrail)
 // EXPORT — KML / GPX
 // ============================================================
 if ($("btnExportKML")) $("btnExportKML").addEventListener("click", () => {
-  if (state.trailPoints.length < 2) return alert("No trail to export yet.");
+  if (state.trailPoints.length < 2) { appAlert("No trail to export yet."); return; }
   const fieldName = (state.field.name || "field").replace(/[^a-z0-9]+/gi, "_");
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const coords = state.trailPoints.map(p => `${p.lng.toFixed(7)},${p.lat.toFixed(7)},0`).join(" ");
@@ -1308,7 +1361,7 @@ if ($("btnExportKML")) $("btnExportKML").addEventListener("click", () => {
   downloadFile(`DiamondO_${fieldName}_${ts}.kml`, kml, "application/vnd.google-earth.kml+xml");
 });
 if ($("btnExportGPX")) $("btnExportGPX").addEventListener("click", () => {
-  if (state.trailPoints.length < 2) return alert("No trail to export yet.");
+  if (state.trailPoints.length < 2) { appAlert("No trail to export yet."); return; }
   const fieldName = (state.field.name || "field").replace(/[^a-z0-9]+/gi, "_");
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const points = state.trailPoints.map(p => {
@@ -1394,7 +1447,7 @@ $("btnSave").addEventListener("click", async () => {
   all[id] = rep;
   localStorage.setItem(LS_REPS, JSON.stringify(all));
   loadReportsList();
-  alert("Report saved: " + defaultName);
+  appAlert("Report saved: " + defaultName, "Saved");
   if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
 
@@ -1494,7 +1547,7 @@ function loadReportsList() {
 $("btnViewRep").addEventListener("click", () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   const r = all[$("repSelect").value];
-  if (!r) return alert("Select a report first.");
+  if (!r) { appAlert("Select a report first."); return; }
   $("repBody").textContent = formatReport(r);
 });
 
@@ -1503,12 +1556,12 @@ if ($("btnRenameRep")) $("btnRenameRep").addEventListener("click", async () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   const id = $("repSelect").value;
   const r = all[id];
-  if (!r) return alert("Select a report to rename.");
+  if (!r) { appAlert("Select a report to rename."); return; }
   const current = r.name || (r.field && r.field.name) || id;
   const next = await showRenameDialog(current);   // themed dialog
   if (next == null) return;                       // user hit cancel
   const trimmed = next.trim();
-  if (!trimmed) return alert("Name cannot be empty.");
+  if (!trimmed) { appAlert("Name cannot be empty."); return; }
   r.name = trimmed;
   all[id] = r;
   localStorage.setItem(LS_REPS, JSON.stringify(all));
@@ -1518,11 +1571,11 @@ if ($("btnRenameRep")) $("btnRenameRep").addEventListener("click", async () => {
 });
 
 // Delete
-$("btnDeleteRep").addEventListener("click", () => {
+$("btnDeleteRep").addEventListener("click", async () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   const id = $("repSelect").value;
-  if (!id || !all[id]) return alert("Select a report to delete.");
-  if (!confirm(`Delete report "${all[id].name || id}"? This cannot be undone.`)) return;
+  if (!id || !all[id]) { appAlert("Select a report to delete."); return; }
+  if (!(await appConfirm(`Delete report "${all[id].name || id}"? This cannot be undone.`, { title: "Delete report", okLabel: "Delete", danger: true }))) return;
   delete all[id];
   localStorage.setItem(LS_REPS, JSON.stringify(all));
   loadReportsList();
@@ -1534,7 +1587,7 @@ $("btnDeleteRep").addEventListener("click", () => {
 $("btnPdfRep").addEventListener("click", () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   const r = all[$("repSelect").value];
-  if (!r) return alert("Select a report first.");
+  if (!r) { appAlert("Select a report first."); return; }
   const html = `
     <html><head><title>${r.name || r.id}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1687,7 +1740,7 @@ function reportsToCSV() {
 if ($("btnExportReportsCSV")) {
   $("btnExportReportsCSV").addEventListener("click", function () {
     var all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
-    if (!Object.keys(all).length) { alert("No reports to export yet."); return; }
+    if (!Object.keys(all).length) { appAlert("No reports to export yet."); return; }
     var csv = reportsToCSV();
     var ts = new Date().toISOString().slice(0, 10);
     downloadFile("DiamondO_Reports_" + ts + ".csv", "\ufeff" + csv, "text/csv;charset=utf-8");
@@ -1779,7 +1832,7 @@ function buildBackup() {
 }
 
 // ===== Export =====
-$("btnExportAll")?.addEventListener("click", () => {
+$("btnExportAll")?.addEventListener("click", async () => {
   const backup = buildBackup();
   const ts = new Date().toISOString().slice(0, 10);   // YYYY-MM-DD
   const filename = `diamond-o-backup-${ts}.json`;
@@ -1791,11 +1844,11 @@ $("btnExportAll")?.addEventListener("click", () => {
     equipment: Object.keys(backup.equipment).length,
     reports:   Object.keys(backup.reports).length,
   };
-  alert(`✅ Exported successfully!\n\n` +
+  appAlert(`✅ Exported successfully!\n\n` +
         `${totals.fields} fields\n` +
         `${totals.equipment} machines\n` +
         `${totals.reports} reports\n\n` +
-        `File: ${filename}`);
+        `File: ${filename}`, "Backup exported");
 });
 
 // ===== Import =====
@@ -1812,7 +1865,7 @@ $("importFileInput")?.addEventListener("change", (e) => {
       const data = JSON.parse(ev.target.result);
       handleImport(data);
     } catch (err) {
-      alert("❌ That doesn't look like a valid backup file.\n\nError: " + err.message);
+      appAlert("❌ That doesn't look like a valid backup file.\n\nError: " + err.message, "Import failed");
     } finally {
       // Reset the input so the same file can be picked again later
       e.target.value = "";
@@ -1822,19 +1875,19 @@ $("importFileInput")?.addEventListener("change", (e) => {
 });
 
 // Validate + ask user → merge or replace
-function handleImport(data) {
+async function handleImport(data) {
   // Basic validation
   if (!data || typeof data !== "object") {
-    return alert("❌ Invalid backup file: not a JSON object.");
+    return appAlert("❌ Invalid backup file: not a JSON object.", "Import failed");
   }
   if (data.app !== "Diamond O Farms — Data Systems Pro") {
-    return alert("❌ This file isn't a Diamond O Farms backup.");
+    return appAlert("❌ This file isn't a Diamond O Farms backup.", "Import failed");
   }
   if (typeof data.version !== "number") {
-    return alert("❌ Backup file is missing version info.");
+    return appAlert("❌ Backup file is missing version info.", "Import failed");
   }
   if (data.version > BACKUP_VERSION) {
-    return alert(`❌ This backup was created by a newer version of the app (v${data.version}).\nUpdate the app and try again.`);
+    return appAlert(`❌ This backup was created by a newer version of the app (v${data.version}).\nUpdate the app and try again.`, "Import failed");
   }
 
   const incoming = {
@@ -1857,20 +1910,25 @@ function handleImport(data) {
     `  • ${current.fields} fields\n` +
     `  • ${current.equipment} machines\n` +
     `  • ${current.reports} reports\n\n` +
-    `Choose how to import:\n` +
-    `  OK  → MERGE (safe, adds incoming, keeps yours)\n` +
-    `  Cancel → choose REPLACE on next prompt`;
+    `MERGE adds the backup's data and keeps yours.\n` +
+    `REPLACE deletes everything here first, then loads the backup.`;
 
-  const mergeChoice = confirm(summary);
+  // OK = Merge (safe default), Cancel = go to Replace path
+  const mergeChoice = await appConfirm(summary, {
+    title: "Import backup",
+    okLabel: "Merge (safe)",
+    cancelLabel: "Replace…"
+  });
 
   if (mergeChoice) {
     performImport(data, "merge");
   } else {
-    const replaceConfirmed = confirm(
+    const replaceConfirmed = await appConfirm(
       "⚠️ REPLACE will DELETE all existing fields, machines, and reports on this device, " +
       "then load the backup file's data.\n\n" +
       "Your current data will be saved as a one-time rollback you can restore via the console.\n\n" +
-      "Are you sure you want to REPLACE?"
+      "Are you sure you want to REPLACE?",
+      { title: "Replace all data?", okLabel: "Replace everything", cancelLabel: "Cancel", danger: true }
     );
     if (replaceConfirmed) performImport(data, "replace");
   }
@@ -1905,19 +1963,19 @@ function performImport(data, mode) {
   loadReportsList();
   updateDataStats();
 
-  alert(`✅ Import complete (${mode === "replace" ? "REPLACED" : "MERGED"})!\n\n` +
+  appAlert(`✅ Import complete (${mode === "replace" ? "REPLACED" : "MERGED"})!\n\n` +
         `Your previous data is saved as a rollback in case you need it.\n` +
         `To restore, open the browser console and run:\n\n` +
-        `  restoreRollback()`);
+        `  restoreRollback()`, "Import complete");
 }
 
 // Console-accessible rollback (in case the user regrets a replace)
-window.restoreRollback = function () {
+window.restoreRollback = async function () {
   const raw = localStorage.getItem(LS_BACKUP_ROLLBACK);
-  if (!raw) return alert("No rollback available.");
+  if (!raw) return appAlert("No rollback available.");
   try {
     const data = JSON.parse(raw);
-    if (!confirm("Restore previous data? This will OVERWRITE current fields/equipment/reports.")) return;
+    if (!(await appConfirm("Restore previous data? This will OVERWRITE current fields/equipment/reports.", { title: "Restore rollback", okLabel: "Restore", danger: true }))) return;
     localStorage.setItem(LS_FIELDS, JSON.stringify(data.fields    || {}));
     localStorage.setItem(LS_EQ,     JSON.stringify(data.equipment || {}));
     localStorage.setItem(LS_REPS,   JSON.stringify(data.reports   || {}));
@@ -1925,9 +1983,9 @@ window.restoreRollback = function () {
     loadEquipmentList();
     loadReportsList();
     updateDataStats();
-    alert("✅ Rollback restored.");
+    appAlert("✅ Rollback restored.", "Restored");
   } catch (e) {
-    alert("Rollback file is corrupted: " + e.message);
+    appAlert("Rollback file is corrupted: " + e.message, "Error");
   }
 };
 window.addEventListener("DOMContentLoaded", () => {
