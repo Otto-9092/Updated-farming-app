@@ -1,3 +1,10 @@
+// ============================================================
+// APP VERSION — bump this string whenever you ship an update.
+// Also update the ?v= query in index.html so devices fetch fresh files.
+// ============================================================
+window.APP_VERSION = "2026.06.03";
+try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
+
 /* ============================================================
    Diamond O Farms — Data Systems Pro
    Complete single-file precision ag display logic.
@@ -2214,6 +2221,8 @@ window.addEventListener("DOMContentLoaded", () => {
   loadEquipmentList();
   loadReportsList();
   loadFieldsList();
+  var _vEl = document.getElementById("appVersion");
+  if (_vEl && window.APP_VERSION) _vEl.textContent = "v" + window.APP_VERSION;
   applyEquipmentUI();
   renderSectionButtons();
   startLocationFollow();
