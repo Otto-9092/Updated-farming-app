@@ -557,3 +557,64 @@ input, select {
 .theme-toggle {
   white-space: nowrap;
 }
+
+
+/* ============================================================
+   THEMED DIALOGS (field check / weather / report title)
+   Reuses .modal-overlay/.modal-card so day & night themes apply.
+   ============================================================ */
+.dlg-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 16px;
+  animation: fadeIn 0.18s ease-out;
+}
+.dlg-overlay.hidden { display: none; }
+.dlg-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%; max-width: 440px;
+  max-height: 88vh; display: flex; flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+.dlg-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+}
+.dlg-title { font-size: 17px; font-weight: bold; color: var(--accent); }
+.dlg-body { padding: 16px 18px; overflow-y: auto; }
+.dlg-body label { display:block; margin-bottom: 12px; font-size: 14px; color: var(--muted); }
+.dlg-body input, .dlg-body select, .dlg-body textarea {
+  display: block; width: 100%; margin-top: 4px;
+  padding: 12px; font-size: 16px; /* 16px stops iOS zoom */
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; font-family: inherit;
+}
+.dlg-body input:focus, .dlg-body select:focus, .dlg-body textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(232,148,0,0.25);
+}
+.dlg-footer {
+  display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--border);
+}
+.dlg-footer .btn { flex: 1; padding: 12px; font-size: 15px; }
+
+/* Summary block used by the field-check dialog */
+.dlg-summary {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.dlg-summary .row { display: flex; gap: 8px; font-size: 14px; padding: 3px 0; }
+.dlg-summary .row .lab { color: var(--muted); width: 92px; flex: none; }
+.dlg-summary .row .val { color: var(--text); font-weight: 600; }
+.dlg-warn {
+  background: var(--panel-2);
+  border: 1px solid var(--red);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 12px;
+  color: var(--text); font-size: 14px; line-height: 1.4;
+}
