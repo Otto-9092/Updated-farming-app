@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.03 · 15:42";
+window.APP_VERSION = "2026.06.03 · 16:33";
 try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -121,7 +121,7 @@ document.querySelectorAll(".tab").forEach((t) => {
     t.classList.add("active");
     $("tab-" + t.dataset.tab).classList.add("active");
     if (state.map) setTimeout(() => google.maps.event.trigger(state.map, "resize"), 100);
-    if (t.dataset.tab === "setup") seedMixCalcFromState();   // ← refresh mix calc inputs
+    if (t.dataset.tab === "setup") { seedMixCalcFromState(); seedCostAcresFromState(); }   // ← refresh calc inputs
   });
 });
 
@@ -152,7 +152,7 @@ function seedMixCalcFromState() {
 
 function readMixProducts() {
   var out = [];
-  for (var i = 1; i <= 3; i++) {
+  for (var i = 1; i <= 6; i++) {
     var name = ($("mixName" + i) && $("mixName" + i).value || "").trim();
     var rate = parseFloat($("mixRate" + i) && $("mixRate" + i).value) || 0;
     var unit = ($("mixUnit" + i) && $("mixUnit" + i).value) || "oz";
@@ -223,7 +223,7 @@ function calcMix() {
 }
 
 function resetMix() {
-  for (var i = 1; i <= 3; i++) {
+  for (var i = 1; i <= 6; i++) {
     if ($("mixName" + i)) $("mixName" + i).value = "";
     if ($("mixRate" + i)) $("mixRate" + i).value = "";
     if ($("mixUnit" + i)) $("mixUnit" + i).value = "oz";
@@ -233,6 +233,99 @@ function resetMix() {
 
 if ($("btnMixCalc"))  $("btnMixCalc").addEventListener("click", calcMix);
 if ($("btnMixReset")) $("btnMixReset").addEventListener("click", resetMix);
+
+// ============================================================
+// COST & PROFIT (per field) — added feature
+// ============================================================
+const COST_FIELDS = ["costSeed","costChem","costFert","costFuel","costOther","costYield","costPrice"];
+
+function readCostInputs() {
+  return {
+    seed:  parseFloat($("costSeed").value)  || 0,
+    chem:  parseFloat($("costChem").value)  || 0,
+    fert:  parseFloat($("costFert").value)  || 0,
+    fuel:  parseFloat($("costFuel").value)  || 0,
+    other: parseFloat($("costOther").value) || 0,
+    yield: parseFloat($("costYield").value) || 0,
+    price: parseFloat($("costPrice").value) || 0,
+    acres: parseFloat($("costAcres").value) || 0,
+  };
+}
+
+function writeCostInputs(c) {
+  c = c || {};
+  if ($("costSeed"))  $("costSeed").value  = c.seed  ? c.seed  : "";
+  if ($("costChem"))  $("costChem").value  = c.chem  ? c.chem  : "";
+  if ($("costFert"))  $("costFert").value  = c.fert  ? c.fert  : "";
+  if ($("costFuel"))  $("costFuel").value  = c.fuel  ? c.fuel  : "";
+  if ($("costOther")) $("costOther").value = c.other ? c.other : "";
+  if ($("costYield")) $("costYield").value = c.yield ? c.yield : "";
+  if ($("costPrice")) $("costPrice").value = c.price ? c.price : "";
+}
+
+function seedCostAcresFromState() {
+  var acEl = $("costAcres");
+  if (acEl && !acEl.value) {
+    var a = (state.boundary && state.boundary.acres > 0) ? state.boundary.acres : 0;
+    if (a > 0) acEl.value = +a.toFixed(2);
+  }
+}
+
+function computeCostSummary(c) {
+  var perAcCost = (c.seed||0)+(c.chem||0)+(c.fert||0)+(c.fuel||0)+(c.other||0);
+  var revPerAc  = (c.yield||0) * (c.price||0);
+  var profitPerAc = revPerAc - perAcCost;
+  var acres = c.acres || 0;
+  return {
+    perAcCost: perAcCost,
+    revPerAc: revPerAc,
+    profitPerAc: profitPerAc,
+    acres: acres,
+    totalCost: acres > 0 ? perAcCost * acres : null,
+    totalRev:  acres > 0 ? revPerAc  * acres : null,
+    totalProfit: acres > 0 ? profitPerAc * acres : null,
+    breakeven: (c.yield||0) > 0 ? perAcCost / c.yield : null,
+  };
+}
+
+function fmtMoney(n) {
+  if (n == null || isNaN(n)) return "\u2014";
+  var neg = n < 0;
+  var s = "$" + Math.abs(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  return neg ? "-" + s : s;
+}
+
+function calcCost() {
+  var c = readCostInputs();
+  var s = computeCostSummary(c);
+  var resEl = $("costResults");
+  if (!resEl) return;
+  var pc = function(v){ return v >= 0 ? "profit-pos" : "profit-neg"; };
+  resEl.innerHTML =
+    '<table>' +
+    '<tr><th>Per Acre</th><th class="num">Amount</th></tr>' +
+    '<tr><td>Total Cost</td><td class="num">' + fmtMoney(s.perAcCost) + '</td></tr>' +
+    '<tr><td>Revenue (' + (c.yield||0) + ' bu \u00D7 ' + fmtMoney(c.price) + ')</td><td class="num">' + fmtMoney(s.revPerAc) + '</td></tr>' +
+    '<tr class="mix-total"><td>Profit / Acre</td><td class="num ' + pc(s.profitPerAc) + '">' + fmtMoney(s.profitPerAc) + '</td></tr>' +
+    '</table>' +
+    (s.acres > 0 ?
+      '<table style="margin-top:8px;">' +
+      '<tr><th>Whole Field (' + s.acres.toFixed(1) + ' ac)</th><th class="num">Amount</th></tr>' +
+      '<tr><td>Total Cost</td><td class="num">' + fmtMoney(s.totalCost) + '</td></tr>' +
+      '<tr><td>Total Revenue</td><td class="num">' + fmtMoney(s.totalRev) + '</td></tr>' +
+      '<tr class="mix-total"><td>Total Profit</td><td class="num ' + pc(s.totalProfit) + '">' + fmtMoney(s.totalProfit) + '</td></tr>' +
+      '</table>' : '<div class="hint" style="margin-top:6px;">Enter Acres for whole-field totals.</div>') +
+    (s.breakeven != null ? '<div class="hint" style="margin-top:6px;">Break-even price: <b>' + fmtMoney(s.breakeven) + '/bu</b></div>' : '');
+}
+
+function resetCost() {
+  COST_FIELDS.forEach(function(id){ if ($(id)) $(id).value = ""; });
+  if ($("costAcres")) $("costAcres").value = "";
+  if ($("costResults")) $("costResults").innerHTML = "";
+}
+
+if ($("btnCostCalc"))  $("btnCostCalc").addEventListener("click", calcCost);
+if ($("btnCostReset")) $("btnCostReset").addEventListener("click", resetCost);
 
 // ============================================================
 // MAP INIT
@@ -1612,6 +1705,7 @@ if ($("btnSaveField")) $("btnSaveField").addEventListener("click", () => {
     crop: $("fldCrop").value,
     variety: $("fldVariety").value,
     boundary: { points: state.boundary.points.slice(), acres: state.boundary.acres },
+    cost: readCostInputs(),   // ← per-field cost/profit inputs
     savedAt: new Date().toISOString(),
   };
   localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
@@ -1629,6 +1723,7 @@ if ($("btnLoadField")) $("btnLoadField").addEventListener("click", () => {
   $("fldCrop").value = f.crop || "Corn";
   $("fldVariety").value = f.variety || "";
   state.field = { name: f.name, crop: f.crop, variety: f.variety };
+  writeCostInputs(f.cost);   // ← restore per-field cost inputs
   if (state.boundary.poly) { state.boundary.poly.setMap(null); state.boundary.poly = null; }
   state.boundary.points = (f.boundary && f.boundary.points) || [];
   state.boundary.acres  = (f.boundary && f.boundary.acres)  || 0;
@@ -1835,6 +1930,11 @@ $("btnSave").addEventListener("click", async () => {
       : null,                                 // ← NEW: harvest readings log
     loads: state.loads || 0,                  // ← NEW: refill/unload count
     loadLog: (state.loadLog || []).slice(),   // ← NEW: timestamped load events
+    cost: (function(){                        // ← NEW: cost/profit snapshot
+      var ci = readCostInputs();
+      if (!ci.acres) ci.acres = +state.acres.toFixed(2) || +state.boundary.acres.toFixed(2) || 0;
+      return { inputs: ci, summary: computeCostSummary(ci) };
+    })(),
   };
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   all[id] = rep;
@@ -2087,6 +2187,20 @@ $("btnPdfRep").addEventListener("click", () => {
       </tr>`).join("")}
     </table>` : (r.loads ? `<h2>Loads</h2><table><tr><td>Total</td><td>${r.loads}</td></tr></table>` : "")}
 
+    ${(r.cost && r.cost.summary) ? `
+    <h2>💰 Cost &amp; Profit</h2>
+    <table>
+      <tr><td>Cost / Acre</td><td>${pdfMoney(r.cost.summary.perAcCost)}</td></tr>
+      <tr><td>Revenue / Acre</td><td>${pdfMoney(r.cost.summary.revPerAc)} (${r.cost.inputs.yield||0} bu @ ${pdfMoney(r.cost.inputs.price)})</td></tr>
+      <tr><td><b>Profit / Acre</b></td><td><b>${pdfMoney(r.cost.summary.profitPerAc)}</b></td></tr>
+      ${r.cost.summary.acres > 0 ? `
+      <tr><td>Acres</td><td>${r.cost.summary.acres.toFixed(1)}</td></tr>
+      <tr><td>Total Cost</td><td>${pdfMoney(r.cost.summary.totalCost)}</td></tr>
+      <tr><td>Total Revenue</td><td>${pdfMoney(r.cost.summary.totalRev)}</td></tr>
+      <tr><td><b>Total Profit</b></td><td><b>${pdfMoney(r.cost.summary.totalProfit)}</b></td></tr>` : ""}
+      ${r.cost.summary.breakeven != null ? `<tr><td>Break-even Price</td><td>${pdfMoney(r.cost.summary.breakeven)}/bu</td></tr>` : ""}
+    </table>` : ""}
+
     </body></html>`;
   const w = window.open("", "_blank");
   w.document.write(html);
@@ -2111,7 +2225,39 @@ function formatReport(r) {
     `Wind:      ${(r.weather && (r.weather.windSpeed || r.weather.windDir)) ? ((r.weather.windSpeed ? r.weather.windSpeed + " mph " : "") + (r.weather.windDir || "")).trim() : "\u2014"}`,
     `Temp:      ${(r.weather && r.weather.temp) ? r.weather.temp + " \u00B0F" : "\u2014"}`,
     `Sky:       ${(r.weather && r.weather.sky) ? r.weather.sky : "\u2014"}`,
-  ].concat(formatHarvestLines(r)).concat(formatLoadLines(r)).join("\n");
+  ].concat(formatHarvestLines(r)).concat(formatLoadLines(r)).concat(formatCostLines(r)).join("\n");
+}
+
+// Small money formatter for the PDF template
+function pdfMoney(n) {
+  if (n == null || isNaN(n)) return "\u2014";
+  return (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2);
+}
+
+// Build cost/profit lines for a report
+function formatCostLines(r) {
+  if (!r.cost || !r.cost.summary) return [];
+  const c = r.cost.inputs || {}, s = r.cost.summary;
+  const lines = [``, `--- Cost & Profit ---`];
+  const dollar = (n) => (n == null || isNaN(n)) ? "\u2014" :
+    (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2);
+  if (c.seed)  lines.push(`Seed:      $${(+c.seed).toFixed(2)}/ac`);
+  if (c.chem)  lines.push(`Chemical:  $${(+c.chem).toFixed(2)}/ac`);
+  if (c.fert)  lines.push(`Fertilizer:$${(+c.fert).toFixed(2)}/ac`);
+  if (c.fuel)  lines.push(`Fuel:      $${(+c.fuel).toFixed(2)}/ac`);
+  if (c.other) lines.push(`Other:     $${(+c.other).toFixed(2)}/ac`);
+  lines.push(`Cost/Acre: ${dollar(s.perAcCost)}`);
+  lines.push(`Yield:     ${c.yield || 0} bu/ac @ ${dollar(c.price)}/bu`);
+  lines.push(`Rev/Acre:  ${dollar(s.revPerAc)}`);
+  lines.push(`Profit/Ac: ${dollar(s.profitPerAc)}`);
+  if (s.acres > 0) {
+    lines.push(`Acres:     ${s.acres.toFixed(1)}`);
+    lines.push(`Total Cost:   ${dollar(s.totalCost)}`);
+    lines.push(`Total Rev:    ${dollar(s.totalRev)}`);
+    lines.push(`Total Profit: ${dollar(s.totalProfit)}`);
+  }
+  if (s.breakeven != null) lines.push(`Break-even: ${dollar(s.breakeven)}/bu`);
+  return lines;
 }
 
 // Build load-counter lines for a report (refills for sprayer / unloads for combine)
@@ -2183,6 +2329,8 @@ function reportsToCSV() {
     "Exp Yield (bu/ac)", "Start Moisture (%)", "Harvest Readings",
     "Last Yield (bu/ac)", "Last Moisture (%)", "Last Quality",
     "Loads", "Load Events",
+    "Cost/Acre ($)", "Revenue/Acre ($)", "Profit/Acre ($)",
+    "Total Cost ($)", "Total Revenue ($)", "Total Profit ($)", "Break-even ($/bu)",
     "Report ID"
   ];
   var rows = [headers.map(csvEscape).join(",")];
@@ -2211,6 +2359,13 @@ function reportsToCSV() {
       (r.harvest && r.harvest.log && r.harvest.log.length) ? r.harvest.log[r.harvest.log.length-1].quality : "",
       r.loads || 0,
       (r.loadLog && r.loadLog.length) ? r.loadLog.map(function(x){ return "#"+x.n+"@"+(x.minsIn!=null?x.minsIn+"min":"")+(x.acresAt!=null?" "+x.acresAt+"ac":""); }).join("; ") : "",
+      (r.cost && r.cost.summary) ? r.cost.summary.perAcCost.toFixed(2) : "",
+      (r.cost && r.cost.summary) ? r.cost.summary.revPerAc.toFixed(2) : "",
+      (r.cost && r.cost.summary) ? r.cost.summary.profitPerAc.toFixed(2) : "",
+      (r.cost && r.cost.summary && r.cost.summary.totalCost != null) ? r.cost.summary.totalCost.toFixed(2) : "",
+      (r.cost && r.cost.summary && r.cost.summary.totalRev != null) ? r.cost.summary.totalRev.toFixed(2) : "",
+      (r.cost && r.cost.summary && r.cost.summary.totalProfit != null) ? r.cost.summary.totalProfit.toFixed(2) : "",
+      (r.cost && r.cost.summary && r.cost.summary.breakeven != null) ? r.cost.summary.breakeven.toFixed(2) : "",
       r.id || ""
     ];
     rows.push(row.map(csvEscape).join(","));
