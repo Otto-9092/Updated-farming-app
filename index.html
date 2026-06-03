@@ -25,6 +25,9 @@
 <link rel="stylesheet" href="styles.css" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
+  /* Low-tank warning: tile turns red when <=15% remaining */
+  .metric.low-tank { background: #b3261e !important; color: #fff !important; }
+  .metric.low-tank .m-label, .metric.low-tank .m-val, .metric.low-tank small { color: #fff !important; }
 </style>
 </head>
 <body>
@@ -35,7 +38,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.03 · 14:47</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.03 · 15:18</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -83,6 +86,10 @@
   <div class="metric hidden" id="mNozGpmBox"><div class="m-label">Nozzle GPM</div><div class="m-val"><span id="mNozGpm">0.00</span></div></div>
   <div class="metric hidden" id="mYieldBox"><div class="m-label">Yield</div><div class="m-val"><span id="mYield">—</span> <small>bu/ac</small></div></div>
   <div class="metric hidden" id="mMoistBox"><div class="m-label">Moisture</div><div class="m-val"><span id="mMoist">—</span> <small>%</small></div></div>
+  <div class="metric hidden" id="mTankLeftBox"><div class="m-label">Tank Left</div><div class="m-val"><span id="mTankLeft">—</span> <small>gal</small></div></div>
+  <div class="metric hidden" id="mAcToEmptyBox"><div class="m-label">Acres to Empty</div><div class="m-val"><span id="mAcToEmpty">—</span></div></div>
+  <div class="metric hidden" id="mMinToEmptyBox"><div class="m-label">Min to Empty</div><div class="m-val"><span id="mMinToEmpty">—</span></div></div>
+  <div class="metric hidden" id="mLoadsBox"><div class="m-label">Loads</div><div class="m-val"><span id="mLoads">0</span></div></div>
 </div>
       </div><!-- /.operate-layout -->
       
@@ -94,6 +101,16 @@
         <button id="secFull"  class="sec-btn active">FULL</button>
         <button id="secRight" class="sec-btn">RIGHT ½</button>
       </div>
+    </div>
+
+    <!-- Tank & Loads (sprayer refill / combine unload) -->
+    <div class="card hidden" id="tankLoadsCard">
+      <div class="card-title" id="tankLoadsTitle">Tank &amp; Loads</div>
+      <div class="btn-row">
+        <button id="btnRefill" class="btn btn-primary hidden">🚰 Refill Tank</button>
+        <button id="btnUnload" class="btn btn-primary hidden">📤 Unload Grain</button>
+      </div>
+      <div class="hint" id="tankLoadsHint"></div>
     </div>
 
  <!-- Controls -->
@@ -542,8 +559,8 @@
 
 <!-- ============== CONFIG ============== -->
 <!-- Put your Google Maps API key in config.js -->
-<script src="config.js?v=20260603-1447"></script>
-<script src="app.js?v=20260603-1447"></script>
+<script src="config.js?v=20260603-1518"></script>
+<script src="app.js?v=20260603-1518"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
