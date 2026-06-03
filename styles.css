@@ -1,14 +1,14 @@
 :root {
-  --bg: #0f1115;
-  --panel: #161a22;
-  --panel-2: #1d2230;
-  --text: #e8ecf1;
-  --muted: #9aa3b2;
-  --accent: #ffb703;
-  --green: #2ecc71;
-  --red: #e74c3c;a
-  --blue: #3498db;
-  --border: #262c3a;
+  --bg: #f5f0e1;        /* cream page background */
+  --panel: #fffdf7;     /* off-white cards/header */
+  --panel-2: #ece5d3;   /* light tan inputs/buttons */
+  --text: #2a2620;      /* dark brown-black text */
+  --muted: #6b6557;     /* warm grey for labels/hints */
+  --accent: #e89400;    /* amber accent (pops on cream) */
+  --green: #2e9e57;     /* deeper green for contrast on light */
+  --red: #d63b29;       /* deeper red for contrast on light */
+  --blue: #2f7fc4;
+  --border: #d6cdb8;    /* soft tan borders */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
@@ -163,22 +163,20 @@ input, textarea, .report-body, pre { -webkit-user-select: text; user-select: tex
 
 /* ===== Metrics — now a side panel beside the map (was an overlay) ===== */
 .metrics {
-  flex: 0 0 220px;  /* fixed-width side column */
+  flex: 0 0 180px;  /* fixed-width side column (single column now) */
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;          /* single column */
   grid-auto-rows: min-content;
   gap: 8px;
   align-content: start;
-  max-height: 55vh;
-  overflow-y: auto;
+  max-height: 55vh;                    /* matches map height; scrolls if taller */
+  overflow-y: auto;                    /* scroll when tiles exceed the height */
   -webkit-overflow-scrolling: touch;
 }
 .metric {
-  background: rgba(15,17,21,0.78);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px; padding: 6px 8px;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
 }
 .m-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .m-val   { font-size: 16px; font-weight: 700; }
@@ -221,7 +219,7 @@ input, select {
 .btn:active { transform: scale(0.97); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary { background: var(--accent); color: #1a1a1a; border-color: var(--accent); }
-.btn-danger  { background: var(--red); border-color: var(--red); color: #fff; }
+.btn-danger  { background: var(--red); border-color: var(--red); color: var(--text); }
 .btn-ghost   { background: transparent; }
 .btn.active-toggle {
   background: var(--accent);
@@ -271,13 +269,14 @@ input, select {
 /* ===== iPad (tablet) — bigger map, 2-col layout possible ===== */
 @media (min-width: 768px) {
   #map { height: 65vh; }
-  .metrics { flex-basis: 260px; grid-template-columns: repeat(2, 1fr); }
+  .metrics { flex-basis: 200px; grid-template-columns: 1fr; max-height: 65vh; }
   .m-val { font-size: 18px; }
 }
 
 /* ===== iPad landscape — wide layout ===== */
 @media (min-width: 1024px) and (orientation: landscape) {
   #map { height: 78vh; }
+  .metrics { max-height: 78vh; }   /* scroll within the taller map height */
 }
 
 /* ===== iPhone (small) — 3-col metrics ===== */
@@ -313,15 +312,15 @@ input, select {
   width: 100%;
   padding: 10px 12px;
   font-size: 16px;            /* 16px prevents iOS zoom on focus */
-  border: 1px solid #444;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #1a1d23;
-  color: #fff;
+  background: var(--panel-2);
+  color: var(--text);
   box-sizing: border-box;
 }
 
 .report-search::placeholder {
-  color: #888;
+  color: var(--muted);
 }
 
 .report-search:focus {
@@ -339,15 +338,15 @@ input, select {
   flex: 1;
   padding: 8px 10px;
   font-size: 14px;
-  border: 1px solid #444;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #1a1d23;
-  color: #fff;
+  background: var(--panel-2);
+  color: var(--text);
 }
 
 .report-count {
   font-size: 12px;
-  color: #9aa0a6;
+  color: var(--muted);
   text-align: right;
   margin-top: 2px;
 }
@@ -357,9 +356,9 @@ input, select {
   padding: 6px;
   font-size: 14px;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  background: #1a1d23;
-  color: #fff;
-  border: 1px solid #444;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 6px;
   box-sizing: border-box;
 }
@@ -379,7 +378,7 @@ input, select {
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.45);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -394,15 +393,15 @@ input, select {
 }
 
 .modal-card {
-  background: #15181d;
-  border: 1px solid #333;
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 12px;
   width: 100%;
   max-width: 440px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
   animation: slideUp 0.22s ease-out;
 }
 
@@ -411,7 +410,7 @@ input, select {
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid #2a2d33;
+  border-bottom: 1px solid var(--border);
 }
 
 .modal-title {
@@ -423,7 +422,7 @@ input, select {
 .modal-close {
   background: transparent;
   border: none;
-  color: #aaa;
+  color: var(--muted);
   font-size: 22px;
   width: 36px; height: 36px;
   border-radius: 50%;
@@ -433,8 +432,8 @@ input, select {
   justify-content: center;
 }
 .modal-close:hover, .modal-close:active {
-  background: #2a2d33;
-  color: #fff;
+  background: var(--border);
+  color: var(--text);
 }
 
 .modal-body {
@@ -447,7 +446,7 @@ input, select {
   display: block;
   margin-bottom: 12px;
   font-size: 14px;
-  color: #ddd;
+  color: var(--text);
 }
 
 .modal-body input,
@@ -458,10 +457,10 @@ input, select {
   margin-top: 4px;
   padding: 10px;
   font-size: 16px;            /* prevents iOS zoom */
-  border: 1px solid #444;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #0e0e0e;
-  color: #fff;
+  background: var(--panel-2);
+  color: var(--text);
   box-sizing: border-box;
   font-family: inherit;
 }
@@ -480,7 +479,7 @@ input, select {
 
 .modal-body .hint {
   font-size: 12px;
-  color: #9aa0a6;
+  color: var(--muted);
   margin-top: -4px;
   margin-bottom: 12px;
 }
@@ -489,7 +488,7 @@ input, select {
   display: flex;
   gap: 10px;
   padding: 14px 18px;
-  border-top: 1px solid #2a2d33;
+  border-top: 1px solid var(--border);
 }
 
 .modal-footer .btn {
