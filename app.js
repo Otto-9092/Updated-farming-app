@@ -116,11 +116,27 @@ function initMap() {
   state.map = new google.maps.Map($("map"), {
     center: getStartCenter(),       // last known location, or Iowa fallback
     zoom: 17,
-    mapTypeId: "satellite",
+    mapTypeId: getStartMapType(),   // remembers your last choice; defaults to hybrid
     tilt: 0,
-    disableDefaultUI: true,
-    zoomControl: true,
+    // --- Native Google Maps controls (replaces disableDefaultUI: true) ---
+    disableDefaultUI: false,
+    zoomControl: true,              // + / - zoom buttons
+    mapTypeControl: true,          // Satellite / Hybrid / Roadmap / Terrain toggle
+    mapTypeControlOptions: {
+      mapTypeIds: ["hybrid", "satellite", "roadmap", "terrain"],
+      style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
+    },
+    fullscreenControl: true,       // fullscreen button
+    streetViewControl: false,      // pegman off (not useful in a field)
+    rotateControl: false,
     gestureHandling: "cooperative", // page scrolls on wheel; Ctrl+wheel zooms map
+  });
+
+  // Remember the map type whenever you change it, so it persists next launch.
+  state.map.addListener("maptypeid_changed", () => {
+    try {
+      localStorage.setItem("lastMapType", state.map.getMapTypeId());
+    } catch (e) { /* storage blocked/full; ignore */ }
   });
 
   state.machineMarker = new google.maps.Marker({
@@ -183,6 +199,17 @@ function getStartCenter() {
     }
   } catch (e) { /* ignore parse/storage errors */ }
   return { lat: 41.5868, lng: -93.625 }; // Des Moines, Iowa fallback
+}
+
+// Returns the saved map type ("hybrid"/"satellite"/"roadmap"/"terrain"),
+// or "hybrid" by default (satellite imagery WITH road names + labels).
+function getStartMapType() {
+  try {
+    const saved = localStorage.getItem("lastMapType");
+    const allowed = ["hybrid", "satellite", "roadmap", "terrain"];
+    if (saved && allowed.indexOf(saved) !== -1) return saved;
+  } catch (e) { /* ignore */ }
+  return "hybrid";
 }
 // Make initMap visible to the Google Maps callback loader
 window.initMap = initMap;
