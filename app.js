@@ -2,11 +2,11 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.04 · 16:45";
-try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
+window.APP_VERSION = "2026.06.04 · 17:40";
+try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
-   Diamond O Farms — Data Systems Pro
+   OπO Farming (Diamond O Farms LLC) — Data Systems Pro
    Complete single-file precision ag display logic.
    ============================================================ */
 
@@ -2116,7 +2116,7 @@ if ($("btnExportKML")) $("btnExportKML").addEventListener("click", () => {
   const kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
-    <name>Diamond O Farms — ${state.field.name || "Trail"}</name>
+    <name>OπO Farming — ${state.field.name || "Trail"}</name>
     <Style id="trail"><LineStyle><color>ff00b7ff</color><width>3</width></LineStyle></Style>
     <Placemark><name>Machine Path</name><styleUrl>#trail</styleUrl>
       <LineString><tessellate>1</tessellate><coordinates>${coords}</coordinates></LineString>
@@ -2135,7 +2135,7 @@ if ($("btnExportGPX")) $("btnExportGPX").addEventListener("click", () => {
     return `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lng.toFixed(7)}"><time>${t}</time><speed>${mps}</speed></trkpt>`;
   }).join("\n");
   const gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Diamond O Farms" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx version="1.1" creator="OπO Farming" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata><name>${state.field.name || "Trail"}</name><time>${new Date().toISOString()}</time></metadata>
   <trk><name>${state.equipment.name || "Machine"} — ${state.field.name || "Field"}</name>
     <trkseg>
@@ -2430,7 +2430,7 @@ $("btnPdfRep").addEventListener("click", async () => {
       <button class="btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
     </div>
 
-    <h1>🚜 Diamond O Farms — ${r.name || "Field Report"}</h1>
+    <h1>🚜 OπO Farming — ${r.name || "Field Report"}</h1>
     <div>${new Date(r.date).toLocaleString()} &nbsp;·&nbsp; ${r.id}</div>
 
     <h2>Field</h2><table>
@@ -2815,7 +2815,7 @@ function updateDataStats() {
 // (async); false returns immediately without them (used for rollback snapshot).
 function buildBackup(includePhotos) {
   var base = {
-    app: "Diamond O Farms — Data Systems Pro",
+    app: "OπO Farming — Data Systems Pro",
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     fields:    JSON.parse(localStorage.getItem(LS_FIELDS) || "{}"),
@@ -2880,8 +2880,9 @@ async function handleImport(data) {
   if (!data || typeof data !== "object") {
     return appAlert("❌ Invalid backup file: not a JSON object.", "Import failed");
   }
-  if (data.app !== "Diamond O Farms — Data Systems Pro") {
-    return appAlert("❌ This file isn't a Diamond O Farms backup.", "Import failed");
+  var VALID_BACKUP_APPS = ["OπO Farming — Data Systems Pro", "Diamond O Farms — Data Systems Pro"];
+  if (VALID_BACKUP_APPS.indexOf(data.app) === -1) {
+    return appAlert("❌ This file isn't an OπO Farming backup.", "Import failed");
   }
   if (typeof data.version !== "number") {
     return appAlert("❌ Backup file is missing version info.", "Import failed");
@@ -3286,19 +3287,64 @@ function migrateLegacyPhotos() {
 // PWA — SERVICE WORKER REGISTRATION (offline support)
 // ============================================================
 if ("serviceWorker" in navigator) {
+  var _waitingSW = null;   // a SW that has installed and is waiting to activate
+
+  // Show the "update available" banner and wire its button.
+  function showUpdateBanner(worker) {
+    _waitingSW = worker;
+    var bar = document.getElementById("updateBanner");
+    if (bar) bar.classList.remove("hidden");
+  }
+
+  function applyUpdate() {
+    var bar = document.getElementById("updateBanner");
+    if (bar) bar.textContent = "Updating\u2026";
+    if (_waitingSW) {
+      _waitingSW.postMessage("SKIP_WAITING");   // tell it to take over now
+    } else {
+      window.location.reload();                  // fallback
+    }
+  }
+  window.applyUpdate = applyUpdate;   // referenced by the banner button
+
   window.addEventListener("load", function () {
     navigator.serviceWorker.register("sw.js").then(function (reg) {
       console.log("[PWA] Service worker registered:", reg.scope);
-      // When a new SW takes control (after an update), reload once so the
-      // freshest files are shown — pairs with the ?v= cache-busting stamps.
-      var refreshing = false;
-      navigator.serviceWorker.addEventListener("controllerchange", function () {
-        if (refreshing) return;
-        refreshing = true;
-        window.location.reload();
+
+      // If one is already waiting (e.g. installed on a previous visit), prompt.
+      if (reg.waiting && navigator.serviceWorker.controller) {
+        showUpdateBanner(reg.waiting);
+      }
+
+      // When a new SW is found installing, watch it; prompt once installed.
+      reg.addEventListener("updatefound", function () {
+        var nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener("statechange", function () {
+          if (nw.state === "installed" && navigator.serviceWorker.controller) {
+            showUpdateBanner(nw);   // new version ready (not first install)
+          }
+        });
       });
+
+      // Proactively check for updates each time the app is opened/focused.
+      function checkForUpdate() { reg.update().catch(function(){}); }
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") checkForUpdate();
+      });
+      // Also check shortly after load.
+      setTimeout(checkForUpdate, 3000);
+
     }).catch(function (err) {
       console.warn("[PWA] Service worker registration failed:", err);
+    });
+
+    // When the new SW takes control, reload once into the fresh version.
+    var refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
     });
   });
 }
