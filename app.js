@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.04 · 10:30";
+window.APP_VERSION = "2026.06.04 · 14:20";
 try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -2361,11 +2361,24 @@ $("btnDeleteRep").addEventListener("click", async () => {
   if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
 
-// Print to PDF — with mobile-friendly back button
+// Print to PDF — popup-safe (works on phone + computer) with photos.
 $("btnPdfRep").addEventListener("click", async () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   const r = all[$("repSelect").value];
   if (!r) { appAlert("Select a report first."); return; }
+
+  // Open the tab SYNCHRONOUSLY inside the click (so it isn't popup-blocked).
+  // We fill it after photos resolve. If the browser still blocks it, win = null
+  // and we fall back to same-tab navigation via a Blob URL.
+  let win = null;
+  try { win = window.open("", "_blank"); } catch (e) { win = null; }
+  if (win) {
+    try {
+      win.document.write('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:Arial;padding:24px;color:#111">Building report\u2026</body>');
+      win.document.close();
+    } catch (e) {}
+  }
+
   // Resolve any IndexedDB-stored note photos to dataURLs before building HTML
   if (r.notes && r.notes.length) {
     await Promise.all(r.notes.map(function (n) {
@@ -2413,7 +2426,7 @@ $("btnPdfRep").addEventListener("click", async () => {
     </head><body>
 
     <div class="action-bar">
-      <button class="btn-back"  onclick="window.close(); setTimeout(()=>history.back(),100);">← Back to App</button>
+      <button class="btn-back"  onclick="if(window.opener){window.close();}else{history.back();}">← Back to App</button>
       <button class="btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
     </div>
 
@@ -2508,9 +2521,32 @@ $("btnPdfRep").addEventListener("click", async () => {
     ` : ""}
 
     </body></html>`;
-  const w = window.open("", "_blank");
-  w.document.write(html);
-  w.document.close();
+
+  // Deliver via a Blob URL — reliable for large HTML + embedded photos,
+  // and works on iOS/standalone PWAs where document.write of big content fails.
+  let url = null;
+  try {
+    url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  } catch (e) { url = null; }
+
+  if (win && url) {
+    // Point the already-opened tab at the report.
+    try { win.location.href = url; }
+    catch (e) {
+      // Last resort: write directly into the opened tab.
+      try { win.document.open(); win.document.write(html); win.document.close(); } catch (e2) {}
+    }
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
+  } else if (url) {
+    // Popup was blocked — navigate the current tab (a Back button is built in).
+    window.location.href = url;
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
+  } else if (win) {
+    // Blob unsupported but we have a window — fall back to document.write.
+    try { win.document.open(); win.document.write(html); win.document.close(); } catch (e) {}
+  } else {
+    appAlert("Could not open the report view. Please allow pop-ups for this site and try again.", "PDF");
+  }
 });
 
 function formatReport(r) {
