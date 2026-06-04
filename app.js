@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.04 · 09:15";
+window.APP_VERSION = "2026.06.04 · 10:30";
 try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -331,6 +331,111 @@ if ($("btnCostCalc"))  $("btnCostCalc").addEventListener("click", calcCost);
 if ($("btnCostReset")) $("btnCostReset").addEventListener("click", resetCost);
 
 // ============================================================
+// PHOTO STORE (IndexedDB) — Stage 2
+// Photos are large; localStorage caps ~5MB. We keep notes/reports in
+// localStorage but store photo dataURLs in IndexedDB keyed by photoId.
+// ============================================================
+const IDB_NAME = "opio_photos_db";
+const IDB_STORE = "photos";
+let _idbPromise = null;
+
+function idbOpen() {
+  if (_idbPromise) return _idbPromise;
+  _idbPromise = new Promise(function (resolve, reject) {
+    if (!("indexedDB" in window)) { reject(new Error("IndexedDB unavailable")); return; }
+    var req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = function () {
+      var db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = function () { resolve(req.result); };
+    req.onerror = function () { reject(req.error); };
+  });
+  return _idbPromise;
+}
+
+function idbTx(mode) {
+  return idbOpen().then(function (db) {
+    return db.transaction(IDB_STORE, mode).objectStore(IDB_STORE);
+  });
+}
+
+// Generate a unique photo id
+function newPhotoId() {
+  return "ph_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+}
+
+// Store a dataURL; resolves with the id used.
+function photoPut(id, dataUrl) {
+  return idbTx("readwrite").then(function (store) {
+    return new Promise(function (resolve, reject) {
+      var r = store.put(dataUrl, id);
+      r.onsuccess = function () { resolve(id); };
+      r.onerror = function () { reject(r.error); };
+    });
+  });
+}
+
+// Retrieve a dataURL (or null).
+function photoGet(id) {
+  if (!id) return Promise.resolve(null);
+  return idbTx("readonly").then(function (store) {
+    return new Promise(function (resolve, reject) {
+      var r = store.get(id);
+      r.onsuccess = function () { resolve(r.result || null); };
+      r.onerror = function () { reject(r.error); };
+    });
+  }).catch(function () { return null; });
+}
+
+// Delete a photo by id.
+function photoDelete(id) {
+  if (!id) return Promise.resolve();
+  return idbTx("readwrite").then(function (store) {
+    return new Promise(function (resolve) {
+      var r = store.delete(id);
+      r.onsuccess = function () { resolve(); };
+      r.onerror = function () { resolve(); };
+    });
+  }).catch(function () {});
+}
+
+// Export ALL photos as a { id: dataUrl } map (for backups).
+function photoExportAll() {
+  return idbTx("readonly").then(function (store) {
+    return new Promise(function (resolve) {
+      var out = {};
+      var req = store.openCursor();
+      req.onsuccess = function () {
+        var cur = req.result;
+        if (cur) { out[cur.key] = cur.value; cur.continue(); }
+        else resolve(out);
+      };
+      req.onerror = function () { resolve(out); };
+    });
+  }).catch(function () { return {}; });
+}
+
+// Import a { id: dataUrl } map (merge into the store).
+function photoImportAll(map) {
+  if (!map || typeof map !== "object") return Promise.resolve();
+  var ids = Object.keys(map);
+  if (!ids.length) return Promise.resolve();
+  return idbTx("readwrite").then(function (store) {
+    return new Promise(function (resolve) {
+      var i = 0;
+      function next() {
+        if (i >= ids.length) { resolve(); return; }
+        var id = ids[i++];
+        var r = store.put(map[id], id);
+        r.onsuccess = next; r.onerror = next;
+      }
+      next();
+    });
+  }).catch(function () {});
+}
+
+// ============================================================
 // FIELD NOTES (text + optional photo, GPS-tagged) — added feature
 // ============================================================
 // Compress/resize an image File into a small JPEG dataURL for localStorage.
@@ -393,7 +498,7 @@ if ($("notePhoto")) $("notePhoto").addEventListener("change", function (e) {
   });
 });
 
-// Save the staged note
+// Save the staged note (photo goes to IndexedDB; note keeps a photoId)
 function saveNote() {
   var text = ($("noteText") && $("noteText").value || "").trim();
   if (!text && !state._stagedPhoto) {
@@ -401,20 +506,40 @@ function saveNote() {
     return;
   }
   var loc = state.lastPos ? { lat: state.lastPos.lat, lng: state.lastPos.lng } : null;
-  state.notes = state.notes || [];
-  state.notes.push({
+  var note = {
     t: new Date().toISOString(),
     minsIn: state.sessionStart ? Math.round((Date.now() - state.sessionStart) / 60000) : null,
     text: text,
-    photo: state._stagedPhoto || null,
+    photoId: null,
     loc: loc
-  });
+  };
+
+  var staged = state._stagedPhoto;
   state._stagedPhoto = null;
   closeDlg("noteDlg");
-  renderNotes();
+
+  function finish() {
+    state.notes = state.notes || [];
+    state.notes.push(note);
+    renderNotes();
+  }
+
+  if (staged) {
+    var id = newPhotoId();
+    photoPut(id, staged).then(function () {
+      note.photoId = id;
+      finish();
+    }).catch(function () {
+      // IndexedDB failed — fall back to inline photo so nothing is lost
+      note.photo = staged;
+      finish();
+    });
+  } else {
+    finish();
+  }
 }
 
-// Render the notes list under the card
+// Render the notes list under the card. Thumbnails load async from IndexedDB.
 function renderNotes() {
   var list = $("notesList");
   if (!list) return;
@@ -425,7 +550,9 @@ function renderNotes() {
   }
   list.innerHTML = notes.map(function (n, i) {
     var when = new Date(n.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    var thumb = n.photo ? '<img src="' + n.photo + '" alt="note photo" data-noteimg="' + i + '" />' : "";
+    var hasPhoto = !!(n.photoId || n.photo);
+    // Placeholder thumb; filled in async below via data-thumb index.
+    var thumb = hasPhoto ? '<img alt="note photo" data-noteimg="' + i + '" data-thumb="' + i + '" />' : "";
     var gps = n.loc ? "\uD83D\uDCCD " + fmtGps(n.loc) : "no GPS";
     return '<div class="note-item">' + thumb +
       '<div class="note-body">' +
@@ -435,6 +562,19 @@ function renderNotes() {
       '<button class="note-del" data-notedel="' + i + '" title="Delete">\u2715</button>' +
     '</div>';
   }).join("");
+
+  // Fill thumbnails asynchronously
+  notes.forEach(function (n, i) {
+    if (n.photo) {
+      var el = list.querySelector('img[data-thumb="' + i + '"]');
+      if (el) el.src = n.photo;
+    } else if (n.photoId) {
+      photoGet(n.photoId).then(function (dataUrl) {
+        var el = list.querySelector('img[data-thumb="' + i + '"]');
+        if (el && dataUrl) el.src = dataUrl;
+      });
+    }
+  });
 }
 
 // Delegated clicks: delete note / open photo full-size
@@ -443,7 +583,8 @@ if ($("notesList")) $("notesList").addEventListener("click", async function (e) 
   if (del != null) {
     var idx = parseInt(del, 10);
     if (await appConfirm("Delete this note?", { title: "Delete note", okLabel: "Delete", danger: true })) {
-      state.notes.splice(idx, 1);
+      var removed = state.notes.splice(idx, 1)[0];
+      if (removed && removed.photoId) photoDelete(removed.photoId);
       renderNotes();
     }
     return;
@@ -454,6 +595,12 @@ if ($("notesList")) $("notesList").addEventListener("click", async function (e) 
     if (n && n.photo) {
       var w = window.open();
       if (w) w.document.write('<img src="' + n.photo + '" style="max-width:100%" />');
+    } else if (n && n.photoId) {
+      photoGet(n.photoId).then(function (dataUrl) {
+        if (!dataUrl) return;
+        var w = window.open();
+        if (w) w.document.write('<img src="' + dataUrl + '" style="max-width:100%" />');
+      });
     }
   }
 });
@@ -2215,10 +2362,18 @@ $("btnDeleteRep").addEventListener("click", async () => {
 });
 
 // Print to PDF — with mobile-friendly back button
-$("btnPdfRep").addEventListener("click", () => {
+$("btnPdfRep").addEventListener("click", async () => {
   const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   const r = all[$("repSelect").value];
   if (!r) { appAlert("Select a report first."); return; }
+  // Resolve any IndexedDB-stored note photos to dataURLs before building HTML
+  if (r.notes && r.notes.length) {
+    await Promise.all(r.notes.map(function (n) {
+      if (n.photo) { n._photoData = n.photo; return Promise.resolve(); }
+      if (n.photoId) return photoGet(n.photoId).then(function (d) { n._photoData = d || null; });
+      n._photoData = null; return Promise.resolve();
+    }));
+  }
   const html = `
     <html><head><title>${r.name || r.id}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -2348,7 +2503,7 @@ $("btnPdfRep").addEventListener("click", () => {
           ${n.loc ? "&bull; 📍 " + n.loc.lat.toFixed(5) + ", " + n.loc.lng.toFixed(5) : "&bull; no GPS"}
         </div>
         ${n.text ? `<div style="margin:4px 0;">${escHtml(n.text)}</div>` : ""}
-        ${n.photo ? `<img src="${n.photo}" style="max-width:320px; max-height:240px; border-radius:6px; margin-top:4px;" />` : ""}
+        ${(n._photoData || n.photo) ? `<img src="${n._photoData || n.photo}" style="max-width:320px; max-height:240px; border-radius:6px; margin-top:4px;" />` : ""}
       </div>`).join("")}
     ` : ""}
 
@@ -2386,7 +2541,7 @@ function formatNoteLines(r) {
   r.notes.forEach(function (n, i) {
     var when = n.minsIn != null ? (n.minsIn + " min") : new Date(n.t).toLocaleTimeString();
     var gps = n.loc ? (n.loc.lat.toFixed(5) + ", " + n.loc.lng.toFixed(5)) : "no GPS";
-    var photo = n.photo ? " [photo]" : "";
+    var photo = (n.photo || n.photoId) ? " [photo]" : "";
     lines.push("  #" + (i + 1) + "  [" + when + "]  \uD83D\uDCCD " + gps + photo);
     if (n.text) lines.push("     " + n.text);
   });
@@ -2604,7 +2759,7 @@ function extendLine(a, b, meters) {
 // ============================================================
 // DATA EXPORT / IMPORT — sync between devices
 // ============================================================
-const BACKUP_VERSION = 1;
+const BACKUP_VERSION = 2;   // v2: includes IndexedDB note photos
 const LS_BACKUP_ROLLBACK = "dof_last_rollback";
 
 // Summary text for the Backup card
@@ -2620,9 +2775,10 @@ function updateDataStats() {
     <b>${reps}</b> report${reps !== 1 ? "s" : ""}`;
 }
 
-// Build the full backup object
-function buildBackup() {
-  return {
+// Build the full backup object. includePhotos=true embeds IndexedDB photos
+// (async); false returns immediately without them (used for rollback snapshot).
+function buildBackup(includePhotos) {
+  var base = {
     app: "Diamond O Farms — Data Systems Pro",
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
@@ -2630,11 +2786,17 @@ function buildBackup() {
     equipment: JSON.parse(localStorage.getItem(LS_EQ)     || "{}"),
     reports:   JSON.parse(localStorage.getItem(LS_REPS)   || "{}"),
   };
+  if (!includePhotos) return base;
+  return photoExportAll().then(function (photos) {
+    base.photos = photos;   // { photoId: dataUrl }
+    return base;
+  });
 }
 
 // ===== Export =====
 $("btnExportAll")?.addEventListener("click", async () => {
-  const backup = buildBackup();
+  const backup = await buildBackup(true);             // include photos
+  const photoCount = backup.photos ? Object.keys(backup.photos).length : 0;
   const ts = new Date().toISOString().slice(0, 10);   // YYYY-MM-DD
   const filename = `diamond-o-backup-${ts}.json`;
   const json = JSON.stringify(backup, null, 2);
@@ -2648,7 +2810,8 @@ $("btnExportAll")?.addEventListener("click", async () => {
   appAlert(`✅ Exported successfully!\n\n` +
         `${totals.fields} fields\n` +
         `${totals.equipment} machines\n` +
-        `${totals.reports} reports\n\n` +
+        `${totals.reports} reports\n` +
+        `${photoCount} photo${photoCount !== 1 ? "s" : ""}\n\n` +
         `File: ${filename}`, "Backup exported");
 });
 
@@ -2737,9 +2900,12 @@ async function handleImport(data) {
 
 // Actually do the import
 function performImport(data, mode) {
-  // 1. Snapshot current state as rollback
-  const rollback = buildBackup();
+  // 1. Snapshot current state as rollback (no photos — keep it light)
+  const rollback = buildBackup(false);
   localStorage.setItem(LS_BACKUP_ROLLBACK, JSON.stringify(rollback));
+
+  // 1b. Restore any photos from the backup into IndexedDB
+  if (data.photos) { photoImportAll(data.photos); }
 
   // 2. Merge or replace each library
   if (mode === "replace") {
@@ -2943,7 +3109,38 @@ window.addEventListener("DOMContentLoaded", () => {
   updateDataStats();                    // ← initialize backup card summary
   populateSeasonYears();                // ← seed season year filter
   renderNotes();                        // ← seed empty notes list
+  migrateLegacyPhotos();                // ← one-time: inline photos -> IndexedDB
 });
+
+// One-time migration: any note with an inline `photo` dataURL (Stage 1) is
+// moved into IndexedDB and replaced with a photoId. Safe to run every load —
+// it only acts on notes that still carry an inline photo.
+function migrateLegacyPhotos() {
+  try {
+    var all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
+    var keys = Object.keys(all);
+    var pending = [];
+    keys.forEach(function (k) {
+      var rep = all[k];
+      if (!rep || !rep.notes) return;
+      rep.notes.forEach(function (n) {
+        if (n.photo && !n.photoId) {
+          var id = newPhotoId();
+          pending.push(photoPut(id, n.photo).then(function () {
+            n.photoId = id;
+            delete n.photo;
+          }).catch(function () {/* leave inline if IDB fails */}));
+        }
+      });
+    });
+    if (pending.length) {
+      Promise.all(pending).then(function () {
+        localStorage.setItem(LS_REPS, JSON.stringify(all));
+        console.log("[migrate] Moved " + pending.length + " inline photo(s) to IndexedDB.");
+      });
+    }
+  } catch (e) { console.warn("[migrate] skipped:", e); }
+}
 
 // ============================================================
 // METRICS PANEL TOGGLE + iOS-FRIENDLY "EXPAND MAP" (CSS fullscreen)
