@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.03 · 17:48";
+window.APP_VERSION = "2026.06.04 · 09:15";
 try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -3048,3 +3048,24 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 })();
+
+// ============================================================
+// PWA — SERVICE WORKER REGISTRATION (offline support)
+// ============================================================
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js").then(function (reg) {
+      console.log("[PWA] Service worker registered:", reg.scope);
+      // When a new SW takes control (after an update), reload once so the
+      // freshest files are shown — pairs with the ?v= cache-busting stamps.
+      var refreshing = false;
+      navigator.serviceWorker.addEventListener("controllerchange", function () {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      });
+    }).catch(function (err) {
+      console.warn("[PWA] Service worker registration failed:", err);
+    });
+  });
+}
