@@ -76,9 +76,25 @@
   .note-del { background: none; border: none; color: #b3261e; font-size: 13px; cursor: pointer; padding: 0 4px; }
   .note-preview img { max-width: 100%; max-height: 160px; border-radius: 8px; margin-top: 6px; }
   .note-empty { font-size: 13px; opacity: 0.6; }
+  /* PWA update banner */
+  .update-banner {
+    position: fixed; left: 0; right: 0; top: 0; z-index: 9999;
+    background: #2f6b3a; color: #fff; text-align: center;
+    font-size: 15px; font-weight: bold; cursor: pointer;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  }
+  .update-banner:active { background: #25542e; }
 </style>
 </head>
 <body>
+
+<!-- PWA update banner (hidden until a new version is ready) -->
+<div id="updateBanner" class="update-banner hidden" role="button" tabindex="0"
+     onclick="if(window.applyUpdate)window.applyUpdate()">
+  🔄 New version ready — tap to update
+</div>
+
 
 <!-- ============== HEADER ============== -->
 <header class="topbar">
@@ -86,7 +102,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.04 · 16:45</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.04 · 17:40</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -791,8 +807,8 @@
 
 <!-- ============== CONFIG ============== -->
 <!-- Put your Google Maps API key in config.js -->
-<script src="config.js?v=20260604-1645"></script>
-<script src="app.js?v=20260604-1645"></script>
+<script src="config.js?v=20260604-1740"></script>
+<script src="app.js?v=20260604-1740"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
