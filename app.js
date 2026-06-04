@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.04 · 14:20";
+window.APP_VERSION = "2026.06.04 · 16:45";
 try { console.log("Diamond O Farms — Data Systems Pro v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -2374,7 +2374,7 @@ $("btnPdfRep").addEventListener("click", async () => {
   try { win = window.open("", "_blank"); } catch (e) { win = null; }
   if (win) {
     try {
-      win.document.write('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:Arial;padding:24px;color:#111">Building report\u2026</body>');
+      win.document.write('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:Arial;padding:24px;color:#111">Building report\u2026</body>');
       win.document.close();
     } catch (e) {}
   }
@@ -2388,7 +2388,7 @@ $("btnPdfRep").addEventListener("click", async () => {
     }));
   }
   const html = `
-    <html><head><title>${r.name || r.id}</title>
+    <html><head><meta charset="utf-8" /><title>${r.name || r.id}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body { font-family: Arial; padding: 20px; color: #111; margin: 0; }
@@ -2526,7 +2526,7 @@ $("btnPdfRep").addEventListener("click", async () => {
   // and works on iOS/standalone PWAs where document.write of big content fails.
   let url = null;
   try {
-    url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
   } catch (e) { url = null; }
 
   if (win && url) {
