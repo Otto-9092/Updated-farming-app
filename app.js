@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.05 · 13:30";
+window.APP_VERSION = "2026.06.05 · 14:15";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -3524,6 +3524,39 @@ function saveMergedLocal(merged) {
   localStorage.setItem(LS_REPS,   JSON.stringify(merged.reports || {}));
 }
 
+// Produce a small human-readable summary of how two versions differ.
+function describeConflict(c) {
+  var L = c.local || {}, C = c.cloud || {};
+  // pick meaningful fields per library type
+  var fieldsByLib = {
+    fields:    ["crop", "variety", "boundary", "cost"],
+    equipment: ["type", "width"],
+    reports:   ["name", "acres", "bushels", "gallons", "date"]
+  };
+  var list = fieldsByLib[c.lib] || [];
+  var rowsOut = [];
+  function fmt(v) {
+    if (v == null) return "—";
+    if (typeof v === "object") {
+      if (v && typeof v.acres === "number") return v.acres.toFixed(2) + " ac"; // boundary
+      return "(set)";
+    }
+    return String(v);
+  }
+  list.forEach(function (k) {
+    var lv = fmt(L[k]), cv = fmt(C[k]);
+    if (lv !== cv) {
+      rowsOut.push('<div class="cf-diff-row"><span class="cf-diff-k">' + escHtml(k) +
+        '</span><span class="cf-diff-mine">' + escHtml(lv) +
+        '</span><span class="cf-diff-cloud">' + escHtml(cv) + '</span></div>');
+    }
+  });
+  if (!rowsOut.length) return "";
+  return '<div class="cf-diff-head"><span class="cf-diff-k"></span>' +
+         '<span class="cf-diff-mine">Mine</span><span class="cf-diff-cloud">Cloud</span></div>' +
+         rowsOut.join("");
+}
+
 // ----- Conflict resolution dialog (built dynamically) -----
 // Resolves to a choices map { "lib::key": "local"|"cloud" }, or null if cancelled.
 function showConflictDialog(conflicts) {
@@ -3536,15 +3569,21 @@ function showConflictDialog(conflicts) {
       var cloudWhen = c.cloudTs ? new Date(c.cloudTs).toLocaleString() : "no date";
       var newer = c.cloudTs > c.localTs ? "cloud" : "local";
       var id = c.lib + "::" + c.key;
+      var diffHtml = describeConflict(c);   // human-readable field differences
       return '<div class="conflict-item" data-cid="' + escHtml(id) + '">' +
         '<div class="conflict-name">' + escHtml(c.label) + ': <b>' + escHtml(c.key) + '</b></div>' +
+        (diffHtml ? '<div class="conflict-diff">' + diffHtml + '</div>' : '') +
         '<div class="conflict-choices">' +
-          '<label class="' + (newer === "local" ? "newer" : "") + '">' +
-            '<input type="radio" name="r' + i + '" value="local" checked> ' +
-            'Keep Mine <span class="ts">(' + localWhen + ')</span></label>' +
-          '<label class="' + (newer === "cloud" ? "newer" : "") + '">' +
-            '<input type="radio" name="r' + i + '" value="cloud"> ' +
-            'Keep Cloud <span class="ts">(' + cloudWhen + ')</span></label>' +
+          '<label class="cf-choice cf-mine ' + (newer === "local" ? "newer" : "") + '" data-val="local">' +
+            '<input type="radio" name="r' + i + '" value="local" checked>' +
+            '<span class="cf-pick">Keep Mine</span>' +
+            '<span class="ts">' + localWhen + (newer === "local" ? " · newest" : "") + '</span>' +
+          '</label>' +
+          '<label class="cf-choice cf-cloud ' + (newer === "cloud" ? "newer" : "") + '" data-val="cloud">' +
+            '<input type="radio" name="r' + i + '" value="cloud">' +
+            '<span class="cf-pick">Keep Cloud</span>' +
+            '<span class="ts">' + cloudWhen + (newer === "cloud" ? " · newest" : "") + '</span>' +
+          '</label>' +
         '</div>' +
       '</div>';
     }).join("");
@@ -3563,9 +3602,27 @@ function showConflictDialog(conflicts) {
       '</div>';
     document.body.appendChild(overlay);
 
+    function syncSelectedClasses() {
+      overlay.querySelectorAll(".conflict-item").forEach(function (item) {
+        var picked = item.querySelector('input[type=radio]:checked');
+        var val = picked ? picked.value : "local";
+        item.querySelectorAll(".cf-choice").forEach(function (lab) {
+          lab.classList.toggle("selected", lab.getAttribute("data-val") === val);
+        });
+      });
+    }
     function pickAll(val) {
       overlay.querySelectorAll('input[type=radio][value="' + val + '"]').forEach(function (r) { r.checked = true; });
+      syncSelectedClasses();
     }
+    // Clicking anywhere on a choice selects its radio.
+    overlay.querySelectorAll(".cf-choice").forEach(function (lab) {
+      lab.addEventListener("click", function () {
+        var radio = lab.querySelector('input[type=radio]');
+        if (radio) { radio.checked = true; syncSelectedClasses(); }
+      });
+    });
+    syncSelectedClasses();   // initialize highlight
     overlay.querySelector("#cfKeepAllMine").onclick = function () { pickAll("local"); };
     overlay.querySelector("#cfKeepAllCloud").onclick = function () { pickAll("cloud"); };
 
