@@ -137,6 +137,16 @@
     display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; justify-content: flex-end;
   }
   .conflict-actions .btn { flex: 1 1 auto; min-width: 110px; }
+  /* KML import preview dialog (reuses overlay/box styles) */
+  .kml-item { display: flex; align-items: center; gap: 10px; padding: 10px 0;
+    border-top: 1px solid rgba(255,255,255,0.12); font-size: 14px; }
+  .kml-item input[type="checkbox"] {
+    -webkit-appearance: checkbox; appearance: checkbox;
+    width: 20px; min-width: 20px; height: 20px; margin: 0; padding: 0; accent-color: #ffb703; flex: 0 0 auto;
+  }
+  .kml-item .kml-name { font-weight: bold; }
+  .kml-item .kml-meta { margin-left: auto; text-align: right; font-size: 12px; opacity: 0.8; }
+  .kml-item .kml-warn { color: #ffb703; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -154,7 +164,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 15:00</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 16:30</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -330,6 +340,15 @@
     <button id="btnDeleteField" class="btn btn-ghost">🗑 Delete</button>
   </div>
   <div class="hint" id="fldStatus">No field loaded.</div>
+
+  <div class="btn-row" style="margin-top:10px;">
+    <button id="btnImportKml" class="btn">🌍 Import from Google Earth (KMZ/KML)</button>
+    <input type="file" id="kmlFileInput" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" style="display:none" />
+  </div>
+  <div class="hint">
+    Draw field boundaries in Google Earth, save as <b>KML</b> or <b>KMZ</b>,
+    then import here — each polygon becomes a saved field with auto-calculated acreage.
+  </div>
 </div>
 
     <div class="card">
@@ -884,8 +903,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260605-1500"></script>
-<script src="app.js?v=20260605-1500"></script>
+<script src="config.js?v=20260605-1630"></script>
+<script src="app.js?v=20260605-1630"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
