@@ -1,6 +1,7 @@
+[Uploading README.md…]()
 # 🚜 Diamond O Farms — Data Systems Pro
 
-A precision agriculture web app built for Diamond O Farms LLC. Turn any iPhone, iPad, or browser into a full-featured field computer for spraying, planting, harvesting, tillage, and spreading — with live GPS, swath painting, multi-equipment management, and complete record-keeping.
+A precision agriculture web app built for Diamond O Farms LLC. Turn any iPhone, iPad, or browser into a full-featured field computer for spraying, planting, harvesting, tillage, and spreading — with live GPS, swath painting, multi-equipment management, complete record-keeping, and cloud sync across all your devices.
 
 **No cab monitor required. No monthly subscription. No proprietary hardware.**
 
@@ -8,7 +9,7 @@ A precision agriculture web app built for Diamond O Farms LLC. Turn any iPhone, 
 
 ## 📸 What it does
 
-Live GPS-driven precision ag display that runs entirely in your browser. Drive any equipment in your field, see real-time coverage painted onto a satellite map, get live metrics, save reports for every job, and sync your setup across devices.
+Live GPS-driven precision ag display that runs entirely in your browser. Drive any equipment in your field, see real-time coverage painted onto a satellite map, get live metrics, save reports for every job, import field boundaries straight from Google Earth, and sync your entire setup across devices through your own Google account.
 
 ---
 
@@ -34,7 +35,18 @@ Live GPS-driven precision ag display that runs entirely in your browser. Drive a
 ### 🏞️ Field Management
 - **Save unlimited fields** with crop, variety, and boundary
 - **Walk or drive the perimeter** to record boundary → auto-calculates acres
+- **Import from Google Earth** — draw boundaries in Google Earth, save as KML or KMZ, and import them directly (auto-calculates acreage)
 - **Load saved fields** instantly with full boundary recall
+
+### 🌍 Google Earth Import (KML / KMZ)
+- Draw field boundaries in **Google Earth** — far easier than tracing on a phone
+- Export as **KML** or **KMZ** and import directly into the app
+- **KMZ files are automatically unzipped** in the browser (no external tools)
+- **Multiple fields per file** — each polygon becomes its own saved field
+- **Field names pulled from your Google Earth placemarks**
+- **Acreage auto-calculated** from each polygon
+- **Preview before importing** — pick exactly which fields to bring in, with duplicate-overwrite warnings
+- **Pins and paths are ignored** — only polygons import as fields
 
 ### 🚜 Equipment Library
 Six fully-supported equipment types with type-specific parameters:
@@ -62,19 +74,36 @@ Six fully-supported equipment types with type-specific parameters:
 - **Printable as PDF** with mobile-friendly back-to-app button
 - **Live count display** — "Showing 3 of 47" when filters are active
 
-### 💾 Backup & Sync
-- **Export all data** to a single `.json` file
+### ☁️ Cloud Sync (Google Drive)
+Sync your equipment, fields, and reports across every device through your own Google account — no servers, no subscriptions, no third-party storage.
+
+- **Sign in with Google** — uses Google Identity Services (secure OAuth, no passwords stored)
+- **One-tap Sync Now** — merges equipment, fields, and reports both ways
+- **Private app storage** — data lives in your Drive's hidden `appDataFolder`; the app **cannot see your other Drive files**
+- **Smart conflict resolution** — if the same item differs on two devices, a dialog shows you exactly what's different (field by field) and lets you choose **Keep Mine** or **Keep Cloud** per item, with "Keep all" shortcuts
+- **Newest-edit-wins** by default for non-conflicting changes
+- **Deletes sync correctly** — uses tombstones so a deleted machine/field/report stays deleted everywhere (and a newer re-add still wins). Tombstones auto-expire after 90 days.
+- **"Last synced" timestamp** persists on each device
+- **Offline-aware** — clear messaging when there's no connection; your data stays safe locally
+- **Manual by design** — nothing syncs until *you* tap Sync Now
+- **Photos stay local** — note photos remain on each device (they still travel inside any PDF you share)
+
+### 💾 Backup & Sync (Manual / Offline)
+- **Export all data** to a single `.json` file (includes photos)
 - **Import on any device** — merge with existing or replace entirely
 - **Auto-rollback** in case of accidental replace
-- **Computer ⇄ phone sync** via email or AirDrop
+- **Computer ⇄ phone transfer** via email or AirDrop
 - **Doubles as disaster recovery** — phone dies? Restore from backup.
+- Great as a belt-and-suspenders backup alongside cloud sync
 
 ### 📤 Trail Export
 - Export your machine path as **KML** (Google Earth, ag software) or **GPX** (most ag software, fitness apps)
 - Includes boundary polygon and timestamped track points with speed
 
-### 📱 iPhone-Optimized
+### 📱 iPhone-Optimized PWA
 - **Add to Home Screen** — launches like a native app
+- **Works fully offline** — the app shell is cached by a service worker, so it loads and runs with no signal
+- **Automatic update banner** — when a new version ships, a banner prompts you to refresh
 - **Custom Diamond O Farms logo** as app icon
 - **Wake lock** — screen stays on during active sessions
 - **iOS-safe inputs** — no auto-zoom on form focus
@@ -99,20 +128,28 @@ This is a **static web app** — no server required. You can:
 1. **Host on GitHub Pages** (recommended — free)
 2. **Host on Netlify, Vercel, Cloudflare Pages** (free)
 3. **Open `index.html` directly** in a browser for local testing
+   - *Note: cloud sync and "Add to Home Screen" require HTTPS hosting; they won't work from a local `file://` open.*
 
 ### Setup steps
 
 1. **Clone or download** this repository
 2. **Get a Google Maps API key**
    - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Enable Maps JavaScript API + Geometry library
+   - Enable **Maps JavaScript API** + **Geometry library**
    - Restrict the key to your domain(s)
-3. **Create `config.js`** in the root with:
+3. **(For cloud sync) Set up Google sign-in**
+   - In the same Google Cloud project, enable the **Google Drive API**
+   - Create an **OAuth 2.0 Client ID** (type: Web application)
+   - Add your hosting origin (e.g. `https://yourname.github.io`) to **Authorized JavaScript origins**
+   - While the app is in "Testing" mode, add each user's Google address under **Test users**
+4. **Create `config.js`** in the root with:
    ```javascript
-   window.GOOGLE_MAPS_API_KEY = "your_api_key_here";
+   window.GOOGLE_MAPS_API_KEY = "your_maps_api_key_here";
+   window.GOOGLE_OAUTH_CLIENT_ID = "your_oauth_client_id.apps.googleusercontent.com"; // optional — only needed for cloud sync
    ```
-4. **Commit and deploy** to your hosting platform
-5. **Open the app** on any device, allow location, and you're running
+   > The OAuth Client ID is a public identifier and is safe to include. **Never** put a client *secret* here — the app doesn't use one.
+5. **Commit and deploy** to your hosting platform
+6. **Open the app** on any device, allow location, and you're running
 
 ### Add to iPhone home screen
 
@@ -127,9 +164,10 @@ This is a **static web app** — no server required. You can:
 
 ### Start of season — one-time setup
 1. **Field & Equipment tab** → add each field with crop type
-2. Walk or drive each perimeter to capture boundary
+2. Draw field boundaries in **Google Earth** and import them (KML/KMZ), **or** walk/drive each perimeter to capture the boundary
 3. Add each machine with type-specific parameters
-4. **Backup & Sync** → Export → save the file as your "season start" snapshot
+4. **Sign in with Google** on each device and tap **Sync Now** so everything matches
+5. *(Optional)* **Backup & Sync** → Export → save the file as your "season start" snapshot
 
 ### Daily use
 1. Open app from home screen
@@ -138,19 +176,19 @@ This is a **static web app** — no server required. You can:
 4. Drive — watch live coverage paint, monitor metrics
 5. End of pass → tap Stop → tap Save Report
 6. Repeat for next field
+7. End of day → **Sync Now** to push the day's reports to your other devices
 
 ### End of day
 1. **Reports tab** → review the day's jobs
 2. Rename any reports for clarity
 3. Print PDFs for records if needed
-4. **Backup & Sync** → Export → keep daily/weekly snapshots
+4. **Sync Now** (and/or **Export** for a manual snapshot)
 
 ### Adding equipment on the computer
-1. On computer browser: set up new machine in Equipment Library
-2. Tap **Export All Data**
-3. Email the `.json` to yourself
-4. On phone: save file from email → tap **Import Data** → Merge
-5. New machine now lives on both devices
+1. On computer browser: set up the new machine in Equipment Library
+2. Tap **Sync Now**
+3. On your phone: tap **Sync Now** → the new machine appears
+   - *(No-Google fallback: Export the `.json`, send it to your phone, and Import → Merge.)*
 
 ---
 
@@ -159,7 +197,10 @@ This is a **static web app** — no server required. You can:
 - **Pure HTML, CSS, JavaScript** — no frameworks, no build step
 - **Google Maps JavaScript API** — satellite imagery, geometry calculations
 - **HTML5 Geolocation API** — high-accuracy GPS with watchPosition
+- **Google Identity Services + Google Drive API** — cloud sync via your own account (private `appDataFolder`)
+- **Service Worker** — offline app-shell caching + automatic update prompts
 - **localStorage** — all data persists locally on each device
+- **DecompressionStream API** — in-browser KMZ (ZIP) extraction for Google Earth import
 - **Wake Lock API** — keeps screen on during sessions (iOS 16.4+)
 
 **File structure:**
@@ -167,8 +208,9 @@ This is a **static web app** — no server required. You can:
 /
 ├── index.html          # Main app structure
 ├── styles.css          # All styling
-├── app.js              # Application logic (~1100 lines)
-├── config.js           # Your Google Maps API key (gitignored)
+├── app.js              # Application logic
+├── sw.js               # Service worker (offline cache + update prompts)
+├── config.js           # Your API key + OAuth client ID (gitignored)
 ├── manifest.json       # PWA manifest
 ├── icon-180.png        # iPhone home-screen icon
 ├── icon-192.png        # Android PWA icon
@@ -178,6 +220,8 @@ This is a **static web app** — no server required. You can:
 ├── favicon.ico         # Multi-size browser favicon
 └── README.md           # This file
 ```
+
+> **Versioning note:** Each release bumps a matching version stamp in three places — the `APP_VERSION` string in `app.js`, the `?v=` query strings in `index.html`, and the `CACHE_NAME` in `sw.js`. This trio is what forces browsers/PWAs to fetch the new files instead of serving stale cached copies, and it triggers the in-app update banner. Always deploy all three together.
 
 ---
 
@@ -197,24 +241,34 @@ Three constants control GPS behavior — tweak if you find the defaults too aggr
 
 `CELL_SIZE_DEG` controls how finely overlap is detected. Default is ~5 meters — finer detection at higher CPU cost.
 
+### Sync tuning (in `app.js`)
+
+| Constant | Default | Effect |
+|---|---|---|
+| `TOMB_MAX_AGE_DAYS` | 90 | How long deletion records (tombstones) are kept before expiring |
+
 ---
 
 ## 🔒 Privacy
 
-- **All data stored locally** in your browser's localStorage
-- **Nothing sent to any server** except Google Maps tile requests
+- **All data stored locally** in your browser's localStorage by default
+- **Cloud sync is optional and account-private** — data goes only to *your* Google Drive's hidden app folder, which the app alone can access; it cannot read your other Drive files
+- **Nothing sent to any server** except Google Maps tile requests and (if you enable sync) your own Google Drive
 - **No analytics, no tracking, no ads**
-- **Your reports, fields, and equipment never leave your device** unless you explicitly export them
+- **Your reports, fields, and equipment never leave your device** unless you explicitly export or sync them
+- **Photos stay on-device** and are never uploaded by cloud sync
 
 ---
 
 ## 🐛 Known limitations
 
-- **Single-machine view only** — can't see other tractors in real-time (would require a backend)
-- **No cloud sync** — sync is manual via export/import files (real-time sync would require Firebase or similar)
+- **Single-machine view only** — can't see other tractors in real-time (would require a live backend)
+- **Manual sync** — sync runs when you tap **Sync Now** (by design); there's no automatic background sync
+- **KMZ on older iOS** — KMZ unzipping needs the `DecompressionStream` API (iOS Safari 16.4+ / modern desktop browsers). On older devices, export from Google Earth as **KML** instead — KML works everywhere.
+- **Photos don't cloud-sync** — by design, to keep the sync file small; use Export/Import or share a PDF to move photos between devices
 - **GPS quality depends on phone hardware** — modern iPhones (X+) give 3-5m accuracy; older devices may be 10-15m
 - **Battery drain** — continuous GPS + screen-on is hard on batteries; a 12V cab charger is recommended for full-day use
-- **Google Maps API quota** — free tier covers ~28,000 map loads per month per key
+- **Google API quotas** — Maps free tier covers ~28,000 map loads per month per key; Drive API free quotas are far more than personal sync use will ever reach
 
 ---
 
