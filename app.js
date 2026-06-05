@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.05 · 15:00";
+window.APP_VERSION = "2026.06.05 · 16:30";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -3375,6 +3375,269 @@ var GoogleSync = (function () {
     signIn: signIn, signOut: signOut
   };
 })();
+
+// ============================================================
+// GOOGLE EARTH IMPORT — parse KML / KMZ field boundaries
+// Self-contained: DOMParser for KML, DecompressionStream for KMZ.
+// ============================================================
+var KmlImport = (function () {
+
+  // ---- Spherical polygon area (matches Google computeArea), returns acres ----
+  function acresFromPoints(pts) {
+    if (!pts || pts.length < 3) return 0;
+    var R = 6378137; // WGS84 radius (m)
+    function rad(d) { return d * Math.PI / 180; }
+    var area = 0, n = pts.length;
+    for (var i = 0; i < n; i++) {
+      var p1 = pts[i], p2 = pts[(i + 1) % n];
+      area += rad(p2.lng - p1.lng) * (2 + Math.sin(rad(p1.lat)) + Math.sin(rad(p2.lat)));
+    }
+    area = Math.abs(area * R * R / 2);          // m^2
+    return (area * 10.7639) / SQFT_PER_ACRE;     // -> acres
+  }
+
+  // ---- Parse a coordinates string "lng,lat,alt lng,lat,alt ..." ----
+  function parseCoords(s) {
+    if (!s) return [];
+    return s.trim().split(/\s+/).map(function (tok) {
+      var parts = tok.split(",");
+      var lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
+      return { lat: lat, lng: lng };
+    }).filter(function (p) { return isFinite(p.lat) && isFinite(p.lng); });
+  }
+
+  // ---- Parse KML text -> [{ name, points, acres }] (polygons only) ----
+  function parseKmlText(kmlText) {
+    var doc = new DOMParser().parseFromString(kmlText, "text/xml");
+    if (doc.getElementsByTagName("parsererror").length) throw new Error("bad-kml");
+    var placemarks = doc.getElementsByTagName("Placemark");
+    var out = [];
+    for (var i = 0; i < placemarks.length; i++) {
+      var pm = placemarks[i];
+      var nameEl = pm.getElementsByTagName("name")[0];
+      var baseName = nameEl ? (nameEl.textContent || "").trim() : "";
+      // A placemark may contain one or more polygons (MultiGeometry)
+      var polys = pm.getElementsByTagName("Polygon");
+      for (var j = 0; j < polys.length; j++) {
+        // Use the outer boundary ring
+        var ring = polys[j].getElementsByTagName("coordinates")[0];
+        if (!ring) continue;
+        var pts = parseCoords(ring.textContent);
+        // Drop a duplicate closing point if present
+        if (pts.length > 1) {
+          var a = pts[0], b = pts[pts.length - 1];
+          if (a.lat === b.lat && a.lng === b.lng) pts = pts.slice(0, -1);
+        }
+        if (pts.length < 3) continue;
+        var nm = baseName || ("Field " + (out.length + 1));
+        if (polys.length > 1) nm = baseName ? (baseName + " #" + (j + 1)) : nm;
+        out.push({ name: nm, points: pts, acres: acresFromPoints(pts) });
+      }
+    }
+    return out;
+  }
+
+  // ---- KMZ (ZIP) -> KML text, via central directory + DecompressionStream ----
+  function readUInt32LE(b, o) { return (b[o] | (b[o+1]<<8) | (b[o+2]<<16) | (b[o+3]<<24)) >>> 0; }
+  function readUInt16LE(b, o) { return (b[o] | (b[o+1]<<8)) >>> 0; }
+
+  function inflateRaw(bytes) {
+    // DecompressionStream('deflate-raw') — supported in modern browsers + iOS 16.4+
+    if (typeof DecompressionStream === "undefined") {
+      return Promise.reject(new Error("no-inflate"));
+    }
+    var ds = new DecompressionStream("deflate-raw");
+    var stream = new Response(bytes).body.pipeThrough(ds);
+    return new Response(stream).arrayBuffer().then(function (ab) { return new Uint8Array(ab); });
+  }
+
+  function extractKmlFromKmz(arrayBuffer) {
+    var buf = new Uint8Array(arrayBuffer);
+    // find End Of Central Directory record
+    var p = buf.length - 22;
+    while (p >= 0 && readUInt32LE(buf, p) !== 0x06054b50) p--;
+    if (p < 0) throw new Error("not-kmz");
+    var cdCount = readUInt16LE(buf, p + 10);
+    var cdOff = readUInt32LE(buf, p + 16);
+    var entries = [];
+    for (var i = 0; i < cdCount; i++) {
+      if (readUInt32LE(buf, cdOff) !== 0x02014b50) break;
+      var method   = readUInt16LE(buf, cdOff + 10);
+      var compSize = readUInt32LE(buf, cdOff + 20);
+      var nameLen  = readUInt16LE(buf, cdOff + 28);
+      var extraLen = readUInt16LE(buf, cdOff + 30);
+      var cmtLen   = readUInt16LE(buf, cdOff + 32);
+      var localOff = readUInt32LE(buf, cdOff + 42);
+      var name = new TextDecoder().decode(buf.slice(cdOff + 46, cdOff + 46 + nameLen));
+      entries.push({ name: name, method: method, compSize: compSize, localOff: localOff });
+      cdOff += 46 + nameLen + extraLen + cmtLen;
+    }
+    var entry = null, k;
+    for (k = 0; k < entries.length; k++) if (/doc\.kml$/i.test(entries[k].name)) { entry = entries[k]; break; }
+    if (!entry) for (k = 0; k < entries.length; k++) if (/\.kml$/i.test(entries[k].name)) { entry = entries[k]; break; }
+    if (!entry) throw new Error("no-kml-in-kmz");
+    var lh = entry.localOff;
+    var lNameLen  = readUInt16LE(buf, lh + 26);
+    var lExtraLen = readUInt16LE(buf, lh + 28);
+    var dataStart = lh + 30 + lNameLen + lExtraLen;
+    var compData = buf.slice(dataStart, dataStart + entry.compSize);
+    if (entry.method === 0) return Promise.resolve(new TextDecoder().decode(compData)); // stored
+    return inflateRaw(compData).then(function (out) { return new TextDecoder().decode(out); });
+  }
+
+  // ---- Public: parse a File object (.kml or .kmz) -> Promise<[{name,points,acres}]> ----
+  function parseFile(file) {
+    var isKmz = /\.kmz$/i.test(file.name) || file.type === "application/vnd.google-earth.kmz";
+    if (isKmz) {
+      return file.arrayBuffer()
+        .then(extractKmlFromKmz)
+        .then(parseKmlText);
+    }
+    return file.text().then(parseKmlText);
+  }
+
+  return { parseFile: parseFile, parseKmlText: parseKmlText, acresFromPoints: acresFromPoints };
+})();
+
+// ----- KML import preview dialog + save logic -----
+function showKmlImportDialog(found) {
+  return new Promise(function (resolve) {
+    var existing = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+    var overlay = document.createElement("div");
+    overlay.className = "conflict-overlay";
+
+    var rows = found.map(function (f, i) {
+      var dup = Object.prototype.hasOwnProperty.call(existing, f.name);
+      return '<label class="kml-item">' +
+        '<input type="checkbox" data-idx="' + i + '" checked>' +
+        '<span><span class="kml-name">' + escHtml(f.name) + '</span>' +
+          (dup ? '<br><span class="kml-warn">\u26A0\uFE0F A field named "' + escHtml(f.name) + '" exists \u2014 importing overwrites it</span>' : '') +
+        '</span>' +
+        '<span class="kml-meta">' + f.acres.toFixed(2) + ' ac<br>' + f.points.length + ' pts</span>' +
+      '</label>';
+    }).join("");
+
+    overlay.innerHTML =
+      '<div class="conflict-box">' +
+        '<div class="conflict-title">\uD83C\uDF0D Import from Google Earth</div>' +
+        '<div class="conflict-sub">Found ' + found.length + ' field' + (found.length !== 1 ? 's' : '') +
+          '. Choose which to import:</div>' +
+        '<div class="conflict-list">' + rows + '</div>' +
+        '<div class="conflict-actions">' +
+          '<button class="btn" id="kmlAll">Select all</button>' +
+          '<button class="btn" id="kmlNone">Select none</button>' +
+          '<button class="btn btn-primary" id="kmlImport">Import selected</button>' +
+          '<button class="btn" id="kmlCancel">Cancel</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    function setAll(v) {
+      overlay.querySelectorAll('input[type=checkbox]').forEach(function (cb) { cb.checked = v; });
+    }
+    function cleanup() { try { document.body.removeChild(overlay); } catch (e) {} }
+
+    overlay.querySelector("#kmlAll").onclick  = function () { setAll(true); };
+    overlay.querySelector("#kmlNone").onclick = function () { setAll(false); };
+    overlay.querySelector("#kmlCancel").onclick = function () { cleanup(); resolve(null); };
+    overlay.querySelector("#kmlImport").onclick = function () {
+      var picked = [];
+      overlay.querySelectorAll('input[type=checkbox]:checked').forEach(function (cb) {
+        picked.push(found[parseInt(cb.getAttribute("data-idx"), 10)]);
+      });
+      cleanup(); resolve(picked);
+    };
+  });
+}
+
+// Save imported fields into the field library (same shape as Save Field).
+function importFieldsToLibrary(fields) {
+  var lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+  var now = new Date().toISOString();
+  fields.forEach(function (f) {
+    var prev = lib[f.name] || {};
+    lib[f.name] = {
+      _modified: now,
+      name: f.name,
+      crop: prev.crop || "Corn",
+      variety: prev.variety || "",
+      boundary: { points: f.points.slice(), acres: f.acres },
+      cost: prev.cost || {},
+      savedAt: now
+    };
+  });
+  localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
+}
+
+// Load one imported field onto the map (mirrors the Load Field flow).
+function showImportedFieldOnMap(f) {
+  if (!state.map || !window.google || !google.maps) return;
+  if (state.boundary.poly) { state.boundary.poly.setMap(null); state.boundary.poly = null; }
+  state.boundary.points = f.points.slice();
+  state.boundary.acres = f.acres;
+  state.field = { name: f.name, crop: "Corn", variety: "" };
+  if (state.boundary.points.length >= 3) {
+    drawBoundaryFinal();
+    var bounds = new google.maps.LatLngBounds();
+    state.boundary.points.forEach(function (p) { bounds.extend(p); });
+    state.map.fitBounds(bounds);
+  }
+  if ($("boundAcres")) $("boundAcres").textContent = f.acres.toFixed(2);
+  if ($("fldName")) $("fldName").value = f.name;
+  state.loadedFieldKey = f.name;
+}
+
+// Main entry: handle a chosen file.
+function handleKmlFile(file) {
+  if (!file) return;
+  if (typeof DecompressionStream === "undefined" && /\.kmz$/i.test(file.name)) {
+    appAlert("This device's browser can't open KMZ files. In Google Earth, choose \"Save as KML\" instead and import that.", "KMZ not supported here");
+    return;
+  }
+  KmlImport.parseFile(file).then(function (found) {
+    if (!found || !found.length) {
+      appAlert("No field polygons were found in that file. Make sure your shapes are saved as polygons (not just pins or paths).", "Nothing to import");
+      return;
+    }
+    return showKmlImportDialog(found).then(function (picked) {
+      if (!picked || !picked.length) return;
+      importFieldsToLibrary(picked);
+      loadFieldsList();
+      if (typeof updateDataStats === "function") updateDataStats();
+      var total = picked.reduce(function (s, f) { return s + f.acres; }, 0);
+      if ($("fldStatus")) {
+        $("fldStatus").textContent = "Imported " + picked.length + " field" +
+          (picked.length !== 1 ? "s" : "") + " (" + total.toFixed(1) + " ac total).";
+      }
+      // Offer to show the first on the map
+      appConfirm("Imported " + picked.length + " field" + (picked.length !== 1 ? "s" : "") +
+        ". Show \"" + picked[0].name + "\" on the map now?",
+        { title: "Import complete", okLabel: "Show on map", cancelLabel: "Not now" })
+        .then(function (ok) { if (ok) showImportedFieldOnMap(picked[0]); });
+    });
+  }).catch(function (err) {
+    var m = (err && err.message) || "error";
+    var msg = "Could not read that file.";
+    if (m === "bad-kml") msg = "That file isn't valid KML/KMZ, or it's corrupted.";
+    else if (m === "no-kml-in-kmz") msg = "That KMZ doesn't contain a KML file.";
+    else if (m === "no-inflate") msg = "This browser can't unzip KMZ. Try saving as KML in Google Earth.";
+    else if (m === "not-kmz") msg = "That file isn't a valid KMZ archive.";
+    appAlert(msg, "Import failed");
+  });
+}
+
+// Wire up the button + hidden file input.
+(function wireKmlImport() {
+  var btn = document.getElementById("btnImportKml");
+  var input = document.getElementById("kmlFileInput");
+  if (btn && input) {
+    btn.addEventListener("click", function () { input.value = ""; input.click(); });
+    input.addEventListener("change", function () {
+      if (input.files && input.files[0]) handleKmlFile(input.files[0]);
+    });
+  }
+})();
+
 
 // ============================================================
 // GOOGLE DRIVE SYNC ENGINE — Stage 2
