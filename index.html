@@ -85,6 +85,9 @@
     box-shadow: 0 2px 10px rgba(0,0,0,0.35);
   }
   .update-banner:active { background: #25542e; }
+  /* Google sync box */
+  .sync-box { border: 1px solid rgba(128,128,128,0.25); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+  #syncStatus { margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -102,7 +105,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 09:30</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 11:00</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -324,6 +327,24 @@
     <!-- ============================================== -->
     <div class="card">
       <div class="card-title">💾 Backup & Sync</div>
+
+      <!-- Google account sync (Stage 1: sign in) -->
+      <div id="syncBox" class="sync-box">
+        <div id="syncSignedOut">
+          <div class="hint">Sign in with Google to sync across your devices.</div>
+          <div class="btn-row">
+            <button id="btnGoogleSignIn" class="btn btn-primary">🔑 Sign in with Google</button>
+          </div>
+        </div>
+        <div id="syncSignedIn" class="hidden">
+          <div class="hint">✅ Signed in as <b id="syncUserEmail">…</b></div>
+          <div class="btn-row">
+            <button id="btnSyncNow" class="btn btn-primary" disabled title="Coming in the next step">🔄 Sync Now</button>
+            <button id="btnGoogleSignOut" class="btn">Sign out</button>
+          </div>
+          <div class="hint" id="syncStatus"></div>
+        </div>
+      </div>
 
       <div class="hint" id="dataStats">
         Loading data summary…
@@ -807,9 +828,11 @@
 </div>
 
 <!-- ============== CONFIG ============== -->
-<!-- Put your Google Maps API key in config.js -->
-<script src="config.js?v=20260605-0930"></script>
-<script src="app.js?v=20260605-0930"></script>
+<!-- Put your Google Maps API key + OAuth Client ID in config.js -->
+<!-- Google Identity Services (for Sign in with Google / Drive sync) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="config.js?v=20260605-1100"></script>
+<script src="app.js?v=20260605-1100"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
