@@ -154,7 +154,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 14:15</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 15:00</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -388,10 +388,11 @@
         <div id="syncSignedIn" class="hidden">
           <div class="hint">✅ Signed in as <b id="syncUserEmail">…</b></div>
           <div class="btn-row">
-            <button id="btnSyncNow" class="btn btn-primary" disabled title="Coming in the next step">🔄 Sync Now</button>
+            <button id="btnSyncNow" class="btn btn-primary">🔄 Sync Now</button>
             <button id="btnGoogleSignOut" class="btn">Sign out</button>
           </div>
           <div class="hint" id="syncStatus"></div>
+          <div class="hint" id="syncLastSynced"></div>
         </div>
       </div>
 
@@ -409,11 +410,14 @@
       </div>
 
       <div class="hint">
-        <b>How to sync between devices:</b><br>
-        1. On your computer: tap <b>Export All Data</b> — a file downloads<br>
-        2. AirDrop or email the file to your phone<br>
-        3. On your phone: tap <b>Import Data</b> → pick the file<br>
-        4. Choose <b>Merge</b> (safe — adds new) or <b>Replace</b> (wipes existing first)
+        <b>☁️ Sync across devices (easiest):</b><br>
+        1. <b>Sign in with Google</b> on each device (same account)<br>
+        2. Tap <b>🔄 Sync Now</b> — it merges equipment, fields &amp; reports both ways<br>
+        3. If the same item differs on two devices, you'll be asked which to keep<br>
+        <i>Note: photos stay on each device — they still travel inside any PDF you share.</i><br><br>
+        <b>📁 Manual backup (offline / no Google):</b><br>
+        Use <b>Export All Data</b> to save a file, then <b>Import Data</b> on the other device
+        (choose <b>Merge</b> to add, or <b>Replace</b> to overwrite).
       </div>
     </div>
 
@@ -880,8 +884,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260605-1415"></script>
-<script src="app.js?v=20260605-1415"></script>
+<script src="config.js?v=20260605-1500"></script>
+<script src="app.js?v=20260605-1500"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
