@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.05 · 14:15";
+window.APP_VERSION = "2026.06.05 · 15:00";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -2806,6 +2806,7 @@ function extendLine(a, b, meters) {
 // ============================================================
 const BACKUP_VERSION = 2;   // v2: includes IndexedDB note photos
 const LS_BACKUP_ROLLBACK = "dof_last_rollback";
+const LS_LAST_SYNCED = "dof_last_synced";   // ISO timestamp of last successful sync
 
 // Summary text for the Backup card
 function updateDataStats() {
@@ -3646,6 +3647,10 @@ function syncNow() {
   if (!GoogleSync.isSignedIn()) {
     return appAlert("Please sign in with Google first.", "Not signed in");
   }
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    setSyncStatus("\uD83D\uDCF6 You're offline — connect to the internet to sync.");
+    return appAlert("You're offline. Connect to the internet and try Sync Now again. Your data is safe on this device.", "No connection");
+  }
   setSyncStatus("Syncing\u2026 downloading from Drive");
 
   return DriveSync.download().then(function (cloud) {
@@ -3672,6 +3677,9 @@ function syncNow() {
         if (typeof loadEquipmentList === "function") loadEquipmentList();
         if (typeof loadReportsList === "function") loadReportsList();
         if (typeof updateDataStats === "function") updateDataStats();
+        var nowIso = new Date().toISOString();
+        try { localStorage.setItem(LS_LAST_SYNCED, nowIso); } catch (e) {}
+        renderLastSynced();
         var when = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         setSyncStatus("\u2705 Synced at " + when);
       });
@@ -3693,6 +3701,9 @@ function syncNow() {
       GoogleSync.signOut(); refreshSyncUI();
       appAlert("Your Google session expired. Please sign in again.", "Session expired");
       setSyncStatus("");
+    } else if (m.indexOf("Failed to fetch") !== -1 || m.indexOf("NetworkError") !== -1 || m.indexOf("Load failed") !== -1) {
+      appAlert("Couldn't reach Google. Check your internet connection and try again. Your data is safe on this device.", "Connection problem");
+      setSyncStatus("\uD83D\uDCF6 Sync failed — no connection.");
     } else {
       appAlert("Sync failed: " + m, "Sync error");
       setSyncStatus("\u274C Sync failed.");
@@ -3714,6 +3725,16 @@ function refreshSyncUI() {
     inBox.classList.add("hidden");
     outBox.classList.remove("hidden");
   }
+  renderLastSynced();
+}
+
+function renderLastSynced() {
+  var el = document.getElementById("syncLastSynced");
+  if (!el) return;
+  var iso = localStorage.getItem(LS_LAST_SYNCED);
+  if (!iso) { el.textContent = "Not synced yet on this device."; return; }
+  var d = new Date(iso);
+  el.textContent = "Last synced: " + d.toLocaleString();
 }
 
 function setSyncStatus(msg) {
