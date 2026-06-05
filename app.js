@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.05 · 16:30";
+window.APP_VERSION = "2026.06.05 · 17:45";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -1970,6 +1970,7 @@ $("btnDeleteEq").addEventListener("click", async () => {
   if (!(await appConfirm(`Delete machine "${k}"?`, { title: "Delete machine", okLabel: "Delete", danger: true }))) return;
   delete lib[k];
   localStorage.setItem(LS_EQ, JSON.stringify(lib));
+  recordTombstone(LS_TOMB_EQ, k);   // ← remember the deletion for sync
   loadEquipmentList();
   if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
@@ -2037,6 +2038,7 @@ if ($("btnDeleteField")) $("btnDeleteField").addEventListener("click", async () 
   if (!(await appConfirm(`Delete field "${k}"?`, { title: "Delete field", okLabel: "Delete", danger: true }))) return;
   delete lib[k];
   localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
+  recordTombstone(LS_TOMB_FIELDS, k);   // ← remember the deletion for sync
   loadFieldsList();
   if ($("fldStatus")) $("fldStatus").textContent = `Deleted: ${k}`;
   if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
@@ -2365,6 +2367,7 @@ $("btnDeleteRep").addEventListener("click", async () => {
   if (!(await appConfirm(`Delete report "${all[id].name || id}"? This cannot be undone.`, { title: "Delete report", okLabel: "Delete", danger: true }))) return;
   delete all[id];
   localStorage.setItem(LS_REPS, JSON.stringify(all));
+  recordTombstone(LS_TOMB_REPS, id);   // ← remember the deletion for sync
   loadReportsList();
   $("repBody").textContent = "Select a report…";
   if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
@@ -2807,6 +2810,28 @@ function extendLine(a, b, meters) {
 const BACKUP_VERSION = 2;   // v2: includes IndexedDB note photos
 const LS_BACKUP_ROLLBACK = "dof_last_rollback";
 const LS_LAST_SYNCED = "dof_last_synced";   // ISO timestamp of last successful sync
+// Tombstones: record deletions so sync can propagate them (newest-action-wins).
+const LS_TOMB_FIELDS = "dof_tomb_fields";
+const LS_TOMB_EQ     = "dof_tomb_equipment";
+const LS_TOMB_REPS   = "dof_tomb_reports";
+const TOMB_MAX_AGE_DAYS = 90;   // expire old tombstones so they don't pile up
+
+function recordTombstone(lsKey, itemKey) {
+  try {
+    var t = JSON.parse(localStorage.getItem(lsKey) || "{}");
+    t[itemKey] = new Date().toISOString();
+    localStorage.setItem(lsKey, JSON.stringify(t));
+  } catch (e) {}
+}
+function pruneTombstones(t) {
+  var cutoff = Date.now() - TOMB_MAX_AGE_DAYS * 86400000;
+  var out = {};
+  Object.keys(t || {}).forEach(function (k) {
+    var when = Date.parse(t[k]);
+    if (isFinite(when) && when >= cutoff) out[k] = t[k];
+  });
+  return out;
+}
 
 // Summary text for the Backup card
 function updateDataStats() {
@@ -3721,28 +3746,44 @@ var DriveSync = (function () {
 // ----- Merge engine -----
 // Returns { merged, conflicts } for one library.
 // keyName: how items are keyed; tsField: timestamp field for newest-wins.
-function mergeLibrary(localObj, cloudObj, tsField) {
+function mergeLibrary(localObj, cloudObj, tsField, localTomb, cloudTomb) {
   localObj = localObj || {}; cloudObj = cloudObj || {};
+  localTomb = localTomb || {}; cloudTomb = cloudTomb || {};
   var merged = {};
   var conflicts = [];
+  var mergedTomb = {};
   var keys = {};
   Object.keys(localObj).forEach(function (k) { keys[k] = true; });
   Object.keys(cloudObj).forEach(function (k) { keys[k] = true; });
+  Object.keys(localTomb).forEach(function (k) { keys[k] = true; });
+  Object.keys(cloudTomb).forEach(function (k) { keys[k] = true; });
+
+  function tparse(v) { return v ? Date.parse(v) : 0; }
 
   Object.keys(keys).forEach(function (k) {
     var L = localObj[k], C = cloudObj[k];
-    if (L && !C) { merged[k] = L; return; }          // local-only → keep
-    if (C && !L) { merged[k] = C; return; }          // cloud-only → add
-    // both exist:
-    if (JSON.stringify(L) === JSON.stringify(C)) { merged[k] = L; return; } // identical
-    // CONFLICT: same key, different content
+    // "alive" timestamp: newest edit on either side (items without a stamp count as ts=1)
+    var aliveTs = Math.max(
+      L ? (tparse(L[tsField]) || 1) : 0,
+      C ? (tparse(C[tsField]) || 1) : 0
+    );
+    var delTs = Math.max(tparse(localTomb[k]), tparse(cloudTomb[k]));
+
+    if (delTs && delTs >= aliveTs) {
+      // Deletion wins → omit item, carry tombstone forward
+      mergedTomb[k] = new Date(delTs).toISOString();
+      return;
+    }
+    // Item is alive → normal add/update/conflict
+    if (L && !C) { merged[k] = L; return; }
+    if (C && !L) { merged[k] = C; return; }
+    if (JSON.stringify(L) === JSON.stringify(C)) { merged[k] = L; return; }
     var lt = L[tsField] ? Date.parse(L[tsField]) : 0;
     var ct = C[tsField] ? Date.parse(C[tsField]) : 0;
     conflicts.push({ key: k, local: L, cloud: C, localTs: lt, cloudTs: ct });
-    // default resolution applied later by the dialog; placeholder = local
-    merged[k] = L;
+    merged[k] = L;   // placeholder until dialog resolves
   });
-  return { merged: merged, conflicts: conflicts };
+  return { merged: merged, conflicts: conflicts, tombstones: mergedTomb };
 }
 
 // Build the merged dataset + list of all conflicts across libraries.
@@ -3755,9 +3796,18 @@ function buildMerge(cloud) {
   var cEq     = (cloud && cloud.equipment) || {};
   var cReps   = (cloud && cloud.reports)   || {};
 
-  var f = mergeLibrary(localFields, cFields, "_modified");
-  var e = mergeLibrary(localEq,     cEq,     "_modified");
-  var r = mergeLibrary(localReps,   cReps,   "savedAt");
+  // Local + cloud tombstones (pruned of anything too old)
+  var ltFields = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_FIELDS) || "{}"));
+  var ltEq     = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_EQ)     || "{}"));
+  var ltReps   = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_REPS)   || "{}"));
+  var ctTomb   = (cloud && cloud.tombstones) || {};
+  var ctFields = pruneTombstones(ctTomb.fields || {});
+  var ctEq     = pruneTombstones(ctTomb.equipment || {});
+  var ctReps   = pruneTombstones(ctTomb.reports || {});
+
+  var f = mergeLibrary(localFields, cFields, "_modified", ltFields, ctFields);
+  var e = mergeLibrary(localEq,     cEq,     "_modified", ltEq,     ctEq);
+  var r = mergeLibrary(localReps,   cReps,   "savedAt",   ltReps,   ctReps);
 
   var conflicts = []
     .concat(f.conflicts.map(function (c) { c.lib = "fields";    c.label = "Field";   return c; }))
@@ -3766,6 +3816,7 @@ function buildMerge(cloud) {
 
   return {
     merged: { fields: f.merged, equipment: e.merged, reports: r.merged },
+    tombstones: { fields: f.tombstones, equipment: e.tombstones, reports: r.tombstones },
     conflicts: conflicts
   };
 }
@@ -3786,6 +3837,14 @@ function saveMergedLocal(merged) {
   localStorage.setItem(LS_FIELDS, JSON.stringify(merged.fields || {}));
   localStorage.setItem(LS_EQ,     JSON.stringify(merged.equipment || {}));
   localStorage.setItem(LS_REPS,   JSON.stringify(merged.reports || {}));
+}
+
+// Persist merged tombstones locally so future syncs keep propagating deletes.
+function saveMergedTombstones(tomb) {
+  tomb = tomb || {};
+  localStorage.setItem(LS_TOMB_FIELDS, JSON.stringify(tomb.fields || {}));
+  localStorage.setItem(LS_TOMB_EQ,     JSON.stringify(tomb.equipment || {}));
+  localStorage.setItem(LS_TOMB_REPS,   JSON.stringify(tomb.reports || {}));
 }
 
 // Produce a small human-readable summary of how two versions differ.
@@ -3925,6 +3984,7 @@ function syncNow() {
         localStorage.setItem(LS_BACKUP_ROLLBACK, JSON.stringify(buildBackup(false)));
       } catch (e) {}
       saveMergedLocal(mergedData);
+      saveMergedTombstones(result.tombstones);
       setSyncStatus("Uploading merged data\u2026");
       var payload = {
         app: "O\u03C0O Farming — Data Systems Pro",
@@ -3932,7 +3992,8 @@ function syncNow() {
         syncedAt: new Date().toISOString(),
         fields: mergedData.fields,
         equipment: mergedData.equipment,
-        reports: mergedData.reports
+        reports: mergedData.reports,
+        tombstones: result.tombstones || {}
       };
       return DriveSync.upload(payload).then(function () {
         // Refresh any visible lists
