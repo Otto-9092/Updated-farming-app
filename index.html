@@ -96,22 +96,45 @@
   }
   .conflict-box {
     background: #1f232b; color: #fff; border-radius: 12px; padding: 16px;
-    max-width: 520px; width: 100%; max-height: 85vh; overflow-y: auto;
+    max-width: 540px; width: 100%; max-height: 85vh; overflow-y: auto;
     box-shadow: 0 8px 40px rgba(0,0,0,0.5);
   }
   .conflict-title { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
   .conflict-sub { font-size: 13px; opacity: 0.8; margin-bottom: 12px; }
-  .conflict-item { border-top: 1px solid rgba(255,255,255,0.12); padding: 10px 0; }
-  .conflict-name { font-size: 14px; margin-bottom: 6px; }
-  .conflict-choices { display: flex; flex-direction: column; gap: 6px; }
-  .conflict-choices label {
-    display: flex; align-items: center; gap: 8px; font-size: 14px;
-    padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.05); cursor: pointer;
+  .conflict-item { border-top: 1px solid rgba(255,255,255,0.12); padding: 12px 0; }
+  .conflict-name { font-size: 15px; margin-bottom: 8px; }
+
+  /* Differences table (Mine vs Cloud) */
+  .conflict-diff { font-size: 12px; margin: 0 0 10px; border-radius: 8px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.1); }
+  .cf-diff-head, .cf-diff-row { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 0; }
+  .cf-diff-head { background: rgba(255,255,255,0.08); font-weight: bold; }
+  .cf-diff-head span, .cf-diff-row span { padding: 6px 8px; }
+  .cf-diff-row:nth-child(odd) { background: rgba(255,255,255,0.03); }
+  .cf-diff-k { opacity: 0.7; text-transform: capitalize; }
+  .cf-diff-mine  { color: #ffd27a; }
+  .cf-diff-cloud { color: #8fd3ff; }
+
+  /* Choice rows — must override the global "input,select{width:100%}" rule */
+  .conflict-choices { display: flex; flex-direction: column; gap: 8px; }
+  .conflict-choices .cf-choice {
+    display: flex; align-items: center; gap: 10px; font-size: 14px;
+    padding: 12px; border-radius: 10px; background: rgba(255,255,255,0.05);
+    border: 2px solid transparent; cursor: pointer; margin: 0;
   }
-  .conflict-choices label.newer { outline: 1px solid #ffb703; }
-  .conflict-choices .ts { font-size: 12px; opacity: 0.65; margin-left: auto; }
+  .conflict-choices .cf-choice input[type="radio"] {
+    -webkit-appearance: radio; appearance: radio;   /* undo global styling */
+    width: 20px; min-width: 20px; height: 20px; margin: 0; padding: 0;
+    accent-color: #ffb703; flex: 0 0 auto;
+  }
+  .conflict-choices .cf-pick { font-weight: bold; }
+  .conflict-choices .cf-choice .ts { font-size: 11px; opacity: 0.7; margin-left: auto; text-align: right; }
+  .conflict-choices .cf-choice.newer { } /* newest indicated via text only */
+  .conflict-choices .cf-choice.selected {
+    border-color: #ffb703; background: rgba(255,183,3,0.15);
+  }
   .conflict-actions {
-    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; justify-content: flex-end;
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; justify-content: flex-end;
   }
   .conflict-actions .btn { flex: 1 1 auto; min-width: 110px; }
 </style>
@@ -131,7 +154,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 13:30</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 14:15</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -857,8 +880,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260605-1330"></script>
-<script src="app.js?v=20260605-1330"></script>
+<script src="config.js?v=20260605-1415"></script>
+<script src="app.js?v=20260605-1415"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
