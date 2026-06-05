@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.04 · 17:40";
+window.APP_VERSION = "2026.06.05 · 09:30";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -32,7 +32,7 @@ const state = {
   boundary: { active: false, points: [], poly: null, acres: 0 },
   coveragePolys: [],
   field: { name: "", crop: "Corn", variety: "" },
-  equipment: { name: "", type: "sprayer", width: 90 },
+  equipment: { name: "", type: "none", width: 90 },   // ← default: nothing selected (clean home screen)
   sprayer:  { gpa: 15, nozzle: 20, target: 12, tank: 1200, product: "" },
   combine:  { expectedYield: 180, tankCapacity: 350, moisture: 15.0 },
   harvest:  { expectedYield: "", startMoisture: "", log: [] },  // per-session harvest readings
@@ -1476,8 +1476,10 @@ function applyEquipmentUI() {
   const nozBox = $("mNozGpmBox");
   if (nozBox) nozBox.classList.toggle("hidden", !isSprayer);
 
-  // Bushels is the combine/harvest metric — shown for non-sprayers.
-  $("mBuBox").classList.toggle("hidden",   isSprayer);
+  // Bushels is the combine/harvest metric — shown for non-sprayers,
+  // but hidden when no equipment is selected (clean home screen).
+  const isNone = state.equipment.type === "none";
+  $("mBuBox").classList.toggle("hidden",   isSprayer || isNone);
 
   // Live harvest tiles (latest yield/moisture) — combines only.
   const isCombine = state.equipment.type === "combine";
@@ -1840,6 +1842,11 @@ function updateEqSummary() {
   const cfg = EQ_TYPES[type];
   const label = $("btnEditEqLabel");
   const summary = $("eqParamSummary");
+  if (type === "none" || !cfg) {                       // ← no equipment selected
+    if (label) label.textContent = "Equipment";
+    if (summary) summary.textContent = "No equipment selected. Pick a type to enable its tools.";
+    return;
+  }
   if (label && cfg) label.textContent = cfg.label;
   if (!summary || !cfg) return;
 
@@ -1892,7 +1899,7 @@ $("eqType")?.addEventListener("change", () => {
   state.equipment.type = $("eqType").value;
   applyEquipmentUI();
   updateEqSummary();
-  openEqModal();
+  if (state.equipment.type !== "none") openEqModal();   // ← skip modal for "None"
 });
 
 // Planter calc: live update inside modal
