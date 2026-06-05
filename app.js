@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.05 · 09:30";
+window.APP_VERSION = "2026.06.05 · 11:00";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -3146,6 +3146,7 @@ window.addEventListener("DOMContentLoaded", () => {
   if (_vEl && window.APP_VERSION) _vEl.textContent = "v" + window.APP_VERSION;
   applyEquipmentUI();
   renderSectionButtons();
+  if (typeof refreshSyncUI === "function") refreshSyncUI();   // ← Stage 1: sync UI
   startLocationFollow();
   showEqSubmenu($("eqType").value);
   updateEqSummary();
@@ -3293,6 +3294,140 @@ function migrateLegacyPhotos() {
 // ============================================================
 // PWA — SERVICE WORKER REGISTRATION (offline support)
 // ============================================================
+// ============================================================
+// GOOGLE SYNC — Stage 1: Sign in with Google (auth only)
+// Uses Google Identity Services token flow (no client secret).
+// Scope: drive.appdata (private app folder) + email (to show who's in).
+// ============================================================
+var GoogleSync = (function () {
+  var SCOPES = "https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email";
+  var tokenClient = null;
+  var accessToken = null;
+  var userEmail = null;
+
+  function clientId() { return window.GOOGLE_OAUTH_CLIENT_ID || ""; }
+
+  function isConfigured() {
+    return !!clientId() && clientId().indexOf("apps.googleusercontent.com") !== -1;
+  }
+
+  function gisReady() {
+    return typeof google !== "undefined" && google.accounts && google.accounts.oauth2;
+  }
+
+  function getToken() { return accessToken; }
+  function getEmail() { return userEmail; }
+  function isSignedIn() { return !!accessToken; }
+
+  function ensureClient() {
+    if (tokenClient) return tokenClient;
+    if (!gisReady() || !isConfigured()) return null;
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId(),
+      scope: SCOPES,
+      callback: function () {}
+    });
+    return tokenClient;
+  }
+
+  function fetchEmail() {
+    return fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: "Bearer " + accessToken }
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (info) { userEmail = info && info.email ? info.email : "(signed in)"; return userEmail; })
+      .catch(function () { userEmail = "(signed in)"; return userEmail; });
+  }
+
+  function signIn() {
+    return new Promise(function (resolve, reject) {
+      if (!isConfigured()) { reject(new Error("not-configured")); return; }
+      if (!gisReady())     { reject(new Error("gis-not-loaded")); return; }
+      var tc = ensureClient();
+      if (!tc) { reject(new Error("no-client")); return; }
+      tc.callback = function (resp) {
+        if (resp && resp.access_token) {
+          accessToken = resp.access_token;
+          fetchEmail().then(function () { resolve(userEmail); });
+        } else {
+          reject(new Error(resp && resp.error ? resp.error : "no-token"));
+        }
+      };
+      try {
+        tc.requestAccessToken({ prompt: "consent" });
+      } catch (e) { reject(e); }
+    });
+  }
+
+  function signOut() {
+    var tok = accessToken;
+    accessToken = null; userEmail = null;
+    if (tok && gisReady() && google.accounts.oauth2.revoke) {
+      try { google.accounts.oauth2.revoke(tok, function () {}); } catch (e) {}
+    }
+  }
+
+  return {
+    isConfigured: isConfigured, gisReady: gisReady,
+    isSignedIn: isSignedIn, getToken: getToken, getEmail: getEmail,
+    signIn: signIn, signOut: signOut
+  };
+})();
+
+// ----- Sync UI wiring (Stage 1) -----
+function refreshSyncUI() {
+  var outBox = document.getElementById("syncSignedOut");
+  var inBox  = document.getElementById("syncSignedIn");
+  var emailEl = document.getElementById("syncUserEmail");
+  if (!outBox || !inBox) return;
+  if (GoogleSync.isSignedIn()) {
+    outBox.classList.add("hidden");
+    inBox.classList.remove("hidden");
+    if (emailEl) emailEl.textContent = GoogleSync.getEmail() || "(signed in)";
+  } else {
+    inBox.classList.add("hidden");
+    outBox.classList.remove("hidden");
+  }
+}
+
+function setSyncStatus(msg) {
+  var el = document.getElementById("syncStatus");
+  if (el) el.textContent = msg || "";
+}
+
+(function wireSyncUI() {
+  var signInBtn = document.getElementById("btnGoogleSignIn");
+  var signOutBtn = document.getElementById("btnGoogleSignOut");
+
+  if (signInBtn) signInBtn.addEventListener("click", function () {
+    if (!GoogleSync.isConfigured()) {
+      appAlert("Google sync isn't set up yet. Add your OAuth Client ID to config.js.", "Sync not configured");
+      return;
+    }
+    if (!GoogleSync.gisReady()) {
+      appAlert("Google sign-in is still loading. Check your connection and try again in a moment.", "Please wait");
+      return;
+    }
+    signInBtn.disabled = true;
+    signInBtn.textContent = "Signing in\u2026";
+    GoogleSync.signIn().then(function (email) {
+      refreshSyncUI();
+      setSyncStatus("Signed in. (Sync Now arrives in the next update.)");
+    }).catch(function (err) {
+      var m = (err && err.message) || "error";
+      appAlert("Could not sign in: " + m, "Sign-in failed");
+    }).finally(function () {
+      signInBtn.disabled = false;
+      signInBtn.textContent = "\uD83D\uDD11 Sign in with Google";
+    });
+  });
+
+  if (signOutBtn) signOutBtn.addEventListener("click", function () {
+    GoogleSync.signOut();
+    refreshSyncUI();
+    setSyncStatus("");
+  });
+})();
+
 if ("serviceWorker" in navigator) {
   var _waitingSW = null;   // a SW that has installed and is waiting to activate
 
