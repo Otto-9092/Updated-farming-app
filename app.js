@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.05 · 11:00";
+window.APP_VERSION = "2026.06.05 · 13:30";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -1930,6 +1930,7 @@ $("btnSaveEq").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const type = state.equipment.type;
   lib[state.equipment.name] = {
+    _modified: new Date().toISOString(),   // ← for sync conflict resolution
     name:  state.equipment.name,
     type:  type,
     width: state.equipment.width,
@@ -1992,6 +1993,7 @@ if ($("btnSaveField")) $("btnSaveField").addEventListener("click", () => {
   if (!name) { appAlert("Please enter a field name first."); return; }
   const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
   lib[name] = {
+    _modified: new Date().toISOString(),   // ← for sync conflict resolution
     name,
     crop: $("fldCrop").value,
     variety: $("fldVariety").value,
@@ -3373,6 +3375,274 @@ var GoogleSync = (function () {
   };
 })();
 
+// ============================================================
+// GOOGLE DRIVE SYNC ENGINE — Stage 2
+// One JSON file in the private appdata folder holds the shared
+// equipment / fields / reports. Photos stay local (by design).
+// ============================================================
+var DriveSync = (function () {
+  var SYNC_FILENAME = "opio-farming-sync.json";
+  var fileId = null;   // cached Drive file id once found/created
+
+  function authHeader() {
+    return { Authorization: "Bearer " + GoogleSync.getToken() };
+  }
+
+  // Find the existing sync file in appDataFolder (or null).
+  function findFile() {
+    var url = "https://www.googleapis.com/drive/v3/files"
+      + "?spaces=appDataFolder"
+      + "&fields=files(id,name,modifiedTime)"
+      + "&q=" + encodeURIComponent("name='" + SYNC_FILENAME + "'");
+    return fetch(url, { headers: authHeader() })
+      .then(function (r) {
+        if (r.status === 401) throw new Error("auth-expired");
+        return r.json();
+      })
+      .then(function (data) {
+        if (data.files && data.files.length) { fileId = data.files[0].id; return fileId; }
+        return null;
+      });
+  }
+
+  // Download + parse the sync file contents (or null if no file).
+  function download() {
+    function fetchContent(id) {
+      return fetch("https://www.googleapis.com/drive/v3/files/" + id + "?alt=media",
+        { headers: authHeader() })
+        .then(function (r) {
+          if (r.status === 401) throw new Error("auth-expired");
+          if (!r.ok) throw new Error("download-failed");
+          return r.text();
+        })
+        .then(function (txt) { try { return JSON.parse(txt); } catch (e) { return null; } });
+    }
+    if (fileId) return fetchContent(fileId);
+    return findFile().then(function (id) { return id ? fetchContent(id) : null; });
+  }
+
+  // Upload (create or update) the sync file with the given object.
+  function upload(obj) {
+    var body = JSON.stringify(obj);
+    if (fileId) {
+      // Update existing file content (media upload)
+      return fetch("https://www.googleapis.com/upload/drive/v3/files/" + fileId + "?uploadType=media",
+        { method: "PATCH",
+          headers: Object.assign({ "Content-Type": "application/json" }, authHeader()),
+          body: body })
+        .then(function (r) { if (!r.ok) throw new Error("upload-failed"); return r.json(); });
+    }
+    // Create new file in appDataFolder (multipart: metadata + content)
+    var boundary = "-------opio" + Date.now();
+    var meta = { name: SYNC_FILENAME, parents: ["appDataFolder"] };
+    var multipart =
+      "--" + boundary + "\r\n" +
+      "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+      JSON.stringify(meta) + "\r\n" +
+      "--" + boundary + "\r\n" +
+      "Content-Type: application/json\r\n\r\n" +
+      body + "\r\n" +
+      "--" + boundary + "--";
+    return fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+      { method: "POST",
+        headers: Object.assign({ "Content-Type": "multipart/related; boundary=" + boundary }, authHeader()),
+        body: multipart })
+      .then(function (r) { if (!r.ok) throw new Error("create-failed"); return r.json(); })
+      .then(function (data) { fileId = data.id; return data; });
+  }
+
+  return { download: download, upload: upload, FILENAME: SYNC_FILENAME };
+})();
+
+// ----- Merge engine -----
+// Returns { merged, conflicts } for one library.
+// keyName: how items are keyed; tsField: timestamp field for newest-wins.
+function mergeLibrary(localObj, cloudObj, tsField) {
+  localObj = localObj || {}; cloudObj = cloudObj || {};
+  var merged = {};
+  var conflicts = [];
+  var keys = {};
+  Object.keys(localObj).forEach(function (k) { keys[k] = true; });
+  Object.keys(cloudObj).forEach(function (k) { keys[k] = true; });
+
+  Object.keys(keys).forEach(function (k) {
+    var L = localObj[k], C = cloudObj[k];
+    if (L && !C) { merged[k] = L; return; }          // local-only → keep
+    if (C && !L) { merged[k] = C; return; }          // cloud-only → add
+    // both exist:
+    if (JSON.stringify(L) === JSON.stringify(C)) { merged[k] = L; return; } // identical
+    // CONFLICT: same key, different content
+    var lt = L[tsField] ? Date.parse(L[tsField]) : 0;
+    var ct = C[tsField] ? Date.parse(C[tsField]) : 0;
+    conflicts.push({ key: k, local: L, cloud: C, localTs: lt, cloudTs: ct });
+    // default resolution applied later by the dialog; placeholder = local
+    merged[k] = L;
+  });
+  return { merged: merged, conflicts: conflicts };
+}
+
+// Build the merged dataset + list of all conflicts across libraries.
+function buildMerge(cloud) {
+  var localFields = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+  var localEq     = JSON.parse(localStorage.getItem(LS_EQ)     || "{}");
+  var localReps   = JSON.parse(localStorage.getItem(LS_REPS)   || "{}");
+
+  var cFields = (cloud && cloud.fields)    || {};
+  var cEq     = (cloud && cloud.equipment) || {};
+  var cReps   = (cloud && cloud.reports)   || {};
+
+  var f = mergeLibrary(localFields, cFields, "_modified");
+  var e = mergeLibrary(localEq,     cEq,     "_modified");
+  var r = mergeLibrary(localReps,   cReps,   "savedAt");
+
+  var conflicts = []
+    .concat(f.conflicts.map(function (c) { c.lib = "fields";    c.label = "Field";   return c; }))
+    .concat(e.conflicts.map(function (c) { c.lib = "equipment"; c.label = "Machine"; return c; }))
+    .concat(r.conflicts.map(function (c) { c.lib = "reports";   c.label = "Report";  return c; }));
+
+  return {
+    merged: { fields: f.merged, equipment: e.merged, reports: r.merged },
+    conflicts: conflicts
+  };
+}
+
+// Apply the user's conflict choices into the merged set.
+// choices: { "fields::North 40": "cloud" | "local", ... }
+function applyConflictChoices(mergeResult, choices) {
+  mergeResult.conflicts.forEach(function (c) {
+    var id = c.lib + "::" + c.key;
+    var pick = choices[id] || "local";   // default safe = keep mine
+    mergeResult.merged[c.lib][c.key] = (pick === "cloud") ? c.cloud : c.local;
+  });
+  return mergeResult.merged;
+}
+
+// Persist a merged dataset locally.
+function saveMergedLocal(merged) {
+  localStorage.setItem(LS_FIELDS, JSON.stringify(merged.fields || {}));
+  localStorage.setItem(LS_EQ,     JSON.stringify(merged.equipment || {}));
+  localStorage.setItem(LS_REPS,   JSON.stringify(merged.reports || {}));
+}
+
+// ----- Conflict resolution dialog (built dynamically) -----
+// Resolves to a choices map { "lib::key": "local"|"cloud" }, or null if cancelled.
+function showConflictDialog(conflicts) {
+  return new Promise(function (resolve) {
+    var overlay = document.createElement("div");
+    overlay.className = "conflict-overlay";
+
+    var rows = conflicts.map(function (c, i) {
+      var localWhen = c.localTs ? new Date(c.localTs).toLocaleString() : "no date";
+      var cloudWhen = c.cloudTs ? new Date(c.cloudTs).toLocaleString() : "no date";
+      var newer = c.cloudTs > c.localTs ? "cloud" : "local";
+      var id = c.lib + "::" + c.key;
+      return '<div class="conflict-item" data-cid="' + escHtml(id) + '">' +
+        '<div class="conflict-name">' + escHtml(c.label) + ': <b>' + escHtml(c.key) + '</b></div>' +
+        '<div class="conflict-choices">' +
+          '<label class="' + (newer === "local" ? "newer" : "") + '">' +
+            '<input type="radio" name="r' + i + '" value="local" checked> ' +
+            'Keep Mine <span class="ts">(' + localWhen + ')</span></label>' +
+          '<label class="' + (newer === "cloud" ? "newer" : "") + '">' +
+            '<input type="radio" name="r' + i + '" value="cloud"> ' +
+            'Keep Cloud <span class="ts">(' + cloudWhen + ')</span></label>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+
+    overlay.innerHTML =
+      '<div class="conflict-box">' +
+        '<div class="conflict-title">\u26A0\uFE0F Sync conflicts (' + conflicts.length + ')</div>' +
+        '<div class="conflict-sub">These items differ on this device and in the cloud. Choose which to keep:</div>' +
+        '<div class="conflict-list">' + rows + '</div>' +
+        '<div class="conflict-actions">' +
+          '<button class="btn" id="cfKeepAllMine">Keep all mine</button>' +
+          '<button class="btn" id="cfKeepAllCloud">Keep all cloud</button>' +
+          '<button class="btn btn-primary" id="cfApply">Apply &amp; Sync</button>' +
+          '<button class="btn" id="cfCancel">Cancel</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    function pickAll(val) {
+      overlay.querySelectorAll('input[type=radio][value="' + val + '"]').forEach(function (r) { r.checked = true; });
+    }
+    overlay.querySelector("#cfKeepAllMine").onclick = function () { pickAll("local"); };
+    overlay.querySelector("#cfKeepAllCloud").onclick = function () { pickAll("cloud"); };
+
+    function cleanup() { try { document.body.removeChild(overlay); } catch (e) {} }
+
+    overlay.querySelector("#cfCancel").onclick = function () { cleanup(); resolve(null); };
+    overlay.querySelector("#cfApply").onclick = function () {
+      var choices = {};
+      overlay.querySelectorAll(".conflict-item").forEach(function (item) {
+        var id = item.getAttribute("data-cid");
+        var sel = item.querySelector('input[type=radio]:checked');
+        choices[id] = sel ? sel.value : "local";
+      });
+      cleanup(); resolve(choices);
+    };
+  });
+}
+
+// ----- Main Sync Now orchestration -----
+function syncNow() {
+  if (!GoogleSync.isSignedIn()) {
+    return appAlert("Please sign in with Google first.", "Not signed in");
+  }
+  setSyncStatus("Syncing\u2026 downloading from Drive");
+
+  return DriveSync.download().then(function (cloud) {
+    var result = buildMerge(cloud);
+
+    function finishWith(mergedData) {
+      // Safety: snapshot current device data before overwriting.
+      try {
+        localStorage.setItem(LS_BACKUP_ROLLBACK, JSON.stringify(buildBackup(false)));
+      } catch (e) {}
+      saveMergedLocal(mergedData);
+      setSyncStatus("Uploading merged data\u2026");
+      var payload = {
+        app: "O\u03C0O Farming — Data Systems Pro",
+        version: BACKUP_VERSION,
+        syncedAt: new Date().toISOString(),
+        fields: mergedData.fields,
+        equipment: mergedData.equipment,
+        reports: mergedData.reports
+      };
+      return DriveSync.upload(payload).then(function () {
+        // Refresh any visible lists
+        if (typeof loadFieldsList === "function") loadFieldsList();
+        if (typeof loadEquipmentList === "function") loadEquipmentList();
+        if (typeof loadReportsList === "function") loadReportsList();
+        if (typeof updateDataStats === "function") updateDataStats();
+        var when = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        setSyncStatus("\u2705 Synced at " + when);
+      });
+    }
+
+    if (!result.conflicts.length) {
+      return finishWith(result.merged);   // no conflicts → silent merge
+    }
+    // Conflicts → ask the user.
+    setSyncStatus(result.conflicts.length + " conflict(s) need your choice\u2026");
+    return showConflictDialog(result.conflicts).then(function (choices) {
+      if (!choices) { setSyncStatus("Sync cancelled."); return; }
+      var mergedData = applyConflictChoices(result, choices);
+      return finishWith(mergedData);
+    });
+  }).catch(function (err) {
+    var m = (err && err.message) || "error";
+    if (m === "auth-expired") {
+      GoogleSync.signOut(); refreshSyncUI();
+      appAlert("Your Google session expired. Please sign in again.", "Session expired");
+      setSyncStatus("");
+    } else {
+      appAlert("Sync failed: " + m, "Sync error");
+      setSyncStatus("\u274C Sync failed.");
+    }
+  });
+}
+
 // ----- Sync UI wiring (Stage 1) -----
 function refreshSyncUI() {
   var outBox = document.getElementById("syncSignedOut");
@@ -3426,6 +3696,21 @@ function setSyncStatus(msg) {
     refreshSyncUI();
     setSyncStatus("");
   });
+
+  var syncBtn = document.getElementById("btnSyncNow");
+  if (syncBtn) {
+    syncBtn.disabled = false;
+    syncBtn.title = "";
+    syncBtn.addEventListener("click", function () {
+      syncBtn.disabled = true;
+      var orig = syncBtn.textContent;
+      syncBtn.textContent = "Syncing\u2026";
+      Promise.resolve(syncNow()).finally(function () {
+        syncBtn.disabled = false;
+        syncBtn.textContent = orig;
+      });
+    });
+  }
 })();
 
 if ("serviceWorker" in navigator) {
