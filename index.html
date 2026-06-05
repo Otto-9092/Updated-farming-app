@@ -88,6 +88,32 @@
   /* Google sync box */
   .sync-box { border: 1px solid rgba(128,128,128,0.25); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
   #syncStatus { margin-top: 6px; }
+  /* Sync conflict dialog */
+  .conflict-overlay {
+    position: fixed; inset: 0; z-index: 10000;
+    background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .conflict-box {
+    background: #1f232b; color: #fff; border-radius: 12px; padding: 16px;
+    max-width: 520px; width: 100%; max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .conflict-title { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
+  .conflict-sub { font-size: 13px; opacity: 0.8; margin-bottom: 12px; }
+  .conflict-item { border-top: 1px solid rgba(255,255,255,0.12); padding: 10px 0; }
+  .conflict-name { font-size: 14px; margin-bottom: 6px; }
+  .conflict-choices { display: flex; flex-direction: column; gap: 6px; }
+  .conflict-choices label {
+    display: flex; align-items: center; gap: 8px; font-size: 14px;
+    padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.05); cursor: pointer;
+  }
+  .conflict-choices label.newer { outline: 1px solid #ffb703; }
+  .conflict-choices .ts { font-size: 12px; opacity: 0.65; margin-left: auto; }
+  .conflict-actions {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; justify-content: flex-end;
+  }
+  .conflict-actions .btn { flex: 1 1 auto; min-width: 110px; }
 </style>
 </head>
 <body>
@@ -105,7 +131,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 11:00</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 13:30</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -831,8 +857,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260605-1100"></script>
-<script src="app.js?v=20260605-1100"></script>
+<script src="config.js?v=20260605-1330"></script>
+<script src="app.js?v=20260605-1330"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
