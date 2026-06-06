@@ -178,6 +178,7 @@
 <nav class="tabs">
   <button class="tab active" data-tab="operate">Operate</button>
   <button class="tab" data-tab="setup">Field & Equipment</button>
+  <button class="tab" data-tab="tools">Tools</button>
   <button class="tab" data-tab="reports">Reports</button>
   <button class="tab" data-tab="season">Season</button>
 </nav>
@@ -440,7 +441,134 @@
       </div>
     </div>
 
-    <!-- ===== PRODUCT / CHEMICAL MIX CALCULATOR (sprayer) ===== -->
+    
+  </section>
+
+<!-- ===== TOOLS TAB ===== -->
+<section id="tab-tools" class="tab-panel">
+  <div class="card">
+    <div class="card-title">🧰 Tools</div>
+    <div class="hint">
+      Farm utilities — calculators and lookups. The Mix Calculator and
+      Cost &amp; Profit tools moved here from “Field &amp; Equipment”.
+    </div>
+  </div>
+
+  <!-- ===== UNIT CONVERTER ===== -->
+  <div class="card" id="unitConvCard">
+    <div class="card-title">📐 Unit Converter</div>
+    <div class="hint">Convert common farm units. Type a value and pick units.</div>
+
+    <div class="mix-row">
+      <label>Category
+        <select id="convCategory" class="mix-unit">
+          <option value="length">Length / Distance</option>
+          <option value="area">Area</option>
+          <option value="volume">Volume (liquid)</option>
+          <option value="weight">Weight</option>
+          <option value="rate">Rate (per acre)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="mix-row">
+      <label>Value
+        <input type="number" id="convValue" step="any" inputmode="decimal" placeholder="0" />
+      </label>
+      <label>From
+        <select id="convFrom" class="mix-unit"></select>
+      </label>
+      <label>To
+        <select id="convTo" class="mix-unit"></select>
+      </label>
+    </div>
+
+    <div class="btn-row">
+      <button id="btnConvCalc" class="btn btn-primary">Convert</button>
+      <button id="btnConvSwap" class="btn btn-ghost">⇄ Swap</button>
+    </div>
+
+    <div id="convResult" class="mix-results"></div>
+  </div>
+
+  <!-- ===== ACREAGE CALCULATOR ===== -->
+  <div class="card" id="acreCalcCard">
+    <div class="card-title">📏 Acreage Calculator</div>
+    <div class="hint">Estimate acres from a shape. 1 acre = 43,560 sq ft.</div>
+
+    <div class="mix-row">
+      <label>Shape
+        <select id="acreShape" class="mix-unit">
+          <option value="rect">Rectangle (L × W)</option>
+          <option value="circle">Circle (radius)</option>
+          <option value="triangle">Triangle (base × height)</option>
+          <option value="sqft">Square feet</option>
+          <option value="sqm">Square meters</option>
+        </select>
+      </label>
+      <label>Units
+        <select id="acreUnits" class="mix-unit">
+          <option value="ft">Feet</option>
+          <option value="yd">Yards</option>
+          <option value="m">Meters</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="mix-row" id="acreInputs">
+      <label id="acreLblA">Length
+        <input type="number" id="acreA" step="any" inputmode="decimal" placeholder="0" />
+      </label>
+      <label id="acreLblB">Width
+        <input type="number" id="acreB" step="any" inputmode="decimal" placeholder="0" />
+      </label>
+    </div>
+
+    <div class="btn-row">
+      <button id="btnAcreCalc" class="btn btn-primary">Calculate</button>
+      <button id="btnAcreReset" class="btn btn-ghost">Clear</button>
+    </div>
+
+    <div id="acreResult" class="mix-results"></div>
+  </div>
+
+  <!-- ===== GPS COORDINATE LOOKUP ===== -->
+  <div class="card" id="gpsLookupCard">
+    <div class="card-title">📍 GPS Coordinate Lookup</div>
+    <div class="hint">Grab your current location, or measure distance between two points.</div>
+
+    <div class="btn-row">
+      <button id="btnGpsHere" class="btn btn-primary">📡 Use My Location</button>
+    </div>
+    <div id="gpsHereResult" class="mix-results"></div>
+
+    <div class="mix-row">
+      <label>Point A — Lat
+        <input type="number" id="gpsLatA" step="any" inputmode="decimal" placeholder="e.g. 41.5868" />
+      </label>
+      <label>Point A — Lng
+        <input type="number" id="gpsLngA" step="any" inputmode="decimal" placeholder="e.g. -93.6250" />
+      </label>
+    </div>
+    <div class="mix-row">
+      <label>Point B — Lat
+        <input type="number" id="gpsLatB" step="any" inputmode="decimal" placeholder="e.g. 41.6000" />
+      </label>
+      <label>Point B — Lng
+        <input type="number" id="gpsLngB" step="any" inputmode="decimal" placeholder="e.g. -93.6000" />
+      </label>
+    </div>
+
+    <div class="btn-row">
+      <button id="btnGpsDist" class="btn btn-primary">Measure A → B</button>
+      <button id="btnGpsMaps" class="btn">🗺️ Open A in Maps</button>
+      <button id="btnGpsReset" class="btn btn-ghost">Clear</button>
+    </div>
+
+    <div id="gpsDistResult" class="mix-results"></div>
+  </div>
+
+  <!-- ===== PRODUCT / CHEMICAL MIX CALCULATOR (sprayer) ===== -->
     <div class="card" id="mixCalcCard">
       <div class="card-title">🧪 Mix Calculator</div>
       <div class="hint">Auto-fills tank size &amp; field acres from your sprayer/field — edit either to override.</div>
@@ -539,7 +667,7 @@
       <div id="mixResults" class="mix-results"></div>
     </div>
 
-    <!-- ===== COST & PROFIT (per field) ===== -->
+  <!-- ===== COST & PROFIT (per field) ===== -->
     <div class="card" id="costProfitCard">
       <div class="card-title">💰 Cost &amp; Profit</div>
       <div class="hint">Per-acre costs save with the field. Enter yield &amp; grain price to see profit.</div>
@@ -565,7 +693,7 @@
 
       <div id="costResults" class="mix-results"></div>
     </div>
-  </section>
+</section>
 
 <!-- ===== REPORTS TAB ===== -->
 <section id="tab-reports" class="tab-panel">
@@ -903,8 +1031,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260605-1745"></script>
-<script src="app.js?v=20260605-1745"></script>
+<script src="config.js?v=20260606-0930"></script>
+<script src="app.js?v=20260606-0930"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
