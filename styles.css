@@ -625,11 +625,14 @@ input, select {
   font-size: 15px; line-height: 1.5; color: var(--text);
   white-space: pre-wrap;   /* respect line breaks passed in the message */
 }
+
+
 /* ============================================================
    TOOLS TAB — Mix Calculator, Cost & Profit, Unit Converter,
    Acreage Calculator, GPS Lookup
-   Uses existing theme variables so day/night both apply.
-   Append-only: nothing above is changed.
+   Added 2026.06.06. Uses existing theme variables so day & night
+   modes both apply automatically. Append-only: nothing above
+   this block was changed or removed.
    ============================================================ */
 
 /* Rows of inputs/selects that should sit side-by-side and wrap */
