@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.05 · 17:45";
+window.APP_VERSION = "2026.06.06 · 09:30";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -123,7 +123,7 @@ document.querySelectorAll(".tab").forEach((t) => {
     t.classList.add("active");
     $("tab-" + t.dataset.tab).classList.add("active");
     if (state.map) setTimeout(() => google.maps.event.trigger(state.map, "resize"), 100);
-    if (t.dataset.tab === "setup") { seedMixCalcFromState(); seedCostAcresFromState(); }   // ← refresh calc inputs
+    if (t.dataset.tab === "tools") { seedMixCalcFromState(); seedCostAcresFromState(); }   // ← refresh calc inputs
     if (t.dataset.tab === "season") renderSeason();   // ← refresh season dashboard
   });
 });
@@ -4177,3 +4177,168 @@ if ("serviceWorker" in navigator) {
     });
   });
 }
+
+
+// ============================================================
+// TOOLS TAB — Unit Converter, Acreage Calculator, GPS Lookup
+// (Added 2026.06.06. Mix Calculator & Cost/Profit logic is
+//  unchanged and lives elsewhere in this file.)
+// ============================================================
+(function () {
+  function $id(id) { return document.getElementById(id); }
+  function fmt(n, d) {
+    if (!isFinite(n)) return "\u2014";
+    d = (d == null) ? 4 : d;
+    return parseFloat(n.toFixed(d)).toLocaleString(undefined, { maximumFractionDigits: d });
+  }
+
+  var UNITS = {
+    length: { units: { "in": 1/12, "ft": 1, "yd": 3, "mi": 5280, "cm": 0.0328084, "m": 3.28084, "km": 3280.84 }},
+    area:   { units: { "sqft": 1/43560, "sqyd": 9/43560, "ac": 1, "ha": 2.47105, "sqm": 0.000247105, "sqmi": 640 }},
+    volume: { units: { "oz": 1/128, "pt": 1/8, "qt": 1/4, "gal": 1, "L": 0.264172, "mL": 0.000264172 }},
+    weight: { units: { "oz": 1/16, "lb": 1, "ton": 2000, "g": 0.00220462, "kg": 2.20462, "tonne": 2204.62 }},
+    rate:   { units: { "oz/ac": 1/128, "pt/ac": 1/8, "qt/ac": 1/4, "gal/ac": 1, "L/ha": 0.264172/2.47105 }}
+  };
+  var LABELS = {
+    "in":"inches","ft":"feet","yd":"yards","mi":"miles","cm":"centimeters","m":"meters","km":"kilometers",
+    "sqft":"sq feet","sqyd":"sq yards","ac":"acres","ha":"hectares","sqm":"sq meters","sqmi":"sq miles",
+    "oz":"fluid oz","pt":"pints","qt":"quarts","gal":"gallons","L":"liters","mL":"milliliters",
+    "lb":"pounds","ton":"tons (US)","g":"grams","kg":"kilograms","tonne":"metric tons",
+    "oz/ac":"oz/acre","pt/ac":"pt/acre","qt/ac":"qt/acre","gal/ac":"gal/acre","L/ha":"L/hectare"
+  };
+
+  function fillUnitSelects() {
+    var cat = $id("convCategory"); if (!cat) return;
+    var group = UNITS[cat.value];
+    var from = $id("convFrom"), to = $id("convTo");
+    var keys = Object.keys(group.units);
+    var opts = keys.map(function (k) {
+      return '<option value="' + k + '">' + k + ' \u2014 ' + (LABELS[k] || k) + '</option>';
+    }).join("");
+    from.innerHTML = opts; to.innerHTML = opts;
+    if (keys.length > 1) to.selectedIndex = 1;
+  }
+  function convert() {
+    var cat = $id("convCategory").value;
+    var group = UNITS[cat];
+    var v = parseFloat($id("convValue").value);
+    var f = $id("convFrom").value, t = $id("convTo").value;
+    var out = $id("convResult");
+    if (isNaN(v)) { out.innerHTML = '<div class="hint">Enter a value to convert.</div>'; return; }
+    var result = (v * group.units[f]) / group.units[t];
+    out.innerHTML =
+      '<div class="mix-line"><b>' + fmt(v) + ' ' + f + '</b> = <b>' + fmt(result) + ' ' + t + '</b></div>' +
+      '<div class="hint">' + (LABELS[f] || f) + ' \u2192 ' + (LABELS[t] || t) + '</div>';
+  }
+  if ($id("convCategory")) {
+    fillUnitSelects();
+    $id("convCategory").addEventListener("change", function () { fillUnitSelects(); $id("convResult").innerHTML = ""; });
+    $id("btnConvCalc").addEventListener("click", convert);
+    $id("convValue").addEventListener("input", convert);
+    $id("convFrom").addEventListener("change", convert);
+    $id("convTo").addEventListener("change", convert);
+    $id("btnConvSwap").addEventListener("click", function () {
+      var f = $id("convFrom"), t = $id("convTo");
+      var tmp = f.value; f.value = t.value; t.value = tmp; convert();
+    });
+  }
+
+  var SQFT_PER_ACRE = 43560;
+  function toFeet(val, units) {
+    if (units === "yd") return val * 3;
+    if (units === "m")  return val * 3.28084;
+    return val;
+  }
+  function acreLabels() {
+    var shape = $id("acreShape").value;
+    var la = $id("acreLblA"), lb = $id("acreLblB"), b = $id("acreB");
+    var unitsSel = $id("acreUnits");
+    function setUnitsVisible(vis) { unitsSel.parentElement.style.display = vis ? "" : "none"; }
+    b.parentElement.style.display = "";
+    setUnitsVisible(true);
+    if (shape === "rect")          { la.childNodes[0].nodeValue = "Length "; lb.childNodes[0].nodeValue = "Width "; }
+    else if (shape === "circle")   { la.childNodes[0].nodeValue = "Radius "; b.parentElement.style.display = "none"; }
+    else if (shape === "triangle") { la.childNodes[0].nodeValue = "Base "; lb.childNodes[0].nodeValue = "Height "; }
+    else if (shape === "sqft")     { la.childNodes[0].nodeValue = "Square feet "; b.parentElement.style.display = "none"; setUnitsVisible(false); }
+    else if (shape === "sqm")      { la.childNodes[0].nodeValue = "Square meters "; b.parentElement.style.display = "none"; setUnitsVisible(false); }
+  }
+  function acreCalc() {
+    var shape = $id("acreShape").value;
+    var units = $id("acreUnits").value;
+    var a = parseFloat($id("acreA").value);
+    var b = parseFloat($id("acreB").value);
+    var out = $id("acreResult");
+    var sqft;
+    if (shape === "sqft")      { sqft = a; }
+    else if (shape === "sqm")  { sqft = a * 10.7639; }
+    else {
+      var af = toFeet(a, units), bf = toFeet(b, units);
+      if (shape === "rect")          sqft = af * bf;
+      else if (shape === "circle")   sqft = Math.PI * af * af;
+      else if (shape === "triangle") sqft = 0.5 * af * bf;
+    }
+    if (isNaN(sqft)) { out.innerHTML = '<div class="hint">Enter the measurement(s).</div>'; return; }
+    var acres = sqft / SQFT_PER_ACRE;
+    out.innerHTML =
+      '<div class="mix-line"><b>' + fmt(acres, 3) + ' acres</b></div>' +
+      '<div class="hint">' + fmt(sqft, 0) + ' sq ft \u00B7 ' + fmt(sqft * 0.092903, 1) + ' sq m \u00B7 ' + fmt(acres * 0.404686, 3) + ' ha</div>';
+  }
+  if ($id("acreShape")) {
+    acreLabels();
+    $id("acreShape").addEventListener("change", function () { acreLabels(); $id("acreResult").innerHTML = ""; });
+    $id("btnAcreCalc").addEventListener("click", acreCalc);
+    $id("btnAcreReset").addEventListener("click", function () {
+      $id("acreA").value = ""; $id("acreB").value = ""; $id("acreResult").innerHTML = "";
+    });
+  }
+
+  function haversineMiles(lat1, lon1, lat2, lon2) {
+    var R = 3958.7613, rad = Math.PI / 180;
+    var dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+    var s = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    return 2 * R * Math.asin(Math.sqrt(s));
+  }
+  if ($id("btnGpsHere")) {
+    $id("btnGpsHere").addEventListener("click", function () {
+      var out = $id("gpsHereResult");
+      if (!navigator.geolocation) { out.innerHTML = '<div class="hint">Geolocation not supported on this device.</div>'; return; }
+      out.innerHTML = '<div class="hint">Locating\u2026</div>';
+      navigator.geolocation.getCurrentPosition(function (p) {
+        var la = p.coords.latitude, ln = p.coords.longitude, ac = p.coords.accuracy;
+        $id("gpsLatA").value = la.toFixed(6);
+        $id("gpsLngA").value = ln.toFixed(6);
+        out.innerHTML =
+          '<div class="mix-line"><b>' + la.toFixed(6) + ', ' + ln.toFixed(6) + '</b></div>' +
+          '<div class="hint">Accuracy \u00B1' + Math.round(ac) + ' m \u00B7 filled into Point A</div>';
+      }, function (err) {
+        out.innerHTML = '<div class="hint">Could not get location: ' + err.message + '</div>';
+      }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+    });
+  }
+  if ($id("btnGpsDist")) {
+    $id("btnGpsDist").addEventListener("click", function () {
+      var laA = parseFloat($id("gpsLatA").value), lnA = parseFloat($id("gpsLngA").value);
+      var laB = parseFloat($id("gpsLatB").value), lnB = parseFloat($id("gpsLngB").value);
+      var out = $id("gpsDistResult");
+      if ([laA,lnA,laB,lnB].some(isNaN)) { out.innerHTML = '<div class="hint">Enter both Point A and Point B coordinates.</div>'; return; }
+      var mi = haversineMiles(laA, lnA, laB, lnB);
+      out.innerHTML =
+        '<div class="mix-line"><b>' + fmt(mi, 3) + ' miles</b> between A and B</div>' +
+        '<div class="hint">' + fmt(mi * 5280, 0) + ' ft \u00B7 ' + fmt(mi * 1.60934, 3) + ' km</div>';
+    });
+  }
+  if ($id("btnGpsMaps")) {
+    $id("btnGpsMaps").addEventListener("click", function () {
+      var la = parseFloat($id("gpsLatA").value), ln = parseFloat($id("gpsLngA").value);
+      if (isNaN(la) || isNaN(ln)) { $id("gpsDistResult").innerHTML = '<div class="hint">Enter Point A coordinates first.</div>'; return; }
+      window.open("https://www.google.com/maps/search/?api=1&query=" + la + "," + ln, "_blank");
+    });
+  }
+  if ($id("btnGpsReset")) {
+    $id("btnGpsReset").addEventListener("click", function () {
+      ["gpsLatA","gpsLngA","gpsLatB","gpsLngB"].forEach(function (id) { $id(id).value = ""; });
+      $id("gpsHereResult").innerHTML = ""; $id("gpsDistResult").innerHTML = "";
+    });
+  }
+})();
