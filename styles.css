@@ -625,3 +625,63 @@ input, select {
   font-size: 15px; line-height: 1.5; color: var(--text);
   white-space: pre-wrap;   /* respect line breaks passed in the message */
 }
+/* ============================================================
+   TOOLS TAB — Mix Calculator, Cost & Profit, Unit Converter,
+   Acreage Calculator, GPS Lookup
+   Uses existing theme variables so day/night both apply.
+   Append-only: nothing above is changed.
+   ============================================================ */
+
+/* Rows of inputs/selects that should sit side-by-side and wrap */
+.mix-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+.mix-row > label {
+  flex: 1 1 120px;   /* grow/shrink, but never narrower than ~120px */
+  min-width: 0;      /* allow proper shrinking inside flex */
+  margin-top: 8px;
+}
+
+/* Compact unit dropdowns (oz/ac, gal, etc.) */
+.mix-unit {
+  min-height: 44px;  /* keep iOS touch target */
+}
+
+/* Results panel shown after a calculation */
+.mix-results {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+.mix-results:empty {
+  margin-top: 0;     /* no gap when there's no result yet */
+}
+
+/* A single result line inside .mix-results */
+.mix-line {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.mix-line b {
+  color: var(--accent);   /* amber in day mode, gold in night mode */
+}
+
+/* Hint lines that follow a result (units, accuracy, conversions) */
+.mix-results .hint {
+  margin-top: 0;
+}
+
+/* On phones, stack the input rows so fields stay easy to tap */
+@media (max-width: 480px) {
+  .mix-row > label {
+    flex: 1 1 100%;
+  }
+}
