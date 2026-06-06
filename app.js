@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.06 · 09:30";
+window.APP_VERSION = "2026.06.06 · 10:15";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -41,6 +41,8 @@ const state = {
   tankGallonsAtRefill: 0,   // state.gallons value at the last refill (sprayer)
   loads: 0,                 // sprayer refills OR combine unloads this session
   loadLog: [],              // timestamped load events
+  bales: 0,                 // baler: bale count this session
+  baleLog: [],              // baler: timestamped bale events
   notes: [],                // field notes (text + optional photo, GPS-tagged)
   _stagedPhoto: null,       // compressed dataURL staged in the Add Note dialog
   planter:  { rowSpacing: 30, rows: 16, population: 34000, variety: "", downforce: 150 },
@@ -1102,6 +1104,8 @@ async function startSession() {
   state.tankGallonsAtRefill = 0;
   state.loads = 0;
   state.loadLog = [];
+  state.bales = 0;
+  state.baleLog = [];
   state.notes = [];            // ← reset field notes for the new session
   renderNotes();
   state.coverageCells.clear();
@@ -1496,18 +1500,25 @@ function applyEquipmentUI() {
   ["mTankLeftBox","mAcToEmptyBox","mMinToEmptyBox"].forEach(function(id){
     var el = $(id); if (el) el.classList.toggle("hidden", !isSprayer);
   });
+  var isBaler = state.equipment.type === "baler";
+
   // Loads tile — sprayer (refills) or combine (unloads)
   var loadsBox = $("mLoadsBox");
   if (loadsBox) loadsBox.classList.toggle("hidden", !(isSprayer || isCombine));
 
-  // Tank & Loads card + its two buttons
+  // Bales tile — baler only
+  var balesBox = $("mBalesBox");
+  if (balesBox) balesBox.classList.toggle("hidden", !isBaler);
+
+  // Tank & Loads / Bales card + its buttons
   var tlCard = $("tankLoadsCard");
-  if (tlCard) tlCard.classList.toggle("hidden", !(isSprayer || isCombine));
-  var refillBtn = $("btnRefill"), unloadBtn = $("btnUnload");
+  if (tlCard) tlCard.classList.toggle("hidden", !(isSprayer || isCombine || isBaler));
+  var refillBtn = $("btnRefill"), unloadBtn = $("btnUnload"), baleBtn = $("btnBale");
   if (refillBtn) refillBtn.classList.toggle("hidden", !isSprayer);
   if (unloadBtn) unloadBtn.classList.toggle("hidden", !isCombine);
+  if (baleBtn)   baleBtn.classList.toggle("hidden", !isBaler);
   var tlTitle = $("tankLoadsTitle");
-  if (tlTitle) tlTitle.textContent = isCombine ? "Grain Loads" : "Tank & Loads";
+  if (tlTitle) tlTitle.textContent = isCombine ? "Grain Loads" : (isBaler ? "Bale Count" : "Tank & Loads");
 
   updateTankAndLoads();
 }
@@ -1523,6 +1534,9 @@ function updateTankAndLoads() {
 
   const loadsEl = $("mLoads");
   if (loadsEl) loadsEl.textContent = state.loads || 0;
+
+  const balesEl = $("mBales");
+  if (balesEl) balesEl.textContent = state.bales || 0;
 
   if (!isSprayer) return;
 
@@ -1582,6 +1596,22 @@ function doUnload() {
   });
   updateTankAndLoads();
   appAlert("Grain unloaded \u2014 load #" + state.loads + " recorded.", "\uD83D\uDCE4 Unload logged");
+}
+
+// Baler: count one bale (independent of combine grain loads)
+function doBale() {
+  if (state.equipment.type !== "baler") return;
+  state.bales = (state.bales || 0) + 1;
+  state.baleLog = state.baleLog || [];
+  state.baleLog.push({
+    t: new Date().toISOString(),
+    minsIn: state.sessionStart ? Math.round((Date.now() - state.sessionStart) / 60000) : 0,
+    type: "bale",
+    n: state.bales,
+    acresAt: +state.acres.toFixed(2)
+  });
+  updateTankAndLoads();
+  appAlert("Bale #" + state.bales + " counted.", "\uD83C\uDF3E Bale logged");
 }
 
 // Refresh the live Yield/Moisture tiles from the latest harvest reading
@@ -1719,6 +1749,18 @@ const EQ_TYPES = {
     subId: "subSpreader",
     fields: ["sdProductType", "sdRate", "sdBin", "sdProductName"],
   },
+  swather: {
+    label: "Swather",
+    emoji: "🌿",
+    subId: "subSwather",
+    fields: ["swWidth", "swCrop", "swConditioner"],
+  },
+  baler: {
+    label: "Baler",
+    emoji: "🟡",
+    subId: "subBaler",
+    fields: ["blType", "blCrop", "blWeight", "blWidth"],
+  },
   other: {
     label: "Other",
     emoji: "❓",
@@ -1773,6 +1815,16 @@ function saveEqModal() {
   // Pull values from the visible sub-menu into state
   const values = readEqParams(type).values;
   applyEqParamsToState(type, values);
+  // Convenience: seed the main "Working Width" from a swather/baler width
+  // when it hasn't been set yet, so acreage tracking works out of the box.
+  if (type === "swather" || type === "baler") {
+    var wEl = $("eqWidth");
+    var subW = parseFloat(type === "swather" ? values.swWidth : values.blWidth) || 0;
+    if (wEl && subW > 0 && (!parseFloat(wEl.value) || parseFloat(wEl.value) <= 0)) {
+      wEl.value = subW;
+      state.equipment.width = Math.max(1, subW);
+    }
+  }
   applyEquipmentUI();                        // ← refresh which metric tiles show
   updateEqSummary();
   closeEqModal();
@@ -1830,6 +1882,17 @@ function applyEqParamsToState(type, values) {
     state.spreader.rate        = parseFloat(values.sdRate) || 0;
     state.spreader.bin         = parseFloat(values.sdBin)  || 0;
     state.spreader.productName = values.sdProductName || "";
+  } else if (type === "swather") {
+    state.swather = state.swather || {};
+    state.swather.width       = parseFloat(values.swWidth) || 0;
+    state.swather.crop        = values.swCrop || "";
+    state.swather.conditioner = values.swConditioner || "none";
+  } else if (type === "baler") {
+    state.baler = state.baler || {};
+    state.baler.baleType = values.blType || "round";
+    state.baler.crop     = values.blCrop || "";
+    state.baler.weight   = parseFloat(values.blWeight) || 0;
+    state.baler.width    = parseFloat(values.blWidth)  || 0;
   } else if (type === "other") {
     state.other = state.other || {};
     state.other.notes = values.otNotes || "";
@@ -2115,6 +2178,7 @@ if ($("btnClearTrail")) $("btnClearTrail").addEventListener("click", clearTrail)
 // Tank refill (sprayer) + grain unload (combine)
 if ($("btnRefill")) $("btnRefill").addEventListener("click", doRefill);
 if ($("btnUnload")) $("btnUnload").addEventListener("click", doUnload);
+if ($("btnBale"))   $("btnBale").addEventListener("click", doBale);
 
 // ============================================================
 // EXPORT — KML / GPX
@@ -2225,6 +2289,8 @@ $("btnSave").addEventListener("click", async () => {
       : null,                                 // ← NEW: harvest readings log
     loads: state.loads || 0,                  // ← NEW: refill/unload count
     loadLog: (state.loadLog || []).slice(),   // ← NEW: timestamped load events
+    bales: state.bales || 0,                  // ← NEW: baler bale count
+    baleLog: (state.baleLog || []).slice(),   // ← NEW: timestamped bale events
     cost: (function(){                        // ← NEW: cost/profit snapshot
       var ci = readCostInputs();
       if (!ci.acres) ci.acres = +state.acres.toFixed(2) || +state.boundary.acres.toFixed(2) || 0;
@@ -2504,6 +2570,17 @@ $("btnPdfRep").addEventListener("click", async () => {
         <td>${x.bushelsAt != null ? x.bushelsAt : (x.gallonsAt != null ? x.gallonsAt : "—")}</td>
       </tr>`).join("")}
     </table>` : (r.loads ? `<h2>Loads</h2><table><tr><td>Total</td><td>${r.loads}</td></tr></table>` : "")}
+
+    ${(r.baleLog && r.baleLog.length) ? `
+    <h2>🌾 Bales (${r.bales || r.baleLog.length})</h2>
+    <table>
+      <tr><th>#</th><th>Time</th><th>Acres</th></tr>
+      ${r.baleLog.map((x) => `<tr>
+        <td>${x.n}</td>
+        <td>${x.minsIn != null ? x.minsIn + " min" : new Date(x.t).toLocaleTimeString()}</td>
+        <td>${x.acresAt != null ? x.acresAt : "—"}</td>
+      </tr>`).join("")}
+    </table>` : (r.bales ? `<h2>🌾 Bales</h2><table><tr><td>Total</td><td>${r.bales}</td></tr></table>` : "")}
 
     ${(r.cost && r.cost.summary) ? `
     <h2>💰 Cost &amp; Profit</h2>
