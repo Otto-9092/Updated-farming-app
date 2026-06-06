@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260606-0930" />
+<link rel="stylesheet" href="styles.css?v=20260606-1015" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* Low-tank warning: tile turns red when <=15% remaining */
@@ -218,6 +218,7 @@
   <div class="metric hidden" id="mAcToEmptyBox"><div class="m-label">Acres to Empty</div><div class="m-val"><span id="mAcToEmpty">—</span></div></div>
   <div class="metric hidden" id="mMinToEmptyBox"><div class="m-label">Min to Empty</div><div class="m-val"><span id="mMinToEmpty">—</span></div></div>
   <div class="metric hidden" id="mLoadsBox"><div class="m-label">Loads</div><div class="m-val"><span id="mLoads">0</span></div></div>
+  <div class="metric hidden" id="mBalesBox"><div class="m-label">Bales</div><div class="m-val"><span id="mBales">0</span></div></div>
 </div>
       </div><!-- /.operate-layout -->
       
@@ -246,6 +247,7 @@
       <div class="btn-row">
         <button id="btnRefill" class="btn btn-primary hidden">🚰 Refill Tank</button>
         <button id="btnUnload" class="btn btn-primary hidden">📤 Unload Grain</button>
+        <button id="btnBale" class="btn btn-primary hidden">🌾 + Bale</button>
       </div>
       <div class="hint" id="tankLoadsHint"></div>
     </div>
@@ -365,6 +367,8 @@
           <option value="planter">🚜 Planter</option>
           <option value="tillage">🍂 Tillage</option>
           <option value="spreader">🟫 Spreader</option>
+          <option value="swather">🌿 Swather</option>
+          <option value="baler">🟡 Baler</option>
           <option value="other">❓ Other</option>
         </select>
       </label>
@@ -840,6 +844,36 @@
       </div>
 
       <!-- ❓ OTHER -->
+      <!-- 🌿 SWATHER -->
+      <div id="subSwather" class="eq-submenu hidden">
+        <label>Cutting Width (ft) <input id="swWidth" type="number" value="16" step="0.5" min="0" /></label>
+        <label>Crop / Forage <input id="swCrop" type="text" placeholder="e.g. alfalfa, grass hay, wheat" /></label>
+        <label>Conditioner
+          <select id="swConditioner">
+            <option value="none">None</option>
+            <option value="roller">Roller</option>
+            <option value="flail">Flail / Impeller</option>
+          </select>
+        </label>
+        <div class="hint">Cutting width also fills "Working Width" on the main screen so acres are tracked.</div>
+      </div>
+
+      <!-- 🟡 BALER -->
+      <div id="subBaler" class="eq-submenu hidden">
+        <label>Bale Type
+          <select id="blType">
+            <option value="round">Round</option>
+            <option value="small_square">Small Square</option>
+            <option value="large_square">Large Square</option>
+          </select>
+        </label>
+        <label>Crop / Forage <input id="blCrop" type="text" placeholder="e.g. alfalfa, grass hay, straw" /></label>
+        <label>Target Bale Weight (lbs) <input id="blWeight" type="number" value="1200" step="25" min="0" /></label>
+        <label>Pickup Width (ft) <input id="blWidth" type="number" value="16" step="0.5" min="0" /></label>
+        <div class="hint">Use the 🌾 <b>+ Bale</b> button on the Operate screen to count bales as you drop them.</div>
+      </div>
+
+      <!-- ❓ OTHER -->
       <div id="subOther" class="eq-submenu hidden">
         <label>Notes <textarea id="otNotes" rows="4" placeholder="Describe the implement, purpose, settings…"></textarea></label>
       </div>
@@ -1031,8 +1065,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260606-0930"></script>
-<script src="app.js?v=20260606-0930"></script>
+<script src="config.js?v=20260606-1015"></script>
+<script src="app.js?v=20260606-1015"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
