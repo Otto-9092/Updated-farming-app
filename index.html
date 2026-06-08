@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260608-1430" />
+<link rel="stylesheet" href="styles.css?v=20260608-1605" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* Low-tank warning: tile turns red when <=15% remaining */
@@ -720,11 +720,26 @@
           <option value="30d">Last 30 days</option>
           <option value="year">This year</option>
         </select>
+        <select id="repEquip" class="report-filter">
+          <option value="all">All equipment</option>
+          <option value="sprayer">🚿 Sprayer</option>
+          <option value="combine">🌾 Combine</option>
+          <option value="planter">🚜 Planter</option>
+          <option value="tillage">🍂 Tillage</option>
+          <option value="spreader">🟫 Spreader</option>
+          <option value="swather">🌿 Swather</option>
+          <option value="baler">🟡 Baler</option>
+          <option value="other">❓ Other</option>
+        </select>
         <select id="repSort" class="report-filter">
           <option value="date_desc">Newest first</option>
           <option value="date_asc">Oldest first</option>
           <option value="name_asc">Name A–Z</option>
           <option value="acres_desc">Most acres</option>
+          <option value="bushels_desc">Most bushels</option>
+          <option value="gallons_desc">Most gallons</option>
+          <option value="bales_desc">Most bales</option>
+          <option value="profit_desc">Most profit</option>
         </select>
       </div>
       <div id="repCount" class="report-count">—</div>
@@ -740,8 +755,13 @@
       <button id="btnViewRep"   class="btn">👁️ View</button>
       <button id="btnRenameRep" class="btn">✏️ Rename</button>
       <button id="btnPdfRep"    class="btn btn-primary">📄 Export PDF</button>
-      <button id="btnExportReportsCSV" class="btn">📊 Export All CSV</button>
       <button id="btnDeleteRep" class="btn btn-ghost">🗑️ Delete</button>
+    </div>
+
+    <!-- Export the current filtered/sorted list -->
+    <div class="btn-row">
+      <button id="btnExportReportsCSV" class="btn">📄 Export View CSV</button>
+      <button id="btnExportReportsPDF" class="btn">🖨️ Export View PDF</button>
     </div>
 
     <pre id="repBody" class="report-body">Select a report…</pre>
@@ -788,6 +808,8 @@
         </select>
       </label>
       <button id="btnSeasonRefresh" class="btn btn-ghost">↻ Refresh</button>
+      <button id="btnSeasonCSV" class="btn">📄 Export CSV</button>
+      <button id="btnSeasonPDF" class="btn">🖨️ Export PDF</button>
     </div>
     <div id="seasonTotals" class="season-totals"></div>
   </div>
@@ -1096,8 +1118,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260608-1430"></script>
-<script src="app.js?v=20260608-1430"></script>
+<script src="config.js?v=20260608-1605"></script>
+<script src="app.js?v=20260608-1605"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
