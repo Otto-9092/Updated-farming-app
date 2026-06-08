@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 17:30";
+window.APP_VERSION = "2026.06.08 · 18:15";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -343,6 +343,11 @@ function seedMoney(n) {
   return (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Tracks which preset is currently loaded (so Save can update/rename it)
+// and the most recent cost-per-acre result (for "Use in Cost & Profit").
+var seedLoadedPreset = null;
+var seedLastCostPerAcre = null;
+
 // Switch the size/rate labels + placeholders based on the sizing mode.
 function syncSeedMode() {
   var mode = $("seedMode") ? $("seedMode").value : "seeds";
@@ -387,23 +392,74 @@ function applySeedPreset(name) {
   syncSeedMode();
   if ($("seedSize")) $("seedSize").value = (p.size != null ? p.size : "");
   if ($("seedBagCost")) $("seedBagCost").value = (p.bagCost != null ? p.bagCost : "");
+  seedLoadedPreset = name;   // remember what we're editing
 }
 
 function saveSeedPreset() {
   var name = ($("seedName") && $("seedName").value || "").trim();
   if (!name) { appAlert("Enter a Crop / Seed Name first, then save."); return; }
   var lib = JSON.parse(localStorage.getItem(LS_SEED) || "{}");
-  lib[name] = {
+
+  var record = {
     _modified: new Date().toISOString(),
     name: name,
     mode: $("seedMode") ? $("seedMode").value : "seeds",
     size: parseFloat($("seedSize") && $("seedSize").value) || 0,
     bagCost: parseFloat($("seedBagCost") && $("seedBagCost").value) || 0
   };
-  localStorage.setItem(LS_SEED, JSON.stringify(lib));
-  loadSeedPresetList();
-  if ($("seedPresetSel")) $("seedPresetSel").value = name;
-  appAlert('Saved seed preset "' + name + '".', "🌱 Preset saved");
+
+  // If we loaded a preset and the name was changed in the field, treat it as a rename.
+  if (seedLoadedPreset && seedLoadedPreset !== name) {
+    delete lib[seedLoadedPreset];
+  }
+  // Warn before clobbering a different existing preset (not the one we're editing).
+  var willOverwrite = lib[name] && name !== seedLoadedPreset;
+
+  var commit = function () {
+    lib[name] = record;
+    localStorage.setItem(LS_SEED, JSON.stringify(lib));
+    seedLoadedPreset = name;
+    loadSeedPresetList();
+    if ($("seedPresetSel")) $("seedPresetSel").value = name;
+    appAlert('Saved seed preset "' + name + '".', "🌱 Preset saved");
+  };
+
+  if (willOverwrite) {
+    appConfirm('A preset named "' + name + '" already exists. Overwrite it?', { title: "Overwrite preset", okLabel: "Overwrite" }).then(function (ok) { if (ok) commit(); });
+  } else {
+    commit();
+  }
+}
+
+// Rename the currently-selected preset via the themed dialog.
+function renameSeedPreset() {
+  var sel = $("seedPresetSel");
+  var name = sel ? sel.value : "";
+  if (!name) { appAlert("Pick a saved preset to rename."); return; }
+  if (typeof showRenameDialog !== "function") {
+    // Fallback: rename by editing the name field then Save.
+    appAlert("Load the preset, edit the name field, then tap Save / Update.");
+    return;
+  }
+  showRenameDialog(name).then(function (next) {
+    if (next == null) return;
+    var trimmed = next.trim();
+    if (!trimmed) { appAlert("Name cannot be empty."); return; }
+    var lib = JSON.parse(localStorage.getItem(LS_SEED) || "{}");
+    if (trimmed === name) return;
+    if (lib[trimmed]) { appAlert('A preset named "' + trimmed + '" already exists.'); return; }
+    var rec = lib[name];
+    if (!rec) return;
+    rec.name = trimmed;
+    rec._modified = new Date().toISOString();
+    lib[trimmed] = rec;
+    delete lib[name];
+    localStorage.setItem(LS_SEED, JSON.stringify(lib));
+    if (seedLoadedPreset === name) { seedLoadedPreset = trimmed; if ($("seedName")) $("seedName").value = trimmed; }
+    loadSeedPresetList();
+    if ($("seedPresetSel")) $("seedPresetSel").value = trimmed;
+    appAlert('Renamed to "' + trimmed + '".', "✏️ Preset renamed");
+  });
 }
 
 function deleteSeedPreset() {
@@ -415,6 +471,7 @@ function deleteSeedPreset() {
     var lib = JSON.parse(localStorage.getItem(LS_SEED) || "{}");
     delete lib[name];
     localStorage.setItem(LS_SEED, JSON.stringify(lib));
+    if (seedLoadedPreset === name) seedLoadedPreset = null;
     loadSeedPresetList();
   });
 }
@@ -440,6 +497,7 @@ function calcSeed() {
   var costExact = bagsExact * bagCost;       // cost using exact bags
   var costWhole = bagsWhole * bagCost;       // cost rounding up to whole bags
   var costPerAcre = acres > 0 ? costWhole / acres : 0;
+  seedLastCostPerAcre = (bagCost > 0) ? costPerAcre : null;   // for "Use in Cost & Profit"
 
   var rows = [
     ["Total " + unitWord + " needed", Math.round(totalNeeded).toLocaleString() + " " + unitWord],
@@ -463,6 +521,29 @@ function resetSeed() {
   });
   if ($("seedPresetSel")) $("seedPresetSel").value = "";
   if ($("seedResults")) $("seedResults").innerHTML = "";
+  seedLoadedPreset = null;
+  seedLastCostPerAcre = null;
+}
+
+// Push the computed seed cost-per-acre into the Cost & Profit "Seed ($/ac)" field.
+function useSeedInCost() {
+  if (seedLastCostPerAcre == null) {
+    calcSeed();   // try to compute on the fly
+  }
+  if (seedLastCostPerAcre == null || isNaN(seedLastCostPerAcre)) {
+    appAlert("Calculate a seed cost first (you need a bag cost, acres, and rate).");
+    return;
+  }
+  var costEl = $("costSeed");
+  if (!costEl) { appAlert("The Cost & Profit Seed field was not found."); return; }
+  var val = (Math.round(seedLastCostPerAcre * 100) / 100);
+  costEl.value = val;
+  var seedAcres = parseFloat($("seedAcres") && $("seedAcres").value) || 0;
+  if (seedAcres > 0 && $("costAcres") && !($("costAcres").value)) $("costAcres").value = seedAcres;
+  if (typeof calcCost === "function") { try { calcCost(); } catch (e) {} }
+  var card = $("costProfitCard");
+  if (card && card.scrollIntoView) card.scrollIntoView({ behavior: "smooth", block: "start" });
+  appAlert("Set Seed ($/ac) to " + seedMoney(val) + " in Cost & Profit.", "➡️ Sent to Cost & Profit");
 }
 
 // Wire up seed calculator
@@ -475,6 +556,8 @@ if ($("btnSeedLoad")) $("btnSeedLoad").addEventListener("click", function () {
   if (sel && sel.value) applySeedPreset(sel.value);
   else appAlert("Pick a saved preset to load.");
 });
+if ($("btnSeedRename")) $("btnSeedRename").addEventListener("click", renameSeedPreset);
+if ($("btnSeedUseCost")) $("btnSeedUseCost").addEventListener("click", useSeedInCost);
 if ($("btnSeedDelete")) $("btnSeedDelete").addEventListener("click", deleteSeedPreset);
 if ($("btnSeedSavePreset")) $("btnSeedSavePreset").addEventListener("click", saveSeedPreset);
 if ($("btnSeedCalc")) $("btnSeedCalc").addEventListener("click", calcSeed);
