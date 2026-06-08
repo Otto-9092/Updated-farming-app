@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 23:55";
+window.APP_VERSION = "2026.06.09 · 00:30";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -28,8 +28,8 @@ const state = {
   efficiencyAttempts: 0,
   coverageCells: new Set(),
   sections: { left: false, full: true, right: false },
-  abLine: { a: null, b: null, poly: null },
-  boundary: { active: false, points: [], poly: null, acres: 0 },
+  abLine: { a: null, b: null, poly: null, swaths: [], swathInfo: "" },
+  boundary: { active: false, points: [], poly: null, acres: 0, drivenPoints: [], offsetSide: "center" },
   coveragePolys: [],
   field: { name: "", crop: "Corn", variety: "" },
   equipment: { name: "", type: "none", width: 90 },   // ← default: nothing selected (clean home screen)
@@ -2152,11 +2152,21 @@ $("btnBoundFinish").addEventListener("click", () => {
   state.boundary.active = false;
   $("btnBoundStart").disabled = false;
   $("btnBoundFinish").disabled = true;
+  // Remember the raw driven path, then offset by the chosen side before saving.
+  state.boundary.drivenPoints = state.boundary.points.slice();
+  var sideSel = $("boundOffsetSide");
+  state.boundary.offsetSide = sideSel ? sideSel.value : "center";
+  state.boundary.points = offsetBoundaryByWidth(state.boundary.drivenPoints, state.boundary.offsetSide);
   drawBoundaryFinal();
   setMode(state.running ? "RUNNING" : "IDLE");
 });
+var _boundOffsetSelEl = $("boundOffsetSide");
+if (_boundOffsetSelEl) _boundOffsetSelEl.addEventListener("change", function () {
+  state.boundary.offsetSide = _boundOffsetSelEl.value;
+});
 $("btnBoundClear").addEventListener("click", () => {
   state.boundary.points = [];
+  state.boundary.drivenPoints = [];
   if (state.boundary.poly) { state.boundary.poly.setMap(null); state.boundary.poly = null; }
   state.boundary.acres = 0;
   $("boundAcres").textContent = "0.00";
@@ -2197,7 +2207,10 @@ $("btnSetB").addEventListener("click", () => {
 $("btnClearAB").addEventListener("click", () => {
   state.abLine.a = state.abLine.b = null;
   if (state.abLine.poly) { state.abLine.poly.setMap(null); state.abLine.poly = null; }
+  clearSwaths();
 });
+$("btnShowSwaths").addEventListener("click", () => { showSwaths(); });
+$("btnHideSwaths").addEventListener("click", () => { clearSwaths(); });
 function renderAB() {
   if (state.abLine.poly) state.abLine.poly.setMap(null);
   if (state.abLine.a && state.abLine.b) {
@@ -2207,6 +2220,139 @@ function renderAB() {
       strokeOpacity: 0.9, map: state.map,
     });
   }
+}
+
+// ============================================================
+// A-B SWATH GUIDANCE — fill the boundary with parallel passes
+// spaced to the machine working width, clipped to the boundary.
+// ============================================================
+function clearSwaths() {
+  if (state.abLine.swaths && state.abLine.swaths.length) {
+    state.abLine.swaths.forEach(function (p) { p.setMap(null); });
+  }
+  state.abLine.swaths = [];
+  var info = document.getElementById("swathInfo");
+  if (info) info.textContent = "";
+}
+
+// Signed perpendicular distance (m) of P from the A->B line. +ve = right of travel.
+function signedPerpDist(P, a, theta) {
+  var d = haversine(a.lat, a.lng, P.lat, P.lng);
+  if (d === 0) return 0;
+  var b = bearingDeg(a.lat, a.lng, P.lat, P.lng);
+  return d * Math.sin((b - theta) * Math.PI / 180);
+}
+
+function showSwaths() {
+  clearSwaths();
+  var a = state.abLine.a, b = state.abLine.b;
+  if (!a || !b) { appAlert("Set point A and point B first to define your line.", "Need A-B line"); return; }
+  var pts = state.boundary.points;
+  if (!pts || pts.length < 3) { appAlert("Record a field boundary first so swaths can fill it.", "Need boundary"); return; }
+
+  var widthM = Math.max(1, (state.equipment.width || 90)) * 0.3048; // ft -> m
+  var theta = bearingDeg(a.lat, a.lng, b.lat, b.lng);
+  var perpR = (theta + 90) % 360;   // to the right of travel
+
+  // Boundary polygon for containment + extent of needed offsets.
+  var poly = new google.maps.Polygon({ paths: pts });
+  var dists = pts.map(function (p) { return signedPerpDist(p, a, theta); });
+  var dmin = Math.min.apply(null, dists), dmax = Math.max.apply(null, dists);
+  var kmin = Math.floor(dmin / widthM), kmax = Math.ceil(dmax / widthM);
+
+  // Diagonal length of field -> how far to extend each swath line before clipping.
+  var span = 0;
+  for (var i = 0; i < pts.length; i++) {
+    for (var j = i + 1; j < pts.length; j++) {
+      var dd = haversine(pts[i].lat, pts[i].lng, pts[j].lat, pts[j].lng);
+      if (dd > span) span = dd;
+    }
+  }
+  var reach = span / 2 + widthM * 2;
+  var step = Math.max(3, widthM / 4);   // sampling resolution along the line
+
+  var drawn = 0;
+  var contains = (google.maps.geometry && google.maps.geometry.poly)
+    ? function (latlng) { return google.maps.geometry.poly.containsLocation(latlng, poly); }
+    : function () { return true; };
+
+  for (var k = kmin; k <= kmax; k++) {
+    // Center point of this swath: A offset perpendicular by k*width.
+    var cp = offsetMeters(a.lat, a.lng, perpR, k * widthM);
+    // Walk the line, collecting in-boundary segments.
+    var seg = [];
+    for (var d = -reach; d <= reach; d += step) {
+      var p = offsetMeters(cp.lat, cp.lng, theta, d);
+      var ll = new google.maps.LatLng(p.lat, p.lng);
+      if (contains(ll)) {
+        seg.push({ lat: p.lat, lng: p.lng });
+      } else if (seg.length >= 2) {
+        drawSwathSeg(seg); drawn++; seg = [];
+      } else { seg = []; }
+    }
+    if (seg.length >= 2) { drawSwathSeg(seg); drawn++; }
+  }
+
+  var info = document.getElementById("swathInfo");
+  if (info) {
+    info.textContent = drawn
+      ? (drawn + " passes \u00b7 " + (state.equipment.width || 90) + " ft spacing")
+      : "No passes fell inside the boundary \u2014 check your A-B line direction.";
+  }
+}
+
+function drawSwathSeg(seg) {
+  var line = new google.maps.Polyline({
+    path: seg, strokeColor: "#00e5ff", strokeWeight: 1.5,
+    strokeOpacity: 0.85, map: state.map, zIndex: 5,
+  });
+  state.abLine.swaths.push(line);
+}
+
+// ============================================================
+// BOUNDARY OFFSET — shift the driven path perpendicular by half
+// the working width so the SAVED boundary marks the worked edge.
+//   "center" -> no shift (drive line = machine center)
+//   "left"   -> driven line is the machine's LEFT edge,  field is to the right
+//   "right"  -> driven line is the machine's RIGHT edge, field is to the left
+// ============================================================
+function offsetBoundaryByWidth(points, side) {
+  if (!points || points.length < 3) return points ? points.slice() : [];
+  if (side === "center" || !side) return points.slice();
+  var halfW = Math.max(1, (state.equipment.width || 90)) * 0.3048 / 2; // m
+
+  // Determine polygon winding so "interior" is consistent.
+  var ringClockwise = isClockwise(points);
+  // For each vertex, offset along the inward normal of the path by halfW.
+  var n = points.length, out = [];
+  for (var i = 0; i < n; i++) {
+    var prev = points[(i - 1 + n) % n], cur = points[i], next = points[(i + 1) % n];
+    // Heading of travel through this vertex (avg of in/out segment bearings).
+    var bIn = bearingDeg(prev.lat, prev.lng, cur.lat, cur.lng);
+    var bOut = bearingDeg(cur.lat, cur.lng, next.lat, next.lng);
+    var heading = averageAngle(bIn, bOut);
+    // Right of travel = heading+90. Left = heading-90.
+    var dir = (side === "left") ? (heading + 90) : (heading - 90);
+    var moved = offsetMeters(cur.lat, cur.lng, dir, halfW);
+    out.push({ lat: moved.lat, lng: moved.lng });
+  }
+  return out;
+}
+
+function isClockwise(pts) {
+  var sum = 0;
+  for (var i = 0; i < pts.length; i++) {
+    var a = pts[i], b = pts[(i + 1) % pts.length];
+    sum += (b.lng - a.lng) * (b.lat + a.lat);
+  }
+  return sum > 0;
+}
+
+function averageAngle(a, b) {
+  var ar = a * Math.PI / 180, br = b * Math.PI / 180;
+  var x = Math.cos(ar) + Math.cos(br), y = Math.sin(ar) + Math.sin(br);
+  if (x === 0 && y === 0) return a;
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
 // ============================================================
