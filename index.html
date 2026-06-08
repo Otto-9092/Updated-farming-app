@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260609-0030" />
+<link rel="stylesheet" href="styles.css?v=20260609-0110" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* ===== Card reordering ===== */
@@ -350,7 +350,7 @@
               <option value="right">Right edge</option>
             </select>
           </label>
-          <div class="hint">Boundary mode ON: GPS points are stored without painting. Drive the perimeter, then finish. The saved boundary is offset by your working width based on the choice above.</div>
+          <div class="hint">Boundary mode ON: GPS points are stored without painting. Drive the perimeter, then finish. After finishing, the grey dashed line shows where you drove and the orange fill shows the offset boundary — change the side above to preview it live.</div>
           <div class="hint" id="boundAcresLine">Boundary acres: <b id="boundAcres">0.00</b></div>
         </div>
         <div class="split-divider"></div>
@@ -365,7 +365,7 @@
             <button id="btnShowSwaths" class="btn btn-sm">🛣️ Show Swaths</button>
             <button id="btnHideSwaths" class="btn btn-sm btn-ghost">Hide</button>
           </div>
-          <div class="hint">Set A then B to define your line. <b>Show Swaths</b> fills the whole field with parallel passes spaced to your working width.</div>
+          <div class="hint">Set A then B to define your line. <b>Show Swaths</b> fills the whole field with parallel passes spaced to your working width. They stay on and auto-update when you change A/B or working width.</div>
           <div class="hint" id="swathInfo"></div>
         </div>
       </div>
@@ -1245,8 +1245,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260609-0030"></script>
-<script src="app.js?v=20260609-0030"></script>
+<script src="config.js?v=20260609-0110"></script>
+<script src="app.js?v=20260609-0110"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
