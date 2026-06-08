@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260608-2145" />
+<link rel="stylesheet" href="styles.css?v=20260608-2230" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* ===== Card reordering ===== */
@@ -44,6 +44,18 @@
   .card.rc-dragging { opacity: 0.55; }
   .card.rc-drop-target { outline: 2px solid #1a7f37; }
   body.reordering .card-title { cursor: default; }
+  /* ===== Split card (two columns, left|right) ===== */
+  .split-card { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: start; }
+  .split-card .split-col { min-width: 0; }
+  .split-card .split-divider { width: 1px; align-self: stretch; background: rgba(128,128,128,0.30); }
+  .split-card .card-title { margin-top: 0; }
+  /* Compact buttons for tight split layouts */
+  .btn.btn-sm { padding: 6px 8px; font-size: 13px; min-width: 0; }
+  .btn-row-compact { gap: 5px; flex-wrap: wrap; }
+  @media (max-width: 560px) {
+    .split-card { grid-template-columns: 1fr; gap: 10px; }
+    .split-card .split-divider { width: auto; height: 1px; }
+  }
   /* Low-tank warning: tile turns red when <=15% remaining */
   .metric.low-tank { background: #b3261e !important; color: #fff !important; }
   .metric.low-tank .m-label, .metric.low-tank .m-val, .metric.low-tank small { color: #fff !important; }
@@ -241,6 +253,7 @@
   <div class="metric hidden" id="mBalesBox"><div class="m-label">Bales</div><div class="m-val"><span id="mBales">0</span></div></div>
 </div>
       </div><!-- /.operate-layout -->
+    </div><!-- /.map-wrap -->
       
     <!-- Section Control (sprayer only) -->
     <div class="card" id="sectionControlCard">
@@ -314,27 +327,30 @@
     <div><span class="dot dot-fast"></span> &gt; target + 2 mph (fast)</div>
   </div>
 </div>
-    <!-- Boundary -->
-    <div class="card">
-      <div class="card-title">Field Boundary</div>
-      <div class="btn-row">
-        <button id="btnBoundStart"  class="btn">▶ Start Boundary</button>
-        <button id="btnBoundFinish" class="btn" disabled>■ Finish Boundary</button>
-        <button id="btnBoundClear"  class="btn btn-ghost">Clear</button>
+    <!-- Boundary + A-B Guidance (side-by-side split card) -->
+    <div class="card" id="boundaryGuidanceCard">
+      <div class="split-card">
+        <div class="split-col">
+          <div class="card-title">Field Boundary</div>
+          <div class="btn-row btn-row-compact">
+            <button id="btnBoundStart"  class="btn btn-sm">▶ Start</button>
+            <button id="btnBoundFinish" class="btn btn-sm" disabled>■ Finish</button>
+            <button id="btnBoundClear"  class="btn btn-sm btn-ghost">Clear</button>
+          </div>
+          <div class="hint">Boundary mode ON: GPS points are stored without painting. Drive the perimeter, then finish.</div>
+          <div class="hint" id="boundAcresLine">Boundary acres: <b id="boundAcres">0.00</b></div>
+        </div>
+        <div class="split-divider"></div>
+        <div class="split-col">
+          <div class="card-title">A-B Guidance</div>
+          <div class="btn-row btn-row-compact">
+            <button id="btnSetA" class="btn btn-sm">Set A</button>
+            <button id="btnSetB" class="btn btn-sm">Set B</button>
+            <button id="btnClearAB" class="btn btn-sm btn-ghost">Clear</button>
+          </div>
+          <div class="hint">Drops A, then B at current GPS — draws straight reference line.</div>
+        </div>
       </div>
-      <div class="hint">When boundary mode is ON, GPS points are stored without painting. Drive the perimeter, then finish.</div>
-      <div class="hint" id="boundAcresLine">Boundary acres: <b id="boundAcres">0.00</b></div>
-    </div>
-
-    <!-- A-B Guidance -->
-    <div class="card">
-      <div class="card-title">A-B Guidance</div>
-      <div class="btn-row">
-        <button id="btnSetA" class="btn">Set A</button>
-        <button id="btnSetB" class="btn">Set B</button>
-        <button id="btnClearAB" class="btn btn-ghost">Clear</button>
-      </div>
-      <div class="hint">Drops A, then B at current GPS — draws straight reference line.</div>
     </div>
   </section>
 
@@ -1210,8 +1226,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260608-2145"></script>
-<script src="app.js?v=20260608-2145"></script>
+<script src="config.js?v=20260608-2230"></script>
+<script src="app.js?v=20260608-2230"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
