@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.09 · 00:30";
+window.APP_VERSION = "2026.06.09 · 01:10";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -28,8 +28,8 @@ const state = {
   efficiencyAttempts: 0,
   coverageCells: new Set(),
   sections: { left: false, full: true, right: false },
-  abLine: { a: null, b: null, poly: null, swaths: [], swathInfo: "" },
-  boundary: { active: false, points: [], poly: null, acres: 0, drivenPoints: [], offsetSide: "center" },
+  abLine: { a: null, b: null, poly: null, swaths: [], swathInfo: "", swathsOn: false },
+  boundary: { active: false, points: [], poly: null, acres: 0, drivenPoints: [], offsetSide: "center", drivenPoly: null },
   coveragePolys: [],
   field: { name: "", crop: "Corn", variety: "" },
   equipment: { name: "", type: "none", width: 90 },   // ← default: nothing selected (clean home screen)
@@ -2158,16 +2158,30 @@ $("btnBoundFinish").addEventListener("click", () => {
   state.boundary.offsetSide = sideSel ? sideSel.value : "center";
   state.boundary.points = offsetBoundaryByWidth(state.boundary.drivenPoints, state.boundary.offsetSide);
   drawBoundaryFinal();
+  drawDrivenPreview();             // show the driven path alongside the offset boundary
+  refreshSwathsIfOn();             // boundary ready -> tile swaths if they were on
   setMode(state.running ? "RUNNING" : "IDLE");
 });
 var _boundOffsetSelEl = $("boundOffsetSide");
 if (_boundOffsetSelEl) _boundOffsetSelEl.addEventListener("change", function () {
   state.boundary.offsetSide = _boundOffsetSelEl.value;
+  previewBoundaryOffset();   // live preview when side changes
+  refreshSwathsIfOn();       // boundary moved -> re-tile swaths
+});
+
+// Live: changing the Working Width re-tiles swaths (and re-previews offset).
+var _eqWidthEl = $("eqWidth");
+if (_eqWidthEl) _eqWidthEl.addEventListener("input", function () {
+  state.equipment.width = Math.max(1, parseFloat(_eqWidthEl.value) || 90);
+  refreshSwathsIfOn();
+  previewBoundaryOffset();
 });
 $("btnBoundClear").addEventListener("click", () => {
   state.boundary.points = [];
   state.boundary.drivenPoints = [];
   if (state.boundary.poly) { state.boundary.poly.setMap(null); state.boundary.poly = null; }
+  clearDrivenPreview();
+  clearSwaths();
   state.boundary.acres = 0;
   $("boundAcres").textContent = "0.00";
 });
@@ -2192,17 +2206,55 @@ function drawBoundaryFinal() {
 }
 
 // ============================================================
+// BOUNDARY OFFSET PREVIEW — show the raw driven path (dashed grey)
+// alongside the offset boundary so the chosen side can be confirmed.
+// ============================================================
+function clearDrivenPreview() {
+  if (state.boundary.drivenPoly) { state.boundary.drivenPoly.setMap(null); state.boundary.drivenPoly = null; }
+}
+
+function drawDrivenPreview() {
+  clearDrivenPreview();
+  var dp = state.boundary.drivenPoints;
+  if (!dp || dp.length < 2) return;
+  // Dashed grey outline of exactly where the machine was driven.
+  state.boundary.drivenPoly = new google.maps.Polygon({
+    paths: dp,
+    strokeColor: "#9aa0a6", strokeWeight: 2, strokeOpacity: 0.9,
+    fillOpacity: 0, clickable: false, zIndex: 3,
+    map: state.map,
+  });
+}
+
+// Recompute + redraw the offset boundary from the driven path using the
+// currently-selected side & working width, and refresh the acres readout.
+function previewBoundaryOffset() {
+  var dp = state.boundary.drivenPoints;
+  if (!dp || dp.length < 3) return;   // nothing recorded yet
+  var sideSel = document.getElementById("boundOffsetSide");
+  var side = sideSel ? sideSel.value : "center";
+  state.boundary.offsetSide = side;
+  state.boundary.points = offsetBoundaryByWidth(dp, side);
+  drawBoundaryFinal();      // redraw filled offset polygon + acres
+  drawDrivenPreview();      // overlay the driven path so both are visible
+  var info = document.getElementById("swathInfo");   // reuse line for a hint
+  // (acres already updated in drawBoundaryFinal)
+}
+
+// ============================================================
 // A-B GUIDANCE
 // ============================================================
 $("btnSetA").addEventListener("click", () => {
   if (!state.lastPos) { appAlert("Need GPS fix first."); return; }
   state.abLine.a = { lat: state.lastPos.lat, lng: state.lastPos.lng };
   renderAB();
+  refreshSwathsIfOn();
 });
 $("btnSetB").addEventListener("click", () => {
   if (!state.lastPos) { appAlert("Need GPS fix first."); return; }
   state.abLine.b = { lat: state.lastPos.lat, lng: state.lastPos.lng };
   renderAB();
+  refreshSwathsIfOn();
 });
 $("btnClearAB").addEventListener("click", () => {
   state.abLine.a = state.abLine.b = null;
@@ -2210,7 +2262,28 @@ $("btnClearAB").addEventListener("click", () => {
   clearSwaths();
 });
 $("btnShowSwaths").addEventListener("click", () => { showSwaths(); });
-$("btnHideSwaths").addEventListener("click", () => { clearSwaths(); });
+$("btnHideSwaths").addEventListener("click", () => { clearSwaths(); persistSwathsOn(false); });
+
+// Persist the swaths on/off preference so it survives reloads.
+var LS_SWATHS_ON = "dof_swaths_on";
+function persistSwathsOn(on) {
+  state.abLine.swathsOn = !!on;
+  try { if (on) localStorage.setItem(LS_SWATHS_ON, "1"); else localStorage.removeItem(LS_SWATHS_ON); } catch (e) {}
+}
+function swathsWereOn() { try { return localStorage.getItem(LS_SWATHS_ON) === "1"; } catch (e) { return false; } }
+// Re-draw swaths whenever the inputs change (A/B, width, boundary) IF they're on.
+// Restore the persisted "swaths on" preference at startup.
+(function () {
+  function go() { if (typeof swathsWereOn === "function" && swathsWereOn()) state.abLine.swathsOn = true; }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go);
+  else go();
+})();
+function refreshSwathsIfOn() {
+  if (!state.abLine.swathsOn) return;
+  if (!state.abLine.a || !state.abLine.b) return;
+  if (!state.boundary.points || state.boundary.points.length < 3) return;
+  showSwaths(true);   // silent re-render
+}
 function renderAB() {
   if (state.abLine.poly) state.abLine.poly.setMap(null);
   if (state.abLine.a && state.abLine.b) {
@@ -2243,12 +2316,14 @@ function signedPerpDist(P, a, theta) {
   return d * Math.sin((b - theta) * Math.PI / 180);
 }
 
-function showSwaths() {
+function showSwaths(silent) {
   clearSwaths();
   var a = state.abLine.a, b = state.abLine.b;
-  if (!a || !b) { appAlert("Set point A and point B first to define your line.", "Need A-B line"); return; }
+  if (!a || !b) { if (!silent) appAlert("Set point A and point B first to define your line.", "Need A-B line"); return; }
   var pts = state.boundary.points;
-  if (!pts || pts.length < 3) { appAlert("Record a field boundary first so swaths can fill it.", "Need boundary"); return; }
+  if (!pts || pts.length < 3) { if (!silent) appAlert("Record a field boundary first so swaths can fill it.", "Need boundary"); return; }
+  state.abLine.swathsOn = true;
+  if (typeof persistSwathsOn === "function") persistSwathsOn(true);
 
   var widthM = Math.max(1, (state.equipment.width || 90)) * 0.3048; // ft -> m
   var theta = bearingDeg(a.lat, a.lng, b.lat, b.lng);
