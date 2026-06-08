@@ -1,4 +1,4 @@
-// ============================================================
+// ===================================================+=========
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
