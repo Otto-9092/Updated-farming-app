@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 16:05";
+window.APP_VERSION = "2026.06.08 · 16:45";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -2331,7 +2331,18 @@ function getFilteredReports() {
   // --- Date filter ---
   const dfEl = $("repDateFilter");
   const df = dfEl ? dfEl.value : "all";
-  if (df !== "all") {
+  if (df === "custom") {
+    // Custom start/end range (inclusive). Either bound is optional.
+    const fromEl = $("repFrom"), toEl = $("repTo");
+    const fromV = fromEl && fromEl.value ? new Date(fromEl.value + "T00:00:00").getTime() : null;
+    const toV   = toEl && toEl.value ? new Date(toEl.value + "T23:59:59.999").getTime() : null;
+    list = list.filter(r => {
+      const t = new Date(r.date).getTime();
+      if (fromV != null && t < fromV) return false;
+      if (toV   != null && t > toV)   return false;
+      return true;
+    });
+  } else if (df !== "all") {
     const now = Date.now();
     const day = 86400000;
     const cutoffs = {
@@ -2403,12 +2414,20 @@ function loadReportsList() {
 }
 
 // Wire up search + filter + sort to re-render live
-["repSearch", "repDateFilter", "repEquip", "repSort"].forEach(id => {
+function syncRepRangeVisibility() {
+  const row = $("repRangeRow");
+  const df = $("repDateFilter");
+  if (row && df) row.classList.toggle("hidden", df.value !== "custom");
+}
+syncRepRangeVisibility();
+
+["repSearch", "repDateFilter", "repEquip", "repSort", "repFrom", "repTo"].forEach(id => {
   const el = $(id);
   if (!el) return;
   el.addEventListener("input", loadReportsList);
   el.addEventListener("change", loadReportsList);
 });
+if ($("repDateFilter")) $("repDateFilter").addEventListener("change", syncRepRangeVisibility);
 
 // View
 $("btnViewRep").addEventListener("click", () => {
@@ -2855,8 +2874,13 @@ function reportsListToHTML(list) {
 
   // Filter description
   var srch = ($("repSearch") && $("repSearch").value || "").trim();
-  var dfMap = { all: "All dates", today: "Today", "7d": "Last 7 days", "30d": "Last 30 days", year: "This year" };
-  var df = $("repDateFilter") ? (dfMap[$("repDateFilter").value] || $("repDateFilter").value) : "All dates";
+  var dfMap = { all: "All dates", today: "Today", "7d": "Last 7 days", "30d": "Last 30 days", year: "This year", custom: "Custom range" };
+  var dfVal = $("repDateFilter") ? $("repDateFilter").value : "all";
+  var df = dfMap[dfVal] || dfVal;
+  if (dfVal === "custom") {
+    var rf = $("repFrom") && $("repFrom").value, rt = $("repTo") && $("repTo").value;
+    df = "Custom range (" + (rf || "any") + " \u2192 " + (rt || "any") + ")";
+  }
   var eq = $("repEquip") ? $("repEquip").value : "all";
   var eqDesc = (eq === "all") ? "All equipment" : eqLabelOf(eq);
   var sortMap = { date_desc: "Newest first", date_asc: "Oldest first", name_asc: "Name A\u2013Z",
@@ -3255,16 +3279,37 @@ function populateSeasonYears() {
   var prev = sel.value;
   var years = seasonYearsAvailable(seasonAllReports());
   sel.innerHTML = '<option value="all">All Years</option>' +
-    years.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join("");
+    years.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join("") +
+    '<option value="custom">Custom range\u2026</option>';
   // keep prior selection if still valid
-  if (prev && (prev === "all" || years.indexOf(Number(prev)) >= 0)) sel.value = prev;
+  if (prev && (prev === "all" || prev === "custom" || years.indexOf(Number(prev)) >= 0)) sel.value = prev;
+  syncSeasonRangeVisibility();
+}
+
+// Show/hide the From/To date inputs when "Custom range" is chosen.
+function syncSeasonRangeVisibility() {
+  var custom = $("seasonYear") && $("seasonYear").value === "custom";
+  var fl = $("seasonFromLabel"), tl = $("seasonToLabel");
+  if (fl) fl.classList.toggle("hidden", !custom);
+  if (tl) tl.classList.toggle("hidden", !custom);
 }
 
 function seasonFiltered() {
   var yr = $("seasonYear") ? $("seasonYear").value : "all";
   var eq = $("seasonEquip") ? $("seasonEquip").value : "all";
   var reps = seasonAllReports();
-  if (yr && yr !== "all") {
+  if (yr === "custom") {
+    var fromEl = $("seasonFrom"), toEl = $("seasonTo");
+    var fromV = fromEl && fromEl.value ? new Date(fromEl.value + "T00:00:00").getTime() : null;
+    var toV   = toEl && toEl.value ? new Date(toEl.value + "T23:59:59.999").getTime() : null;
+    reps = reps.filter(function (r) {
+      if (!r.date) return false;
+      var t = new Date(r.date).getTime();
+      if (fromV != null && t < fromV) return false;
+      if (toV   != null && t > toV)   return false;
+      return true;
+    });
+  } else if (yr && yr !== "all") {
     reps = reps.filter(function (r) { return r.date && String(new Date(r.date).getFullYear()) === String(yr); });
   }
   if (eq && eq !== "all") {
@@ -3470,7 +3515,10 @@ function seasonCurrentView() {
   return {
     reps: reps, primary: primary, primaryLabel: primaryLabel,
     secondary: secondary, secLabel: secLabel, tot: tot,
-    filters: { year: (yr === "all" ? "All Years" : yr), equip: eqLabel,
+    filters: { year: (yr === "all" ? "All Years"
+                : (yr === "custom"
+                   ? ("Custom range (" + (($("seasonFrom") && $("seasonFrom").value) || "any") + " \u2192 " + (($("seasonTo") && $("seasonTo").value) || "any") + ")")
+                   : yr)), equip: eqLabel,
                groupBy: primaryLabel, sortBy: (sortBy.charAt(0).toUpperCase() + sortBy.slice(1)) }
   };
 }
@@ -3605,7 +3653,9 @@ function exportSeasonPDF() {
 if ($("btnSeasonCSV")) $("btnSeasonCSV").addEventListener("click", exportSeasonCSV);
 if ($("btnSeasonPDF")) $("btnSeasonPDF").addEventListener("click", exportSeasonPDF);
 
-if ($("seasonYear")) $("seasonYear").addEventListener("change", renderSeason);
+if ($("seasonYear")) $("seasonYear").addEventListener("change", function () { syncSeasonRangeVisibility(); renderSeason(); });
+if ($("seasonFrom")) $("seasonFrom").addEventListener("change", renderSeason);
+if ($("seasonTo")) $("seasonTo").addEventListener("change", renderSeason);
 if ($("seasonEquip")) $("seasonEquip").addEventListener("change", renderSeason);
 if ($("seasonGroup")) $("seasonGroup").addEventListener("change", renderSeason);
 if ($("seasonSort")) $("seasonSort").addEventListener("change", renderSeason);
