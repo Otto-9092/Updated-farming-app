@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 14:30";
+window.APP_VERSION = "2026.06.08 · 16:05";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -2344,16 +2344,28 @@ function getFilteredReports() {
     if (cutoff != null) list = list.filter(r => new Date(r.date).getTime() >= cutoff);
   }
 
+  // --- Equipment filter ---
+  const eqEl = $("repEquip");
+  const eqFilter = eqEl ? eqEl.value : "all";
+  if (eqFilter && eqFilter !== "all") {
+    list = list.filter(r => r.equipment && r.equipment.type === eqFilter);
+  }
+
   // --- Sort ---
   const sortEl = $("repSort");
   const sort = sortEl ? sortEl.value : "date_desc";
+  const profitOf = r => (r.cost && r.cost.summary && r.cost.summary.totalProfit != null) ? r.cost.summary.totalProfit : -Infinity;
   list.sort((a, b) => {
     switch (sort) {
-      case "date_asc":   return a.date.localeCompare(b.date);
-      case "name_asc":   return (a.name || "").localeCompare(b.name || "");
-      case "acres_desc": return (b.acres || 0) - (a.acres || 0);
+      case "date_asc":     return a.date.localeCompare(b.date);
+      case "name_asc":     return (a.name || "").localeCompare(b.name || "");
+      case "acres_desc":   return (b.acres || 0) - (a.acres || 0);
+      case "bushels_desc": return (b.bushels || 0) - (a.bushels || 0);
+      case "gallons_desc": return (b.gallons || 0) - (a.gallons || 0);
+      case "bales_desc":   return (b.bales || 0) - (a.bales || 0);
+      case "profit_desc":  return profitOf(b) - profitOf(a);
       case "date_desc":
-      default:           return b.date.localeCompare(a.date);
+      default:             return b.date.localeCompare(a.date);
     }
   });
 
@@ -2391,7 +2403,7 @@ function loadReportsList() {
 }
 
 // Wire up search + filter + sort to re-render live
-["repSearch", "repDateFilter", "repSort"].forEach(id => {
+["repSearch", "repDateFilter", "repEquip", "repSort"].forEach(id => {
   const el = $(id);
   if (!el) return;
   el.addEventListener("input", loadReportsList);
@@ -2761,9 +2773,10 @@ function csvEscape(val) {
 }
 
 function reportsToCSV() {
-  var all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
-  var list = Object.values(all);
-  list.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
+  // Export the CURRENT filtered + sorted view (search / date / equipment / sort).
+  var list = (typeof getFilteredReports === "function")
+    ? getFilteredReports()
+    : Object.values(JSON.parse(localStorage.getItem(LS_REPS) || "{}"));
 
   var headers = [
     "Date", "Name", "Field", "Crop", "Variety",
@@ -2773,7 +2786,7 @@ function reportsToCSV() {
     "Wind Speed (mph)", "Wind Dir", "Temp (F)", "Sky", "Weather Time",
     "Exp Yield (bu/ac)", "Start Moisture (%)", "Harvest Readings",
     "Last Yield (bu/ac)", "Last Moisture (%)", "Last Quality",
-    "Loads", "Load Events",
+    "Loads", "Bales", "Load Events",
     "Cost/Acre ($)", "Revenue/Acre ($)", "Profit/Acre ($)",
     "Total Cost ($)", "Total Revenue ($)", "Total Profit ($)", "Break-even ($/bu)",
     "Report ID"
@@ -2803,6 +2816,7 @@ function reportsToCSV() {
       (r.harvest && r.harvest.log && r.harvest.log.length) ? r.harvest.log[r.harvest.log.length-1].moisture : "",
       (r.harvest && r.harvest.log && r.harvest.log.length) ? r.harvest.log[r.harvest.log.length-1].quality : "",
       r.loads || 0,
+      r.bales || 0,
       (r.loadLog && r.loadLog.length) ? r.loadLog.map(function(x){ return "#"+x.n+"@"+(x.minsIn!=null?x.minsIn+"min":"")+(x.acresAt!=null?" "+x.acresAt+"ac":""); }).join("; ") : "",
       (r.cost && r.cost.summary) ? r.cost.summary.perAcCost.toFixed(2) : "",
       (r.cost && r.cost.summary) ? r.cost.summary.revPerAc.toFixed(2) : "",
@@ -2820,11 +2834,126 @@ function reportsToCSV() {
 
 if ($("btnExportReportsCSV")) {
   $("btnExportReportsCSV").addEventListener("click", function () {
-    var all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
-    if (!Object.keys(all).length) { appAlert("No reports to export yet."); return; }
+    var list = getFilteredReports();
+    if (!list.length) { appAlert("No reports match the current filters to export."); return; }
     var csv = reportsToCSV();
     var ts = new Date().toISOString().slice(0, 10);
-    downloadFile("DiamondO_Reports_" + ts + ".csv", "\ufeff" + csv, "text/csv;charset=utf-8");
+    downloadFile("DiamondO_Reports_view_" + ts + ".csv", "\ufeff" + csv, "text/csv;charset=utf-8");
+  });
+}
+
+// ============================================================
+// REPORTS — export the current filtered/sorted LIST as one PDF
+// (mirrors the Season export: opens a printable page in a new tab)
+// ============================================================
+function reportsListToHTML(list) {
+  var eqLabelOf = function (t) {
+    var cfg = (typeof EQ_TYPES !== "undefined" && t) ? EQ_TYPES[t] : null;
+    return cfg ? (cfg.emoji + " " + cfg.label) : (t || "\u2014");
+  };
+  var anyProfit = list.some(function (r) { return r.cost && r.cost.summary && r.cost.summary.totalProfit != null; });
+
+  // Filter description
+  var srch = ($("repSearch") && $("repSearch").value || "").trim();
+  var dfMap = { all: "All dates", today: "Today", "7d": "Last 7 days", "30d": "Last 30 days", year: "This year" };
+  var df = $("repDateFilter") ? (dfMap[$("repDateFilter").value] || $("repDateFilter").value) : "All dates";
+  var eq = $("repEquip") ? $("repEquip").value : "all";
+  var eqDesc = (eq === "all") ? "All equipment" : eqLabelOf(eq);
+  var sortMap = { date_desc: "Newest first", date_asc: "Oldest first", name_asc: "Name A\u2013Z",
+                  acres_desc: "Most acres", bushels_desc: "Most bushels", gallons_desc: "Most gallons",
+                  bales_desc: "Most bales", profit_desc: "Most profit" };
+  var sort = $("repSort") ? (sortMap[$("repSort").value] || $("repSort").value) : "Newest first";
+
+  // Totals across the filtered list
+  var tot = { acres: 0, bushels: 0, gallons: 0, loads: 0, bales: 0, profit: 0, hasProfit: false };
+  list.forEach(function (r) {
+    tot.acres += sNum(r.acres); tot.bushels += sNum(r.bushels); tot.gallons += sNum(r.gallons);
+    tot.loads += sNum(r.loads); tot.bales += sNum(r.bales);
+    if (r.cost && r.cost.summary && r.cost.summary.totalProfit != null) { tot.profit += sNum(r.cost.summary.totalProfit); tot.hasProfit = true; }
+  });
+
+  var rows = list.map(function (r) {
+    var f = r.field || {}, e = r.equipment || {};
+    var profit = (r.cost && r.cost.summary && r.cost.summary.totalProfit != null) ? r.cost.summary.totalProfit : null;
+    return "<tr>" +
+      "<td>" + escHtml(r.date ? new Date(r.date).toLocaleDateString() : "") + "</td>" +
+      "<td>" + escHtml(r.name || "") + "</td>" +
+      "<td>" + escHtml(f.name || "") + "</td>" +
+      "<td>" + escHtml(f.crop || "") + "</td>" +
+      "<td>" + escHtml(eqLabelOf(e.type)) + "</td>" +
+      '<td class="n">' + sNum(r.acres).toFixed(1) + "</td>" +
+      '<td class="n">' + Math.round(sNum(r.bushels)).toLocaleString() + "</td>" +
+      '<td class="n">' + sNum(r.gallons).toFixed(0) + "</td>" +
+      '<td class="n">' + sNum(r.loads) + "</td>" +
+      '<td class="n">' + sNum(r.bales) + "</td>" +
+      (anyProfit ? '<td class="n">' + (profit != null ? fmtMoney(profit) : "\u2014") + "</td>" : "") +
+      "</tr>";
+  }).join("");
+
+  return '<!doctype html><html><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>Reports</title><style>' +
+    'body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:24px;}' +
+    'h1{margin:0 0 4px;font-size:22px;}' +
+    '.meta{color:#555;font-size:13px;margin-bottom:6px;}.meta b{color:#111;}' +
+    'table{border-collapse:collapse;width:100%;font-size:13px;margin-top:10px;}' +
+    'th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;}' +
+    'th{background:#f3efe0;}td.n,th.n{text-align:right;}' +
+    'tr.tot td{font-weight:bold;background:#faf7ec;}' +
+    '.action-bar{margin-bottom:16px;display:flex;gap:10px;}' +
+    '.action-bar button{padding:10px 14px;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;}' +
+    '.btn-back{background:#444;color:#fff;}.btn-print{background:#ffb703;color:#1a1a1a;}' +
+    '@media print{.action-bar{display:none!important;}body{padding:30px;}}' +
+    '</style></head><body>' +
+    '<div class="action-bar">' +
+    '<button class="btn-back" onclick="if(window.opener){window.close();}else{history.back();}">\u2190 Back to App</button>' +
+    '<button class="btn-print" onclick="window.print()">\uD83D\uDDA8\uFE0F Print / Save PDF</button>' +
+    '</div>' +
+    '<h1>\uD83D\uDCC4 Reports</h1>' +
+    '<div class="meta"><b>Search:</b> ' + escHtml(srch || "(none)") +
+    ' &nbsp; <b>Dates:</b> ' + escHtml(df) +
+    ' &nbsp; <b>Equipment:</b> ' + escHtml(eqDesc) +
+    ' &nbsp; <b>Sorted by:</b> ' + escHtml(sort) + '</div>' +
+    '<div class="meta">Generated ' + escHtml(new Date().toLocaleString()) +
+    ' \u00B7 ' + list.length + ' report' + (list.length !== 1 ? "s" : "") + '</div>' +
+    '<table><thead><tr><th>Date</th><th>Name</th><th>Field</th><th>Crop</th><th>Equipment</th>' +
+    '<th class="n">Acres</th><th class="n">Bushels</th><th class="n">Gallons</th>' +
+    '<th class="n">Loads</th><th class="n">Bales</th>' +
+    (anyProfit ? '<th class="n">Profit</th>' : "") + '</tr></thead><tbody>' +
+    rows +
+    '<tr class="tot"><td>TOTAL</td><td></td><td></td><td></td><td></td>' +
+    '<td class="n">' + tot.acres.toFixed(1) + "</td>" +
+    '<td class="n">' + Math.round(tot.bushels).toLocaleString() + "</td>" +
+    '<td class="n">' + tot.gallons.toFixed(0) + "</td>" +
+    '<td class="n">' + tot.loads + "</td>" +
+    '<td class="n">' + tot.bales + "</td>" +
+    (anyProfit ? '<td class="n">' + (tot.hasProfit ? fmtMoney(tot.profit) : "\u2014") + "</td>" : "") +
+    '</tr></tbody></table></body></html>';
+}
+
+if ($("btnExportReportsPDF")) {
+  $("btnExportReportsPDF").addEventListener("click", function () {
+    var list = getFilteredReports();
+    if (!list.length) { appAlert("No reports match the current filters to export."); return; }
+    var html = reportsListToHTML(list);
+
+    var win = null;
+    try { win = window.open("", "_blank"); } catch (e) { win = null; }
+    var url = null;
+    try { url = URL.createObjectURL(new Blob([html], { type: "text/html" })); } catch (e) { url = null; }
+
+    if (win && url) {
+      try { win.location.href = url; }
+      catch (e) { try { win.document.open(); win.document.write(html); win.document.close(); } catch (e2) {} }
+      setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
+    } else if (url) {
+      window.location.href = url;
+      setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
+    } else if (win) {
+      try { win.document.open(); win.document.write(html); win.document.close(); } catch (e) {}
+    } else {
+      appAlert("Could not open the export view. Please allow pop-ups for this site and try again.", "PDF");
+    }
   });
 }
 
@@ -3303,6 +3432,178 @@ function seasonTable(groups, label, tot) {
     '</tr></tfoot>';
   return head + body + '</tbody>' + foot + '</table>';
 }
+
+// ============================================================
+// SEASON SUMMARY — export current view (CSV / PDF)
+// Rebuilds the exact filtered + grouped + sorted data that is
+// currently shown, so exports always match the dashboard.
+// ============================================================
+function seasonCurrentView() {
+  var reps    = seasonFiltered();
+  var groupBy = $("seasonGroup") ? $("seasonGroup").value : "crop";
+  var sortBy  = $("seasonSort")  ? $("seasonSort").value  : "acres";
+  var yr      = $("seasonYear")  ? $("seasonYear").value  : "all";
+  var eq      = $("seasonEquip") ? $("seasonEquip").value : "all";
+  var sortFn  = seasonSortFn(sortBy);
+
+  var groupLabels = { crop: "Crop", field: "Field", equipment: "Equipment", month: "Month" };
+  var primaryLabel = groupLabels[groupBy] || "Crop";
+  var primary = aggregateBy(reps, seasonKeyFn(groupBy), sortFn);
+
+  var secKey   = (groupBy === "field") ? "crop" : "field";
+  var secLabel = (groupBy === "field") ? "Crop" : "Field";
+  var secondary = aggregateBy(reps, seasonKeyFn(secKey), sortFn);
+
+  var tot = { reports: reps.length, acres: 0, bushels: 0, gallons: 0, loads: 0, bales: 0, profit: 0, hasProfit: false };
+  reps.forEach(function (r) {
+    tot.acres += sNum(r.acres); tot.bushels += sNum(r.bushels);
+    tot.gallons += sNum(r.gallons); tot.loads += sNum(r.loads); tot.bales += sNum(r.bales);
+    if (r.cost && r.cost.summary && r.cost.summary.totalProfit != null) { tot.profit += sNum(r.cost.summary.totalProfit); tot.hasProfit = true; }
+  });
+
+  var eqLabel = "All Equipment";
+  if (eq !== "all") {
+    var cfg = (typeof EQ_TYPES !== "undefined") ? EQ_TYPES[eq] : null;
+    eqLabel = cfg ? (cfg.emoji + " " + cfg.label) : eq;
+  }
+
+  return {
+    reps: reps, primary: primary, primaryLabel: primaryLabel,
+    secondary: secondary, secLabel: secLabel, tot: tot,
+    filters: { year: (yr === "all" ? "All Years" : yr), equip: eqLabel,
+               groupBy: primaryLabel, sortBy: (sortBy.charAt(0).toUpperCase() + sortBy.slice(1)) }
+  };
+}
+
+function csvCell(v) {
+  var s = (v == null) ? "" : String(v);
+  if (/[",\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function seasonViewToCSV(view) {
+  var lines = [];
+  lines.push(["Season Summary Export"].map(csvCell).join(","));
+  lines.push(["Year", view.filters.year].map(csvCell).join(","));
+  lines.push(["Equipment", view.filters.equip].map(csvCell).join(","));
+  lines.push(["Grouped By", view.filters.groupBy].map(csvCell).join(","));
+  lines.push(["Sorted By", view.filters.sortBy].map(csvCell).join(","));
+  lines.push(["Generated", new Date().toLocaleString()].map(csvCell).join(","));
+  lines.push("");
+
+  function tableBlock(title, label, groups) {
+    lines.push([title].map(csvCell).join(","));
+    lines.push([label, "Reports", "Acres", "Bushels", "Gallons", "Loads", "Bales", "Profit ($)"].map(csvCell).join(","));
+    groups.forEach(function (g) {
+      lines.push([
+        g.key, g.reports, g.acres.toFixed(1), Math.round(g.bushels),
+        g.gallons.toFixed(0), g.loads, g.bales,
+        g.hasProfit ? g.profit.toFixed(2) : ""
+      ].map(csvCell).join(","));
+    });
+    var t = view.tot;
+    lines.push([
+      "TOTAL", t.reports, t.acres.toFixed(1), Math.round(t.bushels),
+      t.gallons.toFixed(0), t.loads, t.bales, t.hasProfit ? t.profit.toFixed(2) : ""
+    ].map(csvCell).join(","));
+    lines.push("");
+  }
+
+  tableBlock("By " + view.primaryLabel, view.primaryLabel, view.primary);
+  tableBlock("By " + view.secLabel, view.secLabel, view.secondary);
+  return lines.join("\n");
+}
+
+function exportSeasonCSV() {
+  var view = seasonCurrentView();
+  if (!view.reps.length) { appAlert("No data in the current view to export. Adjust the filters and try again."); return; }
+  var ts = new Date().toISOString().slice(0, 10);
+  var tag = view.filters.groupBy.toLowerCase();
+  downloadFile("DiamondO_Season_" + tag + "_" + ts + ".csv", "\ufeff" + seasonViewToCSV(view), "text/csv;charset=utf-8");
+}
+
+function seasonViewToHTML(view) {
+  var t = view.tot;
+  var moneyCell = function (g) {
+    if (!g.hasProfit) return "\u2014";
+    return '<span class="' + (g.profit >= 0 ? "pos" : "neg") + '">' + fmtMoney(g.profit) + '</span>';
+  };
+  var tableHTML = function (title, label, groups) {
+    var rows = groups.map(function (g) {
+      return '<tr><td>' + escHtml(g.key) + '</td><td class="n">' + g.reports + '</td>' +
+        '<td class="n">' + g.acres.toFixed(1) + '</td><td class="n">' + Math.round(g.bushels).toLocaleString() + '</td>' +
+        '<td class="n">' + g.gallons.toFixed(0) + '</td><td class="n">' + g.loads + '</td><td class="n">' + g.bales + '</td>' +
+        '<td class="n">' + moneyCell(g) + '</td></tr>';
+    }).join("");
+    return '<h2>' + escHtml(title) + '</h2><table><thead><tr>' +
+      '<th>' + escHtml(label) + '</th><th class="n">Reports</th><th class="n">Acres</th><th class="n">Bushels</th>' +
+      '<th class="n">Gallons</th><th class="n">Loads</th><th class="n">Bales</th><th class="n">Profit</th></tr></thead><tbody>' +
+      rows +
+      '<tr class="tot"><td>TOTAL</td><td class="n">' + t.reports + '</td><td class="n">' + t.acres.toFixed(1) + '</td>' +
+      '<td class="n">' + Math.round(t.bushels).toLocaleString() + '</td><td class="n">' + t.gallons.toFixed(0) + '</td>' +
+      '<td class="n">' + t.loads + '</td><td class="n">' + t.bales + '</td><td class="n">' +
+      (t.hasProfit ? fmtMoney(t.profit) : "\u2014") + '</td></tr></tbody></table>';
+  };
+
+  return '<!doctype html><html><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>Season Summary</title><style>' +
+    'body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:24px;}' +
+    'h1{margin:0 0 4px;font-size:22px;}h2{margin:22px 0 8px;font-size:16px;}' +
+    '.meta{color:#555;font-size:13px;margin-bottom:6px;}' +
+    '.meta b{color:#111;}' +
+    'table{border-collapse:collapse;width:100%;font-size:13px;margin-bottom:8px;}' +
+    'th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;}' +
+    'th{background:#f3efe0;}td.n,th.n{text-align:right;}' +
+    'tr.tot td{font-weight:bold;background:#faf7ec;}' +
+    '.pos{color:#1c7c3c;}.neg{color:#c0301f;}' +
+    '.action-bar{margin-bottom:16px;display:flex;gap:10px;}' +
+    '.action-bar button{padding:10px 14px;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;}' +
+    '.btn-back{background:#444;color:#fff;}.btn-print{background:#ffb703;color:#1a1a1a;}' +
+    '@media print{.action-bar{display:none!important;}body{padding:30px;}}' +
+    '</style></head><body>' +
+    '<div class="action-bar">' +
+    '<button class="btn-back" onclick="if(window.opener){window.close();}else{history.back();}">\u2190 Back to App</button>' +
+    '<button class="btn-print" onclick="window.print()">\uD83D\uDDA8\uFE0F Print / Save PDF</button>' +
+    '</div>' +
+    '<h1>\uD83D\uDCCA Season Summary</h1>' +
+    '<div class="meta"><b>Year:</b> ' + escHtml(view.filters.year) +
+    ' &nbsp; <b>Equipment:</b> ' + escHtml(view.filters.equip) +
+    ' &nbsp; <b>Grouped by:</b> ' + escHtml(view.filters.groupBy) +
+    ' &nbsp; <b>Sorted by:</b> ' + escHtml(view.filters.sortBy) + '</div>' +
+    '<div class="meta">Generated ' + escHtml(new Date().toLocaleString()) +
+    ' \u00B7 ' + view.tot.reports + ' report' + (view.tot.reports !== 1 ? "s" : "") + '</div>' +
+    tableHTML("By " + view.primaryLabel, view.primaryLabel, view.primary) +
+    tableHTML("By " + view.secLabel, view.secLabel, view.secondary) +
+    '</body></html>';
+}
+
+function exportSeasonPDF() {
+  var view = seasonCurrentView();
+  if (!view.reps.length) { appAlert("No data in the current view to export. Adjust the filters and try again."); return; }
+  var html = seasonViewToHTML(view);
+
+  var win = null;
+  try { win = window.open("", "_blank"); } catch (e) { win = null; }
+  var url = null;
+  try { url = URL.createObjectURL(new Blob([html], { type: "text/html" })); } catch (e) { url = null; }
+
+  if (win && url) {
+    try { win.location.href = url; }
+    catch (e) { try { win.document.open(); win.document.write(html); win.document.close(); } catch (e2) {} }
+    setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
+  } else if (url) {
+    window.location.href = url;
+    setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
+  } else if (win) {
+    try { win.document.open(); win.document.write(html); win.document.close(); } catch (e) {}
+  } else {
+    appAlert("Could not open the export view. Please allow pop-ups for this site and try again.", "PDF");
+  }
+}
+
+if ($("btnSeasonCSV")) $("btnSeasonCSV").addEventListener("click", exportSeasonCSV);
+if ($("btnSeasonPDF")) $("btnSeasonPDF").addEventListener("click", exportSeasonPDF);
 
 if ($("seasonYear")) $("seasonYear").addEventListener("change", renderSeason);
 if ($("seasonEquip")) $("seasonEquip").addEventListener("change", renderSeason);
