@@ -23,9 +23,27 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260608-2045" />
+<link rel="stylesheet" href="styles.css?v=20260608-2145" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
+  /* ===== Card reordering ===== */
+  .reorder-toggle-row { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 8px; }
+  .reorder-reset-btn { display: none; }
+  body.reordering .reorder-reset-btn { display: inline-flex; }
+  .reorder-toggle-row .btn.reorder-on { background: #1a7f37; color: #fff; border-color: #1a7f37; }
+  .card-reorder-ctrls { display: none; gap: 4px; float: right; margin-left: 8px; align-items: center; }
+  body.reordering .card-reorder-ctrls { display: inline-flex; }
+  .card-reorder-ctrls .rc-btn {
+    border: 1px solid rgba(128,128,128,0.4); background: rgba(128,128,128,0.10);
+    border-radius: 6px; min-width: 30px; height: 30px; font-size: 15px; line-height: 1;
+    cursor: pointer; padding: 0 6px; color: inherit; touch-action: manipulation;
+  }
+  .card-reorder-ctrls .rc-btn:active { background: rgba(128,128,128,0.28); }
+  .card-reorder-ctrls .rc-handle { cursor: grab; opacity: 0.7; }
+  body.reordering .card { outline: 1px dashed rgba(26,127,55,0.5); }
+  .card.rc-dragging { opacity: 0.55; }
+  .card.rc-drop-target { outline: 2px solid #1a7f37; }
+  body.reordering .card-title { cursor: default; }
   /* Low-tank warning: tile turns red when <=15% remaining */
   .metric.low-tank { background: #b3261e !important; color: #fff !important; }
   .metric.low-tank .m-label, .metric.low-tank .m-val, .metric.low-tank small { color: #fff !important; }
@@ -1192,8 +1210,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260608-2045"></script>
-<script src="app.js?v=20260608-2045"></script>
+<script src="config.js?v=20260608-2145"></script>
+<script src="app.js?v=20260608-2145"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
