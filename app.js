@@ -1,8 +1,8 @@
-// ===================================================+=========
+// ============================================================
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 19:35";
+window.APP_VERSION = "2026.06.08 · 20:45";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -546,6 +546,235 @@ function exportSeedPresetsCSV() {
   downloadFile("DiamondO_SeedPresets_" + ts + ".csv", "\ufeff" + seedPresetsToCSV(), "text/csv;charset=utf-8");
 }
 
+// ---- Generic CSV parser: handles quoted fields, commas, escaped quotes, CRLF/LF ----
+function parseCSV(text) {
+  if (text == null) return [];
+  // Strip a leading UTF-8 BOM if present.
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  var rows = [], row = [], field = "", i = 0, inQuotes = false;
+  while (i < text.length) {
+    var ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += ch; i++; continue;
+    }
+    if (ch === '"') { inQuotes = true; i++; continue; }
+    if (ch === ',') { row.push(field); field = ""; i++; continue; }
+    if (ch === '\r') { i++; continue; }
+    if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+    field += ch; i++;
+  }
+  // flush last field/row (if any content)
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+// Import seed presets from a CSV. Accepts the columns we export, matched by header
+// (case-insensitive). Minimum required: a name column. Merges into existing presets.
+function importSeedPresetsCSV(text) {
+  var rows = parseCSV(text).filter(function (r) {
+    return r.length && r.some(function (c) { return String(c).trim() !== ""; });
+  });
+  if (!rows.length) { appAlert("That CSV looks empty."); return; }
+
+  var header = rows[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  function col(names) {
+    for (var n = 0; n < names.length; n++) {
+      var idx = header.indexOf(names[n]);
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+  var iName = col(["crop / seed name", "crop/seed name", "name", "crop", "seed"]);
+  var iMode = col(["bag sizing", "sizing", "mode"]);
+  var iSize = col(["size per bag", "size", "seeds per bag", "lbs per bag", "seeds/bag", "lbs/bag"]);
+  var iCost = col(["cost per bag ($)", "cost per bag", "bag cost", "cost/bag", "cost"]);
+
+  if (iName === -1) {
+    appAlert('Could not find a name column. The CSV needs a header row with at least "Crop / Seed Name".', "Import failed");
+    return;
+  }
+
+  var lib = JSON.parse(localStorage.getItem(LS_SEED) || "{}");
+  var added = 0, updated = 0, skipped = 0;
+  for (var r = 1; r < rows.length; r++) {
+    var cells = rows[r];
+    var name = (cells[iName] != null ? String(cells[iName]).trim() : "");
+    if (!name) { skipped++; continue; }
+
+    // Mode: detect "lb" anywhere → lbs, else seeds.
+    var modeRaw = (iMode !== -1 && cells[iMode] != null) ? String(cells[iMode]).toLowerCase() : "";
+    var mode = modeRaw.indexOf("lb") !== -1 ? "lbs" : "seeds";
+
+    var size = (iSize !== -1) ? parseFloat(String(cells[iSize]).replace(/[^0-9.\-]/g, "")) : NaN;
+    var bagCost = (iCost !== -1) ? parseFloat(String(cells[iCost]).replace(/[^0-9.\-]/g, "")) : NaN;
+
+    var existed = !!lib[name];
+    lib[name] = {
+      _modified: new Date().toISOString(),
+      name: name,
+      mode: mode,
+      size: isNaN(size) ? 0 : size,
+      bagCost: isNaN(bagCost) ? 0 : bagCost
+    };
+    if (existed) updated++; else added++;
+  }
+
+  localStorage.setItem(LS_SEED, JSON.stringify(lib));
+  if (typeof loadSeedPresetList === "function") loadSeedPresetList();
+  if (typeof updateDataStats === "function") updateDataStats();
+  appAlert("✅ Import complete.\n\n" + added + " added\n" + updated + " updated" +
+    (skipped ? "\n" + skipped + " row(s) skipped (no name)" : ""), "🌱 Presets imported");
+}
+
+// ---- Bulk import FIELDS from a CSV (merges by name; preserves existing boundary/cost) ----
+function importFieldsCSV(text) {
+  var rows = parseCSV(text).filter(function (r) { return r.length && r.some(function (c) { return String(c).trim() !== ""; }); });
+  if (!rows.length) { appAlert("That CSV looks empty."); return; }
+  var header = rows[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  function col(names) { for (var n = 0; n < names.length; n++) { var idx = header.indexOf(names[n]); if (idx !== -1) return idx; } return -1; }
+  var iName = col(["name", "field name", "field", "crop / seed name"]);
+  var iCrop = col(["crop"]);
+  var iVar  = col(["variety", "hybrid"]);
+  var iAcres = col(["acres", "boundary acres", "area"]);
+  if (iName === -1) { appAlert('The CSV needs a header row with at least a "Name" column.', "Import failed"); return; }
+
+  var lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+  var added = 0, updated = 0, skipped = 0;
+  for (var r = 1; r < rows.length; r++) {
+    var cells = rows[r];
+    var name = (cells[iName] != null ? String(cells[iName]).trim() : "");
+    if (!name) { skipped++; continue; }
+    var existing = lib[name] || {};
+    var existed = !!lib[name];
+    var acres = (iAcres !== -1) ? parseFloat(String(cells[iAcres]).replace(/[^0-9.\-]/g, "")) : NaN;
+    // Preserve any existing boundary; only set acres if provided.
+    var boundary = existing.boundary || { points: [], acres: 0 };
+    if (!isNaN(acres)) boundary = { points: (existing.boundary && existing.boundary.points) || [], acres: acres };
+    lib[name] = {
+      _modified: new Date().toISOString(),
+      savedAt: new Date().toISOString(),
+      name: name,
+      crop: (iCrop !== -1 && cells[iCrop] != null) ? String(cells[iCrop]).trim() : (existing.crop || ""),
+      variety: (iVar !== -1 && cells[iVar] != null) ? String(cells[iVar]).trim() : (existing.variety || ""),
+      boundary: boundary,
+      cost: existing.cost || {}
+    };
+    if (existed) updated++; else added++;
+  }
+  localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
+  if (typeof loadFieldsList === "function") loadFieldsList();
+  if (typeof updateDataStats === "function") updateDataStats();
+  appAlert("✅ Fields import complete.\n\n" + added + " added\n" + updated + " updated" +
+    (skipped ? "\n" + skipped + " row(s) skipped (no name)" : ""), "🌾 Fields imported");
+}
+
+// ---- Bulk import EQUIPMENT from a CSV (merges by name; preserves existing params) ----
+function importEquipmentCSV(text) {
+  var rows = parseCSV(text).filter(function (r) { return r.length && r.some(function (c) { return String(c).trim() !== ""; }); });
+  if (!rows.length) { appAlert("That CSV looks empty."); return; }
+  var header = rows[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  function col(names) { for (var n = 0; n < names.length; n++) { var idx = header.indexOf(names[n]); if (idx !== -1) return idx; } return -1; }
+  var iName = col(["name", "machine", "equipment", "equipment name"]);
+  var iType = col(["type", "machine type", "category"]);
+  var iWidth = col(["width (ft)", "width", "implement width"]);
+  if (iName === -1) { appAlert('The CSV needs a header row with at least a "Name" column.', "Import failed"); return; }
+
+  // Map free-text type to a known EQ_TYPES key (else "other").
+  var validTypes = (typeof EQ_TYPES !== "undefined") ? Object.keys(EQ_TYPES) : [];
+  function normType(raw) {
+    var t = String(raw || "").trim().toLowerCase();
+    if (!t) return "other";
+    for (var i = 0; i < validTypes.length; i++) { if (t.indexOf(validTypes[i]) !== -1) return validTypes[i]; }
+    return "other";
+  }
+
+  var lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
+  var added = 0, updated = 0, skipped = 0;
+  for (var r = 1; r < rows.length; r++) {
+    var cells = rows[r];
+    var name = (cells[iName] != null ? String(cells[iName]).trim() : "");
+    if (!name) { skipped++; continue; }
+    var existing = lib[name] || {};
+    var existed = !!lib[name];
+    var width = (iWidth !== -1) ? parseFloat(String(cells[iWidth]).replace(/[^0-9.\-]/g, "")) : NaN;
+    lib[name] = {
+      _modified: new Date().toISOString(),
+      name: name,
+      type: (iType !== -1) ? normType(cells[iType]) : (existing.type || "other"),
+      width: isNaN(width) ? (existing.width != null ? existing.width : 0) : width,
+      params: existing.params || {}
+    };
+    if (existed) updated++; else added++;
+  }
+  localStorage.setItem(LS_EQ, JSON.stringify(lib));
+  if (typeof loadEquipmentList === "function") loadEquipmentList();
+  if (typeof updateDataStats === "function") updateDataStats();
+  appAlert("✅ Equipment import complete.\n\n" + added + " added\n" + updated + " updated" +
+    (skipped ? "\n" + skipped + " row(s) skipped (no name)" : ""), "🚜 Equipment imported");
+}
+
+// ---- Combined multi-section CSV of every library (fields, equipment, reports, seed presets) ----
+function buildAllDataCSV() {
+  var blocks = [];
+
+  // Section 1: Fields
+  var fields = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+  var fHead = ["Name", "Crop", "Variety", "Acres", "Boundary Acres", "Last Modified"];
+  var fRows = ["# FIELDS", fHead.map(csvEscape).join(",")];
+  Object.keys(fields).sort().forEach(function (k) {
+    var f = fields[k] || {};
+    fRows.push([f.name || k, f.crop || "", f.variety || "",
+      (f.acres != null ? f.acres : ""), (f.boundaryAcres != null ? f.boundaryAcres : ""),
+      f._modified ? new Date(f._modified).toLocaleString() : ""].map(csvEscape).join(","));
+  });
+  blocks.push(fRows.join("\r\n"));
+
+  // Section 2: Equipment
+  var eq = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
+  var eHead = ["Name", "Type", "Width (ft)", "Last Modified"];
+  var eRows = ["# EQUIPMENT", eHead.map(csvEscape).join(",")];
+  Object.keys(eq).sort().forEach(function (k) {
+    var e = eq[k] || {};
+    eRows.push([e.name || k, e.type || "", (e.width != null ? e.width : ""),
+      e._modified ? new Date(e._modified).toLocaleString() : ""].map(csvEscape).join(","));
+  });
+  blocks.push(eRows.join("\r\n"));
+
+  // Section 3: Reports (reuse the rich reports CSV — but ALL reports, not the filtered view)
+  var reps = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
+  var rList = Object.values(reps).sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
+  var rHead = ["Date", "Name", "Field", "Crop", "Machine", "Type", "Acres", "Bushels", "Gallons", "Loads", "Bales", "Total Profit ($)", "Report ID"];
+  var rRows = ["# REPORTS", rHead.map(csvEscape).join(",")];
+  rList.forEach(function (r) {
+    var f = r.field || {}, e = r.equipment || {};
+    var profit = (r.cost && r.cost.summary && r.cost.summary.totalProfit != null) ? r.cost.summary.totalProfit.toFixed(2) : "";
+    rRows.push([
+      r.date ? new Date(r.date).toLocaleString() : "", r.name || "",
+      f.name || "", f.crop || "", e.name || "", e.type || "",
+      (r.acres != null ? r.acres : ""), (r.bushels != null ? r.bushels : ""),
+      (r.gallons != null ? r.gallons : ""), (r.loads != null ? r.loads : ""),
+      (r.bales != null ? r.bales : ""), profit, r.id || ""
+    ].map(csvEscape).join(","));
+  });
+  blocks.push(rRows.join("\r\n"));
+
+  // Section 4: Seed presets
+  blocks.push("# SEED PRESETS\r\n" + seedPresetsToCSV());
+
+  // Join sections with a blank line between each.
+  return blocks.join("\r\n\r\n");
+}
+
+function exportAllDataCSV() {
+  var csv = buildAllDataCSV();
+  var ts = new Date().toISOString().slice(0, 10);
+  downloadFile("DiamondO_AllData_" + ts + ".csv", "\ufeff" + csv, "text/csv;charset=utf-8");
+}
+
 function resetSeed() {
   ["seedName", "seedSize", "seedBagCost", "seedAcres", "seedRate"].forEach(function (id) {
     if ($(id)) $(id).value = "";
@@ -592,6 +821,22 @@ if ($("btnSeedUseCost")) $("btnSeedUseCost").addEventListener("click", useSeedIn
 if ($("btnSeedDelete")) $("btnSeedDelete").addEventListener("click", deleteSeedPreset);
 if ($("btnSeedSavePreset")) $("btnSeedSavePreset").addEventListener("click", saveSeedPreset);
 if ($("btnSeedExportCSV")) $("btnSeedExportCSV").addEventListener("click", exportSeedPresetsCSV);
+if ($("btnSeedImportCSV")) $("btnSeedImportCSV").addEventListener("click", function () {
+  var inp = $("seedImportInput");
+  if (inp) inp.click();
+});
+if ($("seedImportInput")) $("seedImportInput").addEventListener("change", function (e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    try { importSeedPresetsCSV(String(ev.target.result || "")); }
+    catch (err) { appAlert("Could not read that CSV: " + err.message, "Import failed"); }
+  };
+  reader.onerror = function () { appAlert("Could not read the file.", "Import failed"); };
+  reader.readAsText(file);
+  e.target.value = "";   // allow re-importing the same file
+});
 if ($("btnSeedCalc")) $("btnSeedCalc").addEventListener("click", calcSeed);
 if ($("btnSeedReset")) $("btnSeedReset").addEventListener("click", resetSeed);
 syncSeedMode();
@@ -3391,6 +3636,28 @@ $("btnExportAll")?.addEventListener("click", async () => {
 $("btnImportAll")?.addEventListener("click", () => {
   $("importFileInput").click();   // proxy click to hidden file input
 });
+
+$("btnExportAllCSV")?.addEventListener("click", () => {
+  exportAllDataCSV();
+});
+
+function wireCsvImport(btnId, inputId, importFn) {
+  if ($(btnId)) $(btnId).addEventListener("click", function () { var inp = $(inputId); if (inp) inp.click(); });
+  if ($(inputId)) $(inputId).addEventListener("change", function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try { importFn(String(ev.target.result || "")); }
+      catch (err) { appAlert("Could not read that CSV: " + err.message, "Import failed"); }
+    };
+    reader.onerror = function () { appAlert("Could not read the file.", "Import failed"); };
+    reader.readAsText(file);
+    e.target.value = "";
+  });
+}
+wireCsvImport("btnImportFieldsCSV", "fieldsImportInput", importFieldsCSV);
+wireCsvImport("btnImportEquipCSV", "equipImportInput", importEquipmentCSV);
 
 $("importFileInput")?.addEventListener("change", (e) => {
   const file = e.target.files && e.target.files[0];
