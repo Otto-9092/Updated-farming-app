@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 19:00";
+window.APP_VERSION = "2026.06.08 · 19:35";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -518,6 +518,34 @@ function calcSeed() {
   }).join("") + '</tbody></table>';
 }
 
+function seedPresetsToCSV() {
+  var lib = JSON.parse(localStorage.getItem(LS_SEED) || "{}");
+  var names = Object.keys(lib).sort();
+  var headers = ["Crop / Seed Name", "Bag Sizing", "Size per Bag", "Cost per Bag ($)", "Cost per Unit ($)", "Last Modified"];
+  var rows = [headers.map(csvEscape).join(",")];
+  names.forEach(function (k) {
+    var p = lib[k] || {};
+    var mode = p.mode === "lbs" ? "Lbs per bag" : "Seeds per bag";
+    var size = (p.size != null ? p.size : "");
+    var bagCost = (p.bagCost != null ? p.bagCost : "");
+    var perUnit = (p.size && p.bagCost) ? (p.bagCost / p.size) : "";
+    // Per-unit: seeds are tiny, so show more precision; lbs to cents.
+    if (perUnit !== "") perUnit = p.mode === "lbs" ? perUnit.toFixed(4) : perUnit.toFixed(6);
+    rows.push([
+      p.name || k, mode, size, bagCost, perUnit,
+      p._modified ? new Date(p._modified).toLocaleString() : ""
+    ].map(csvEscape).join(","));
+  });
+  return rows.join("\r\n");
+}
+
+function exportSeedPresetsCSV() {
+  var lib = JSON.parse(localStorage.getItem(LS_SEED) || "{}");
+  if (!Object.keys(lib).length) { appAlert("No seed presets saved yet to export."); return; }
+  var ts = new Date().toISOString().slice(0, 10);
+  downloadFile("DiamondO_SeedPresets_" + ts + ".csv", "\ufeff" + seedPresetsToCSV(), "text/csv;charset=utf-8");
+}
+
 function resetSeed() {
   ["seedName", "seedSize", "seedBagCost", "seedAcres", "seedRate"].forEach(function (id) {
     if ($(id)) $(id).value = "";
@@ -563,6 +591,7 @@ if ($("btnSeedRename")) $("btnSeedRename").addEventListener("click", renameSeedP
 if ($("btnSeedUseCost")) $("btnSeedUseCost").addEventListener("click", useSeedInCost);
 if ($("btnSeedDelete")) $("btnSeedDelete").addEventListener("click", deleteSeedPreset);
 if ($("btnSeedSavePreset")) $("btnSeedSavePreset").addEventListener("click", saveSeedPreset);
+if ($("btnSeedExportCSV")) $("btnSeedExportCSV").addEventListener("click", exportSeedPresetsCSV);
 if ($("btnSeedCalc")) $("btnSeedCalc").addEventListener("click", calcSeed);
 if ($("btnSeedReset")) $("btnSeedReset").addEventListener("click", resetSeed);
 syncSeedMode();
