@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260606-1015" />
+<link rel="stylesheet" href="styles.css?v=20260608-1430" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* Low-tank warning: tile turns red when <=15% remaining */
@@ -50,7 +50,7 @@
   .profit-neg { color: #b3261e; font-weight: bold; }
   @media (max-width: 480px) { .cost-grid { grid-template-columns: 1fr 1fr; } }
   /* Season dashboard */
-  .season-controls { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 10px; }
+  .season-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 10px; }
   .season-controls label { display: flex; flex-direction: column; font-size: 13px; gap: 3px; }
   .season-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
   .season-stat { background: rgba(128,128,128,0.10); border-radius: 8px; padding: 10px; text-align: center; }
@@ -756,13 +756,44 @@
       <label>Year
         <select id="seasonYear"></select>
       </label>
+      <label>Equipment
+        <select id="seasonEquip">
+          <option value="all">All Equipment</option>
+          <option value="sprayer">🚿 Sprayer</option>
+          <option value="combine">🌾 Combine</option>
+          <option value="planter">🚜 Planter</option>
+          <option value="tillage">🍂 Tillage</option>
+          <option value="spreader">🟫 Spreader</option>
+          <option value="swather">🌿 Swather</option>
+          <option value="baler">🟡 Baler</option>
+          <option value="other">❓ Other</option>
+        </select>
+      </label>
+      <label>Group By
+        <select id="seasonGroup">
+          <option value="crop">Crop</option>
+          <option value="field">Field</option>
+          <option value="equipment">Equipment</option>
+          <option value="month">Month</option>
+        </select>
+      </label>
+      <label>Sort By
+        <select id="seasonSort">
+          <option value="acres">Acres</option>
+          <option value="reports">Reports</option>
+          <option value="bushels">Bushels</option>
+          <option value="gallons">Gallons</option>
+          <option value="bales">Bales</option>
+          <option value="profit">Profit</option>
+        </select>
+      </label>
       <button id="btnSeasonRefresh" class="btn btn-ghost">↻ Refresh</button>
     </div>
     <div id="seasonTotals" class="season-totals"></div>
   </div>
 
   <div class="card">
-    <div class="card-title">By Crop</div>
+    <div class="card-title" id="seasonGroupTitle">By Crop</div>
     <div id="seasonCropChart" class="season-chart"></div>
     <div id="seasonCropTable"></div>
   </div>
@@ -1065,8 +1096,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260606-1015"></script>
-<script src="app.js?v=20260606-1015"></script>
+<script src="config.js?v=20260608-1430"></script>
+<script src="app.js?v=20260608-1430"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
