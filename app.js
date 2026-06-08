@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 20:45";
+window.APP_VERSION = "2026.06.08 · 21:45";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -5392,5 +5392,207 @@ if ("serviceWorker" in navigator) {
       ["gpsLatA","gpsLngA","gpsLatB","gpsLngB"].forEach(function (id) { $id(id).value = ""; });
       $id("gpsHereResult").innerHTML = ""; $id("gpsDistResult").innerHTML = "";
     });
+  }
+})();
+
+
+// ============================================================
+// CARD REORDERING — drag or ▲/▼ to rearrange cards within each tab.
+// Order is saved per-tab in localStorage and re-applied on load.
+// Pure UI preference (kept local; not part of cloud sync).
+// ============================================================
+(function () {
+  var LS_CARD_ORDER = "dof_card_order";
+  var PANELS = ["tab-setup", "tab-tools", "tab-reports", "tab-season"];
+
+  function loadOrders() {
+    try { return JSON.parse(localStorage.getItem(LS_CARD_ORDER) || "{}"); }
+    catch (e) { return {}; }
+  }
+  function saveOrders(o) {
+    try { localStorage.setItem(LS_CARD_ORDER, JSON.stringify(o)); } catch (e) {}
+  }
+
+  // Give every card a stable id based on its panel + original index.
+  function ensureCardIds(panel) {
+    var cards = panelCards(panel);
+    cards.forEach(function (card, i) {
+      if (!card.id) card.id = panel.id + "-card-" + i;
+      card.setAttribute("data-rc", "1");
+      // Remember the original DOM order so "Reset" can restore it.
+      if (card.getAttribute("data-rc-orig") == null) card.setAttribute("data-rc-orig", String(i));
+    });
+    return cards;
+  }
+
+  // Direct .card children of a panel (skip the toggle row).
+  function panelCards(panel) {
+    return Array.prototype.filter.call(panel.children, function (el) {
+      return el.classList && el.classList.contains("card");
+    });
+  }
+
+  function cardTitle(card) {
+    return card.querySelector(".card-title");
+  }
+
+  // Build the ▲ ▼ ⠿ control cluster for a card.
+  function buildControls(panel, card) {
+    if (card.querySelector(".card-reorder-ctrls")) return;
+    var title = cardTitle(card);
+    if (!title) return;
+    var wrap = document.createElement("span");
+    wrap.className = "card-reorder-ctrls";
+
+    var handle = document.createElement("span");
+    handle.className = "rc-btn rc-handle";
+    handle.title = "Drag to reorder";
+    handle.textContent = "\u2630"; // ☰
+
+    var up = document.createElement("button");
+    up.type = "button"; up.className = "rc-btn rc-up"; up.title = "Move up"; up.textContent = "\u25B2";
+    up.addEventListener("click", function (e) { e.stopPropagation(); moveCard(panel, card, -1); });
+
+    var down = document.createElement("button");
+    down.type = "button"; down.className = "rc-btn rc-down"; down.title = "Move down"; down.textContent = "\u25BC";
+    down.addEventListener("click", function (e) { e.stopPropagation(); moveCard(panel, card, 1); });
+
+    wrap.appendChild(handle);
+    wrap.appendChild(up);
+    wrap.appendChild(down);
+    title.appendChild(wrap);
+
+    // Drag & drop (desktop). The whole card is draggable only while reordering.
+    card.setAttribute("draggable", "false");
+    handle.addEventListener("mousedown", function () { card.setAttribute("draggable", "true"); });
+    handle.addEventListener("mouseup", function () { card.setAttribute("draggable", "false"); });
+
+    card.addEventListener("dragstart", function (e) {
+      if (!document.body.classList.contains("reordering")) { e.preventDefault(); return; }
+      card.classList.add("rc-dragging");
+      try { e.dataTransfer.setData("text/plain", card.id); e.dataTransfer.effectAllowed = "move"; } catch (err) {}
+    });
+    card.addEventListener("dragend", function () {
+      card.classList.remove("rc-dragging");
+      card.setAttribute("draggable", "false");
+      panelCards(panel).forEach(function (c) { c.classList.remove("rc-drop-target"); });
+    });
+    card.addEventListener("dragover", function (e) {
+      if (!document.body.classList.contains("reordering")) return;
+      e.preventDefault();
+      card.classList.add("rc-drop-target");
+    });
+    card.addEventListener("dragleave", function () { card.classList.remove("rc-drop-target"); });
+    card.addEventListener("drop", function (e) {
+      if (!document.body.classList.contains("reordering")) return;
+      e.preventDefault();
+      card.classList.remove("rc-drop-target");
+      var draggedId = "";
+      try { draggedId = e.dataTransfer.getData("text/plain"); } catch (err) {}
+      var dragged = draggedId && document.getElementById(draggedId);
+      if (!dragged || dragged === card) return;
+      // Insert dragged before or after target depending on pointer position.
+      var rect = card.getBoundingClientRect();
+      var after = (e.clientY - rect.top) > rect.height / 2;
+      if (after) card.parentNode.insertBefore(dragged, card.nextSibling);
+      else card.parentNode.insertBefore(dragged, card);
+      persistOrder(panel);
+    });
+  }
+
+  function moveCard(panel, card, dir) {
+    var cards = panelCards(panel);
+    var idx = cards.indexOf(card);
+    var swapWith = cards[idx + dir];
+    if (!swapWith) return; // already at edge
+    if (dir < 0) panel.insertBefore(card, swapWith);
+    else panel.insertBefore(swapWith, card);
+    persistOrder(panel);
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function persistOrder(panel) {
+    var orders = loadOrders();
+    orders[panel.id] = panelCards(panel).map(function (c) { return c.id; });
+    saveOrders(orders);
+  }
+
+  // Apply a saved order to a panel (cards not in the saved list keep relative order at end).
+  function applyOrder(panel) {
+    var orders = loadOrders();
+    var saved = orders[panel.id];
+    if (!saved || !saved.length) return;
+    saved.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && el.parentNode === panel) panel.appendChild(el);
+    });
+  }
+
+  // Restore a panel's cards to their original (markup) order and clear the saved order.
+  function resetOrder(panel) {
+    var cards = panelCards(panel).slice();
+    cards.sort(function (a, b) {
+      return (parseInt(a.getAttribute("data-rc-orig"), 10) || 0) - (parseInt(b.getAttribute("data-rc-orig"), 10) || 0);
+    });
+    cards.forEach(function (c) { panel.appendChild(c); });   // re-append in original order
+    var orders = loadOrders();
+    delete orders[panel.id];
+    saveOrders(orders);
+  }
+
+  // Inject the per-tab "Rearrange" toggle at the top of each panel.
+  function injectToggle(panel) {
+    if (panel.querySelector(".reorder-toggle-row")) return;
+    var row = document.createElement("div");
+    row.className = "reorder-toggle-row";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn reorder-toggle-btn";
+    btn.textContent = "\u2195 Rearrange cards";
+    btn.addEventListener("click", function () {
+      var on = document.body.classList.toggle("reordering");
+      // Update all toggle buttons' look + label.
+      document.querySelectorAll(".reorder-toggle-btn").forEach(function (b) {
+        b.classList.toggle("reorder-on", on);
+        b.textContent = on ? "\u2713 Done rearranging" : "\u2195 Rearrange cards";
+      });
+    });
+
+    // Reset-order button — only visible while rearranging (via CSS).
+    var resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "btn btn-ghost reorder-reset-btn";
+    resetBtn.textContent = "\u21BA Reset order";
+    resetBtn.addEventListener("click", function () {
+      var doReset = function () {
+        resetOrder(panel);
+        if (panel.firstChild !== row) panel.insertBefore(row, panel.firstChild);  // keep toggle row on top
+      };
+      if (typeof appConfirm === "function") {
+        appConfirm("Reset this tab's cards to their original order?", { title: "Reset card order", okLabel: "Reset" })
+          .then(function (ok) { if (ok) doReset(); });
+      } else { doReset(); }
+    });
+
+    row.appendChild(resetBtn);
+    row.appendChild(btn);
+    panel.insertBefore(row, panel.firstChild);
+  }
+
+  function initCardReordering() {
+    PANELS.forEach(function (pid) {
+      var panel = document.getElementById(pid);
+      if (!panel) return;
+      ensureCardIds(panel);   // assign ids BEFORE applying saved order
+      applyOrder(panel);
+      injectToggle(panel);
+      panelCards(panel).forEach(function (card) { buildControls(panel, card); });
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initCardReordering);
+  } else {
+    initCardReordering();
   }
 })();
