@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260608-1605" />
+<link rel="stylesheet" href="styles.css?v=20260608-1645" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* Low-tank warning: tile turns red when <=15% remaining */
@@ -51,6 +51,8 @@
   @media (max-width: 480px) { .cost-grid { grid-template-columns: 1fr 1fr; } }
   /* Season dashboard */
   .season-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 10px; }
+  .report-range-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+  .report-range-row label { display: flex; flex-direction: column; font-size: 13px; gap: 3px; }
   .season-controls label { display: flex; flex-direction: column; font-size: 13px; gap: 3px; }
   .season-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
   .season-stat { background: rgba(128,128,128,0.10); border-radius: 8px; padding: 10px; text-align: center; }
@@ -719,6 +721,7 @@
           <option value="7d">Last 7 days</option>
           <option value="30d">Last 30 days</option>
           <option value="year">This year</option>
+          <option value="custom">Custom range…</option>
         </select>
         <select id="repEquip" class="report-filter">
           <option value="all">All equipment</option>
@@ -741,6 +744,10 @@
           <option value="bales_desc">Most bales</option>
           <option value="profit_desc">Most profit</option>
         </select>
+      </div>
+      <div id="repRangeRow" class="report-range-row hidden">
+        <label>From <input type="date" id="repFrom" class="report-filter" /></label>
+        <label>To <input type="date" id="repTo" class="report-filter" /></label>
       </div>
       <div id="repCount" class="report-count">—</div>
     </div>
@@ -775,6 +782,12 @@
     <div class="season-controls">
       <label>Year
         <select id="seasonYear"></select>
+      </label>
+      <label id="seasonFromLabel" class="hidden">From
+        <input type="date" id="seasonFrom" />
+      </label>
+      <label id="seasonToLabel" class="hidden">To
+        <input type="date" id="seasonTo" />
       </label>
       <label>Equipment
         <select id="seasonEquip">
@@ -1118,8 +1131,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260608-1605"></script>
-<script src="app.js?v=20260608-1605"></script>
+<script src="config.js?v=20260608-1645"></script>
+<script src="app.js?v=20260608-1645"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
