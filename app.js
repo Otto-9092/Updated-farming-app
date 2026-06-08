@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 22:30";
+window.APP_VERSION = "2026.06.08 · 23:40";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -4428,6 +4428,39 @@ var GoogleSync = (function () {
     });
   }
 
+  // Silent sign-in: reuse the existing Google session WITHOUT showing a popup.
+  // Uses prompt: "" — if Google needs user interaction (e.g. consent expired or
+  // not previously granted), it rejects with "interaction-required" so the caller
+  // can fall back to the visible signIn().
+  function signInSilent() {
+    return new Promise(function (resolve, reject) {
+      if (!isConfigured()) { reject(new Error("not-configured")); return; }
+      if (!gisReady())     { reject(new Error("gis-not-loaded")); return; }
+      var tc = ensureClient();
+      if (!tc) { reject(new Error("no-client")); return; }
+      var settled = false;
+      tc.callback = function (resp) {
+        if (settled) return; settled = true;
+        if (resp && resp.access_token) {
+          accessToken = resp.access_token;
+          fetchEmail().then(function () { resolve(userEmail); });
+        } else {
+          reject(new Error(resp && resp.error ? resp.error : "no-token"));
+        }
+      };
+      // error_callback fires when a popup would be required but prompt is "".
+      try {
+        tc.requestAccessToken({
+          prompt: "",
+          error_callback: function (err) {
+            if (settled) return; settled = true;
+            reject(new Error((err && err.type) ? err.type : "interaction-required"));
+          }
+        });
+      } catch (e) { if (!settled) { settled = true; reject(e); } }
+    });
+  }
+
   function signOut() {
     var tok = accessToken;
     accessToken = null; userEmail = null;
@@ -4439,9 +4472,15 @@ var GoogleSync = (function () {
   return {
     isConfigured: isConfigured, gisReady: gisReady,
     isSignedIn: isSignedIn, getToken: getToken, getEmail: getEmail,
-    signIn: signIn, signOut: signOut
+    signIn: signIn, signInSilent: signInSilent, signOut: signOut
   };
 })();
+
+// ---- "Stay logged in" preference (drives silent re-login on app open) ----
+var LS_STAY_LOGGED_IN = "dof_stay_logged_in";
+function markStayLoggedIn() { try { localStorage.setItem(LS_STAY_LOGGED_IN, "1"); } catch (e) {} }
+function clearStayLoggedIn() { try { localStorage.removeItem(LS_STAY_LOGGED_IN); } catch (e) {} }
+function wantsStayLoggedIn() { try { return localStorage.getItem(LS_STAY_LOGGED_IN) === "1"; } catch (e) { return false; } }
 
 // ============================================================
 // GOOGLE EARTH IMPORT — parse KML / KMZ field boundaries
@@ -5134,8 +5173,9 @@ function setSyncStatus(msg) {
     signInBtn.disabled = true;
     signInBtn.textContent = "Signing in\u2026";
     GoogleSync.signIn().then(function (email) {
+      markStayLoggedIn();   // remember so future opens reconnect silently
       refreshSyncUI();
-      setSyncStatus("Signed in. (Sync Now arrives in the next update.)");
+      setSyncStatus("Signed in.");
     }).catch(function (err) {
       var m = (err && err.message) || "error";
       appAlert("Could not sign in: " + m, "Sign-in failed");
@@ -5147,8 +5187,9 @@ function setSyncStatus(msg) {
 
   if (signOutBtn) signOutBtn.addEventListener("click", function () {
     GoogleSync.signOut();
+    clearStayLoggedIn();   // stop silent re-login until the user signs in again
     refreshSyncUI();
-    setSyncStatus("");
+    setSyncStatus("Signed out.");
   });
 
   var syncBtn = document.getElementById("btnSyncNow");
@@ -5598,5 +5639,101 @@ if ("serviceWorker" in navigator) {
     document.addEventListener("DOMContentLoaded", initCardReordering);
   } else {
     initCardReordering();
+  }
+})();
+
+
+// ============================================================
+// STARTUP LOGIN PROMPT
+// On app open, if Google sync is configured and the user is not
+// signed in, offer to sign in right away — so it doesn't have to
+// be hunted for on the Setup tab. Non-blocking: "Not now" lets the
+// app run offline/in the field. "Don't ask again" is remembered.
+// ============================================================
+(function () {
+  var LS_LOGIN_OPTOUT = "dof_login_prompt_optout";
+
+  function alreadyOptedOut() {
+    try { return localStorage.getItem(LS_LOGIN_OPTOUT) === "1"; } catch (e) { return false; }
+  }
+  function setOptOut(v) {
+    try {
+      if (v) localStorage.setItem(LS_LOGIN_OPTOUT, "1");
+      else localStorage.removeItem(LS_LOGIN_OPTOUT);
+    } catch (e) {}
+  }
+  // Expose so a Setup-tab control could reset it later if desired.
+  window.resetLoginPrompt = function () { setOptOut(false); };
+
+  // Wait for Google Identity Services to finish loading (async script),
+  // up to ~6s, then run cb(ready:boolean).
+  function whenGisReady(cb) {
+    if (typeof GoogleSync === "undefined") { cb(false); return; }
+    var tries = 0, max = 30;            // 30 x 200ms = 6s
+    (function poll() {
+      if (GoogleSync.gisReady()) { cb(true); return; }
+      if (++tries >= max) { cb(false); return; }
+      setTimeout(poll, 200);
+    })();
+  }
+
+  function afterSignedIn(msg) {
+    if (typeof markStayLoggedIn === "function") markStayLoggedIn();
+    if (typeof refreshSyncUI === "function") refreshSyncUI();
+    if (typeof setSyncStatus === "function") setSyncStatus(msg || "Signed in.");
+    if (typeof syncNow === "function") { Promise.resolve(syncNow()).catch(function () {}); }
+  }
+
+  function showVisiblePrompt() {
+    if (alreadyOptedOut()) return;              // user asked us not to nag
+    appConfirm(
+      "Sign in to your Google account to automatically sync your fields, equipment, seed presets and reports across all your devices?",
+      { title: "\uD83D\uDD11 Sign in to sync", okLabel: "Sign in with Google", cancelLabel: "Not now" }
+    ).then(function (ok) {
+      if (!ok) return;                          // "Not now" — just close for this session
+      GoogleSync.signIn().then(function () {
+        afterSignedIn("Signed in.");
+      }).catch(function (err) {
+        var m = (err && err.message) || "error";
+        if (m !== "popup_closed" && m !== "access_denied") {
+          appAlert("Could not sign in: " + m + "\n\nYou can sign in anytime from the Setup tab.", "Sign-in failed");
+        }
+      });
+    });
+  }
+
+  function maybePromptLogin() {
+    if (typeof GoogleSync === "undefined") return;
+    if (!GoogleSync.isConfigured()) return;     // no OAuth client id -> nothing to do
+    if (GoogleSync.isSignedIn()) return;        // already signed in this session
+
+    whenGisReady(function (ready) {
+      if (!ready) return;                       // offline or GIS blocked — stay quiet
+      if (GoogleSync.isSignedIn()) return;      // race: signed in meanwhile
+
+      // If the user previously chose to stay logged in, try a SILENT re-login
+      // first (no popup). Only fall back to the visible prompt if that fails.
+      if (typeof wantsStayLoggedIn === "function" && wantsStayLoggedIn() &&
+          typeof GoogleSync.signInSilent === "function") {
+        GoogleSync.signInSilent().then(function () {
+          afterSignedIn("Reconnected to Google.");
+        }).catch(function () {
+          // Silent failed (consent/interaction needed) — show the normal prompt.
+          showVisiblePrompt();
+        });
+        return;
+      }
+
+      // No stay-logged-in preference yet → show the visible prompt.
+      showVisiblePrompt();
+    });
+  }
+
+  // Run a moment after load so the sync engine + GIS have a chance to init.
+  function start() { setTimeout(maybePromptLogin, 1200); }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
   }
 })();
