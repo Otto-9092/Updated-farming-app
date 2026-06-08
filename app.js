@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.06 · 10:15";
+window.APP_VERSION = "2026.06.08 · 14:30";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -3132,11 +3132,14 @@ function populateSeasonYears() {
 }
 
 function seasonFiltered() {
-  var sel = $("seasonYear");
-  var yr = sel ? sel.value : "all";
+  var yr = $("seasonYear") ? $("seasonYear").value : "all";
+  var eq = $("seasonEquip") ? $("seasonEquip").value : "all";
   var reps = seasonAllReports();
   if (yr && yr !== "all") {
     reps = reps.filter(function (r) { return r.date && String(new Date(r.date).getFullYear()) === String(yr); });
+  }
+  if (eq && eq !== "all") {
+    reps = reps.filter(function (r) { return r.equipment && r.equipment.type === eq; });
   }
   return reps;
 }
@@ -3144,41 +3147,76 @@ function seasonFiltered() {
 // Sum helper that pulls numeric metrics safely
 function sNum(v) { return (typeof v === "number" && !isNaN(v)) ? v : 0; }
 
-function aggregateBy(reps, keyFn) {
+// Month names for "Group By: Month"
+var SEASON_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// Returns the grouping key function for the current "Group By" selection.
+function seasonKeyFn(groupBy) {
+  if (groupBy === "field") return function (r) { return r.field && r.field.name; };
+  if (groupBy === "equipment") return function (r) {
+    var t = r.equipment && r.equipment.type;
+    var cfg = (typeof EQ_TYPES !== "undefined" && t) ? EQ_TYPES[t] : null;
+    return cfg ? (cfg.emoji + " " + cfg.label) : (t || "(none)");
+  };
+  if (groupBy === "month") return function (r) {
+    if (!r.date) return "(no date)";
+    var d = new Date(r.date);
+    return d.getFullYear() + " " + SEASON_MONTHS[d.getMonth()];
+  };
+  // default: crop
+  return function (r) { return r.field && r.field.crop; };
+}
+
+// Sort comparator for the current "Sort By" selection.
+function seasonSortFn(sortBy) {
+  if (sortBy === "reports") return function (a, b) { return b.reports - a.reports; };
+  if (sortBy === "bushels") return function (a, b) { return b.bushels - a.bushels; };
+  if (sortBy === "gallons") return function (a, b) { return b.gallons - a.gallons; };
+  if (sortBy === "bales")   return function (a, b) { return b.bales - a.bales; };
+  if (sortBy === "profit")  return function (a, b) { return b.profit - a.profit; };
+  return function (a, b) { return b.acres - a.acres; };  // default: acres
+}
+
+function aggregateBy(reps, keyFn, sortFn) {
   var groups = {};
   reps.forEach(function (r) {
     var k = keyFn(r) || "(unspecified)";
-    if (!groups[k]) groups[k] = { key: k, reports: 0, acres: 0, bushels: 0, gallons: 0, loads: 0, profit: 0, hasProfit: false };
+    if (!groups[k]) groups[k] = { key: k, reports: 0, acres: 0, bushels: 0, gallons: 0, loads: 0, bales: 0, profit: 0, hasProfit: false };
     var g = groups[k];
     g.reports += 1;
     g.acres   += sNum(r.acres);
     g.bushels += sNum(r.bushels);
     g.gallons += sNum(r.gallons);
     g.loads   += sNum(r.loads);
+    g.bales   += sNum(r.bales);
     if (r.cost && r.cost.summary && r.cost.summary.totalProfit != null) {
       g.profit += sNum(r.cost.summary.totalProfit);
       g.hasProfit = true;
     }
   });
-  return Object.values(groups).sort(function (a, b) { return b.acres - a.acres; });
+  return Object.values(groups).sort(sortFn || function (a, b) { return b.acres - a.acres; });
 }
 
 function renderSeason() {
   populateSeasonYears();
   var reps = seasonFiltered();
 
+  var groupBy = $("seasonGroup") ? $("seasonGroup").value : "crop";
+  var sortBy  = $("seasonSort")  ? $("seasonSort").value  : "acres";
+  var sortFn  = seasonSortFn(sortBy);
+
   // ---- Totals ----
-  var tot = { reports: reps.length, acres: 0, bushels: 0, gallons: 0, loads: 0, profit: 0, hasProfit: false };
+  var tot = { reports: reps.length, acres: 0, bushels: 0, gallons: 0, loads: 0, bales: 0, profit: 0, hasProfit: false };
   reps.forEach(function (r) {
     tot.acres += sNum(r.acres); tot.bushels += sNum(r.bushels);
-    tot.gallons += sNum(r.gallons); tot.loads += sNum(r.loads);
+    tot.gallons += sNum(r.gallons); tot.loads += sNum(r.loads); tot.bales += sNum(r.bales);
     if (r.cost && r.cost.summary && r.cost.summary.totalProfit != null) { tot.profit += sNum(r.cost.summary.totalProfit); tot.hasProfit = true; }
   });
 
   var totalsEl = $("seasonTotals");
   if (totalsEl) {
     if (!reps.length) {
-      totalsEl.innerHTML = '<div class="hint">No reports yet for this period. Save some sessions to see your season summary.</div>';
+      totalsEl.innerHTML = '<div class="hint">No reports match these filters. Try “All Years” / “All Equipment”, or save some sessions first.</div>';
       if ($("seasonCropChart")) $("seasonCropChart").innerHTML = "";
       if ($("seasonCropTable")) $("seasonCropTable").innerHTML = "";
       if ($("seasonFieldTable")) $("seasonFieldTable").innerHTML = "";
@@ -3191,25 +3229,49 @@ function renderSeason() {
       stat(Math.round(tot.bushels).toLocaleString(), "Bushels") +
       stat(tot.gallons.toFixed(0), "Gallons") +
       stat(tot.loads, "Loads") +
+      stat(tot.bales, "Bales") +
       (tot.hasProfit ? stat('<span class="' + (tot.profit >= 0 ? "profit-pos" : "profit-neg") + '">' + fmtMoney(tot.profit) + '</span>', "Profit") : "");
   }
 
-  // ---- By Crop: bar chart (acres) + table ----
-  var byCrop = aggregateBy(reps, function (r) { return r.field && r.field.crop; });
+  // ---- Primary grouping (chart + table), driven by "Group By" ----
+  var groupLabels = { crop: "Crop", field: "Field", equipment: "Equipment", month: "Month" };
+  var primaryLabel = groupLabels[groupBy] || "Crop";
+  var titleEl = $("seasonGroupTitle");
+  if (titleEl) titleEl.textContent = "By " + primaryLabel + "  ·  sorted by " + (sortBy.charAt(0).toUpperCase() + sortBy.slice(1));
+
+  var primary = aggregateBy(reps, seasonKeyFn(groupBy), sortFn);
+
+  // Bar chart shows the metric you're sorting by (falls back to acres).
+  var metricOf = function (g) {
+    if (sortBy === "reports") return g.reports;
+    if (sortBy === "bushels") return g.bushels;
+    if (sortBy === "gallons") return g.gallons;
+    if (sortBy === "bales")   return g.bales;
+    if (sortBy === "profit")  return g.profit;
+    return g.acres;
+  };
+  var metricUnit = { acres: " ac", bushels: " bu", gallons: " gal", bales: "", reports: "", profit: "" }[sortBy] || "";
   var chartEl = $("seasonCropChart");
   if (chartEl) {
-    var maxAcres = Math.max.apply(null, byCrop.map(function (g) { return g.acres; }).concat([1]));
-    chartEl.innerHTML = byCrop.map(function (g) {
-      var pct = Math.round((g.acres / maxAcres) * 100);
+    var maxVal = Math.max.apply(null, primary.map(metricOf).concat([1]));
+    chartEl.innerHTML = primary.map(function (g) {
+      var v = metricOf(g);
+      var pct = Math.max(0, Math.round((v / maxVal) * 100));
+      var disp = (sortBy === "profit") ? fmtMoney(v) : (sortBy === "acres" || sortBy === "gallons") ? v.toFixed(1) + metricUnit : Math.round(v).toLocaleString() + metricUnit;
       return '<div class="sbar-row"><span>' + escHtml(g.key) + '</span>' +
              '<span class="sbar-track"><span class="sbar-fill" style="width:' + pct + '%"></span></span>' +
-             '<span class="num">' + g.acres.toFixed(1) + ' ac</span></div>';
+             '<span class="num">' + disp + '</span></div>';
     }).join("");
   }
-  if ($("seasonCropTable")) $("seasonCropTable").innerHTML = seasonTable(byCrop, "Crop", tot);
+  if ($("seasonCropTable")) $("seasonCropTable").innerHTML = seasonTable(primary, primaryLabel, tot);
+
+  // ---- Secondary table: always show "By Field" unless you're already grouping by field,
+  //      in which case show "By Crop" so you still get a second perspective. ----
   if ($("seasonFieldTable")) {
-    var byField = aggregateBy(reps, function (r) { return r.field && r.field.name; });
-    $("seasonFieldTable").innerHTML = seasonTable(byField, "Field", tot);
+    var secKey = (groupBy === "field") ? "crop" : "field";
+    var secLabel = (groupBy === "field") ? "Crop" : "Field";
+    var secondary = aggregateBy(reps, seasonKeyFn(secKey), sortFn);
+    $("seasonFieldTable").innerHTML = '<div class="card-title" style="margin-top:0">By ' + secLabel + '</div>' + seasonTable(secondary, secLabel, tot);
   }
 }
 
@@ -3217,7 +3279,7 @@ function seasonTable(groups, label, tot) {
   var anyProfit = groups.some(function (g) { return g.hasProfit; });
   var head = '<table class="season-table"><thead><tr>' +
     '<th>' + label + '</th><th class="num">Reports</th><th class="num">Acres</th>' +
-    '<th class="num">Bushels</th><th class="num">Gallons</th><th class="num">Loads</th>' +
+    '<th class="num">Bushels</th><th class="num">Gallons</th><th class="num">Loads</th><th class="num">Bales</th>' +
     (anyProfit ? '<th class="num">Profit</th>' : '') + '</tr></thead><tbody>';
   var body = groups.map(function (g) {
     return '<tr><td>' + escHtml(g.key) + '</td>' +
@@ -3226,6 +3288,7 @@ function seasonTable(groups, label, tot) {
       '<td class="num">' + Math.round(g.bushels).toLocaleString() + '</td>' +
       '<td class="num">' + g.gallons.toFixed(0) + '</td>' +
       '<td class="num">' + g.loads + '</td>' +
+      '<td class="num">' + g.bales + '</td>' +
       (anyProfit ? '<td class="num ' + (g.hasProfit ? (g.profit >= 0 ? "profit-pos" : "profit-neg") : "") + '">' + (g.hasProfit ? fmtMoney(g.profit) : "\u2014") + '</td>' : '') +
       '</tr>';
   }).join("");
@@ -3235,12 +3298,16 @@ function seasonTable(groups, label, tot) {
     '<td class="num">' + Math.round(tot.bushels).toLocaleString() + '</td>' +
     '<td class="num">' + tot.gallons.toFixed(0) + '</td>' +
     '<td class="num">' + tot.loads + '</td>' +
+    '<td class="num">' + tot.bales + '</td>' +
     (anyProfit ? '<td class="num ' + (tot.profit >= 0 ? "profit-pos" : "profit-neg") + '">' + (tot.hasProfit ? fmtMoney(tot.profit) : "\u2014") + '</td>' : '') +
     '</tr></tfoot>';
   return head + body + '</tbody>' + foot + '</table>';
 }
 
 if ($("seasonYear")) $("seasonYear").addEventListener("change", renderSeason);
+if ($("seasonEquip")) $("seasonEquip").addEventListener("change", renderSeason);
+if ($("seasonGroup")) $("seasonGroup").addEventListener("change", renderSeason);
+if ($("seasonSort")) $("seasonSort").addEventListener("change", renderSeason);
 if ($("btnSeasonRefresh")) $("btnSeasonRefresh").addEventListener("click", renderSeason);
 
 window.addEventListener("DOMContentLoaded", () => {
