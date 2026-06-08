@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 21:45";
+window.APP_VERSION = "2026.06.08 · 22:30";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -5403,7 +5403,7 @@ if ("serviceWorker" in navigator) {
 // ============================================================
 (function () {
   var LS_CARD_ORDER = "dof_card_order";
-  var PANELS = ["tab-setup", "tab-tools", "tab-reports", "tab-season"];
+  var PANELS = ["tab-operate", "tab-setup", "tab-tools", "tab-reports", "tab-season"];
 
   function loadOrders() {
     try { return JSON.parse(localStorage.getItem(LS_CARD_ORDER) || "{}"); }
@@ -5576,7 +5576,11 @@ if ("serviceWorker" in navigator) {
 
     row.appendChild(resetBtn);
     row.appendChild(btn);
-    panel.insertBefore(row, panel.firstChild);
+    // Insert the toggle row just before the first reorderable card, so any
+    // locked leading content (like the Operate map) stays pinned at the top.
+    var firstCard = panelCards(panel)[0];
+    if (firstCard) panel.insertBefore(row, firstCard);
+    else panel.appendChild(row);
   }
 
   function initCardReordering() {
