@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260608-1645" />
+<link rel="stylesheet" href="styles.css?v=20260608-1730" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* Low-tank warning: tile turns red when <=15% remaining */
@@ -699,6 +699,53 @@
 
       <div id="costResults" class="mix-results"></div>
     </div>
+
+  <!-- ===== SEED CALCULATOR ===== -->
+    <div class="card" id="seedCalcCard">
+      <div class="card-title">🌱 Seed Calculator</div>
+      <div class="hint">Save each crop's bag size &amp; cost as a preset, then enter acres and your seeding rate to get bags needed and total cost.</div>
+
+      <!-- Saved presets -->
+      <div class="mix-row" style="grid-template-columns: 2fr auto;">
+        <label>Saved Seed Presets
+          <select id="seedPresetSel" class="mix-unit"><option value="">— None —</option></select>
+        </label>
+        <div class="btn-row" style="margin:0; align-self:flex-end;">
+          <button id="btnSeedLoad" class="btn">📂 Load</button>
+          <button id="btnSeedDelete" class="btn btn-ghost">🗑️</button>
+        </div>
+      </div>
+
+      <!-- Crop / seed definition -->
+      <div class="cost-grid">
+        <label>Crop / Seed Name <input id="seedName" type="text" placeholder="e.g. Corn DKC62-08" /></label>
+        <label>Bag Sizing
+          <select id="seedMode" class="mix-unit">
+            <option value="seeds">Seeds per bag</option>
+            <option value="lbs">Lbs per bag</option>
+          </select>
+        </label>
+        <label id="seedSizeLbl">Seeds / Bag <input id="seedSize" type="number" step="any" min="0" inputmode="decimal" placeholder="e.g. 80000" /></label>
+        <label>Cost per Bag ($) <input id="seedBagCost" type="number" step="0.01" min="0" inputmode="decimal" placeholder="e.g. 285" /></label>
+      </div>
+
+      <div class="btn-row">
+        <button id="btnSeedSavePreset" class="btn">💾 Save as Preset</button>
+      </div>
+
+      <!-- Planting plan -->
+      <div class="cost-grid">
+        <label>Acres to Plant <input id="seedAcres" type="number" step="0.01" min="0" inputmode="decimal" placeholder="e.g. 80" /></label>
+        <label id="seedRateLbl">Population (seeds/ac) <input id="seedRate" type="number" step="any" min="0" inputmode="decimal" placeholder="e.g. 34000" /></label>
+      </div>
+
+      <div class="btn-row">
+        <button id="btnSeedCalc" class="btn btn-primary">Calculate</button>
+        <button id="btnSeedReset" class="btn btn-ghost">Clear</button>
+      </div>
+
+      <div id="seedResults" class="mix-results"></div>
+    </div>
 </section>
 
 <!-- ===== REPORTS TAB ===== -->
@@ -1131,8 +1178,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260608-1645"></script>
-<script src="app.js?v=20260608-1645"></script>
+<script src="config.js?v=20260608-1730"></script>
+<script src="app.js?v=20260608-1730"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
