@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 23:40";
+window.APP_VERSION = "2026.06.08 · 23:55";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -5136,6 +5136,8 @@ function refreshSyncUI() {
     outBox.classList.add("hidden");
     inBox.classList.remove("hidden");
     if (emailEl) emailEl.textContent = GoogleSync.getEmail() || "(signed in)";
+    var stayChk = document.getElementById("chkStaySignedIn");
+    if (stayChk && typeof wantsStayLoggedIn === "function") stayChk.checked = wantsStayLoggedIn();
   } else {
     inBox.classList.add("hidden");
     outBox.classList.remove("hidden");
@@ -5191,6 +5193,21 @@ function setSyncStatus(msg) {
     refreshSyncUI();
     setSyncStatus("Signed out.");
   });
+
+  var stayChk = document.getElementById("chkStaySignedIn");
+  if (stayChk) {
+    // Initialize from saved preference.
+    if (typeof wantsStayLoggedIn === "function") stayChk.checked = wantsStayLoggedIn();
+    stayChk.addEventListener("change", function () {
+      if (stayChk.checked) {
+        if (typeof markStayLoggedIn === "function") markStayLoggedIn();
+        setSyncStatus("Will reconnect automatically next time you open the app.");
+      } else {
+        if (typeof clearStayLoggedIn === "function") clearStayLoggedIn();
+        setSyncStatus("Auto-reconnect off. You'll be asked to sign in next open.");
+      }
+    });
+  }
 
   var syncBtn = document.getElementById("btnSyncNow");
   if (syncBtn) {
