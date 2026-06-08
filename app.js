@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.08 · 16:45";
+window.APP_VERSION = "2026.06.08 · 17:30";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -87,6 +87,7 @@ const SPEED_EMA_ALPHA       = 0.25; // exponential smoothing: lower = smoother, 
 const LS_EQ     = "dof_equipment_library";
 const LS_REPS   = "dof_reports";
 const LS_FIELDS = "dof_fields_library";
+const LS_SEED   = "dof_seed_presets";
 
 // ===== DOM helper =====
 const $ = (id) => document.getElementById(id);
@@ -331,6 +332,155 @@ function resetCost() {
 
 if ($("btnCostCalc"))  $("btnCostCalc").addEventListener("click", calcCost);
 if ($("btnCostReset")) $("btnCostReset").addEventListener("click", resetCost);
+
+// ============================================================
+// SEED CALCULATOR — Tools tab
+// Saves per-crop bag size (seeds/bag OR lbs/bag) + cost/bag as presets,
+// then computes bags & total cost for the acres + rate you enter.
+// ============================================================
+function seedMoney(n) {
+  if (n == null || isNaN(n)) return "$0.00";
+  return (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Switch the size/rate labels + placeholders based on the sizing mode.
+function syncSeedMode() {
+  var mode = $("seedMode") ? $("seedMode").value : "seeds";
+  var sizeLbl = $("seedSizeLbl"), rateLbl = $("seedRateLbl");
+  var sizeIn = $("seedSize"), rateIn = $("seedRate");
+  if (mode === "lbs") {
+    if (sizeLbl) sizeLbl.childNodes[0].nodeValue = "Lbs / Bag ";
+    if (sizeIn) sizeIn.placeholder = "e.g. 50";
+    if (rateLbl) rateLbl.childNodes[0].nodeValue = "Rate (lbs/ac) ";
+    if (rateIn) rateIn.placeholder = "e.g. 90";
+  } else {
+    if (sizeLbl) sizeLbl.childNodes[0].nodeValue = "Seeds / Bag ";
+    if (sizeIn) sizeIn.placeholder = "e.g. 80000";
+    if (rateLbl) rateLbl.childNodes[0].nodeValue = "Population (seeds/ac) ";
+    if (rateIn) rateIn.placeholder = "e.g. 34000";
+  }
+}
+
+function loadSeedPresetList() {
+  var lib = JSON.parse(localStorage.getItem(LS_SEED) || "{}");
+  var sel = $("seedPresetSel");
+  if (!sel) return;
+  var prev = sel.value;
+  sel.innerHTML = '<option value="">— None —</option>';
+  Object.keys(lib).sort().forEach(function (k) {
+    var o = document.createElement("option");
+    o.value = k;
+    var p = lib[k];
+    var unit = p.mode === "lbs" ? " lb/bag" : " seeds/bag";
+    o.textContent = k + " (" + (p.size != null ? Number(p.size).toLocaleString() : "?") + unit + ")";
+    sel.appendChild(o);
+  });
+  if (prev && lib[prev]) sel.value = prev;
+}
+
+function applySeedPreset(name) {
+  var lib = JSON.parse(localStorage.getItem(LS_SEED) || "{}");
+  var p = lib[name];
+  if (!p) return;
+  if ($("seedName")) $("seedName").value = p.name || name;
+  if ($("seedMode")) $("seedMode").value = p.mode || "seeds";
+  syncSeedMode();
+  if ($("seedSize")) $("seedSize").value = (p.size != null ? p.size : "");
+  if ($("seedBagCost")) $("seedBagCost").value = (p.bagCost != null ? p.bagCost : "");
+}
+
+function saveSeedPreset() {
+  var name = ($("seedName") && $("seedName").value || "").trim();
+  if (!name) { appAlert("Enter a Crop / Seed Name first, then save."); return; }
+  var lib = JSON.parse(localStorage.getItem(LS_SEED) || "{}");
+  lib[name] = {
+    _modified: new Date().toISOString(),
+    name: name,
+    mode: $("seedMode") ? $("seedMode").value : "seeds",
+    size: parseFloat($("seedSize") && $("seedSize").value) || 0,
+    bagCost: parseFloat($("seedBagCost") && $("seedBagCost").value) || 0
+  };
+  localStorage.setItem(LS_SEED, JSON.stringify(lib));
+  loadSeedPresetList();
+  if ($("seedPresetSel")) $("seedPresetSel").value = name;
+  appAlert('Saved seed preset "' + name + '".', "🌱 Preset saved");
+}
+
+function deleteSeedPreset() {
+  var sel = $("seedPresetSel");
+  var name = sel ? sel.value : "";
+  if (!name) { appAlert("Pick a saved preset to delete."); return; }
+  appConfirm('Delete seed preset "' + name + '"?', { title: "Delete preset", okLabel: "Delete", danger: true }).then(function (ok) {
+    if (!ok) return;
+    var lib = JSON.parse(localStorage.getItem(LS_SEED) || "{}");
+    delete lib[name];
+    localStorage.setItem(LS_SEED, JSON.stringify(lib));
+    loadSeedPresetList();
+  });
+}
+
+function calcSeed() {
+  var mode = $("seedMode") ? $("seedMode").value : "seeds";
+  var size = parseFloat($("seedSize") && $("seedSize").value) || 0;       // seeds or lbs per bag
+  var bagCost = parseFloat($("seedBagCost") && $("seedBagCost").value) || 0;
+  var acres = parseFloat($("seedAcres") && $("seedAcres").value) || 0;
+  var rate = parseFloat($("seedRate") && $("seedRate").value) || 0;       // per-acre
+  var out = $("seedResults");
+  if (!out) return;
+
+  if (acres <= 0 || rate <= 0 || size <= 0) {
+    out.innerHTML = '<div class="hint">Enter bag size, acres, and a per-acre rate to calculate.</div>';
+    return;
+  }
+
+  var unitWord = mode === "lbs" ? "lbs" : "seeds";
+  var totalNeeded = acres * rate;            // total seeds or total lbs
+  var bagsExact = totalNeeded / size;        // fractional bags
+  var bagsWhole = Math.ceil(bagsExact);      // bags you actually buy
+  var costExact = bagsExact * bagCost;       // cost using exact bags
+  var costWhole = bagsWhole * bagCost;       // cost rounding up to whole bags
+  var costPerAcre = acres > 0 ? costWhole / acres : 0;
+
+  var rows = [
+    ["Total " + unitWord + " needed", Math.round(totalNeeded).toLocaleString() + " " + unitWord],
+    ["Bags needed (exact)", bagsExact.toFixed(2)],
+    ["<b>Bags to buy (rounded up)</b>", "<b>" + bagsWhole.toLocaleString() + "</b>"]
+  ];
+  if (bagCost > 0) {
+    rows.push(["Total cost (exact bags)", seedMoney(costExact)]);
+    rows.push(["<b>Total cost (whole bags)</b>", "<b>" + seedMoney(costWhole) + "</b>"]);
+    rows.push(["Cost per acre", seedMoney(costPerAcre)]);
+  }
+
+  out.innerHTML = '<table><tbody>' + rows.map(function (r) {
+    return '<tr><td>' + r[0] + '</td><td class="num" style="text-align:right">' + r[1] + '</td></tr>';
+  }).join("") + '</tbody></table>';
+}
+
+function resetSeed() {
+  ["seedName", "seedSize", "seedBagCost", "seedAcres", "seedRate"].forEach(function (id) {
+    if ($(id)) $(id).value = "";
+  });
+  if ($("seedPresetSel")) $("seedPresetSel").value = "";
+  if ($("seedResults")) $("seedResults").innerHTML = "";
+}
+
+// Wire up seed calculator
+if ($("seedMode")) $("seedMode").addEventListener("change", syncSeedMode);
+if ($("seedPresetSel")) $("seedPresetSel").addEventListener("change", function () {
+  if (this.value) applySeedPreset(this.value);
+});
+if ($("btnSeedLoad")) $("btnSeedLoad").addEventListener("click", function () {
+  var sel = $("seedPresetSel");
+  if (sel && sel.value) applySeedPreset(sel.value);
+  else appAlert("Pick a saved preset to load.");
+});
+if ($("btnSeedDelete")) $("btnSeedDelete").addEventListener("click", deleteSeedPreset);
+if ($("btnSeedSavePreset")) $("btnSeedSavePreset").addEventListener("click", saveSeedPreset);
+if ($("btnSeedCalc")) $("btnSeedCalc").addEventListener("click", calcSeed);
+if ($("btnSeedReset")) $("btnSeedReset").addEventListener("click", resetSeed);
+syncSeedMode();
+loadSeedPresetList();
 
 // ============================================================
 // PHOTO STORE (IndexedDB) — Stage 2
