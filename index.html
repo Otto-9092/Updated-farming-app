@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260608-1935" />
+<link rel="stylesheet" href="styles.css?v=20260608-2045" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* Low-tank warning: tile turns red when <=15% remaining */
@@ -428,11 +428,20 @@
 
       <div class="btn-row">
         <button id="btnExportAll" class="btn btn-primary">📤 Export All Data</button>
+        <button id="btnExportAllCSV" class="btn">📊 Export All Data (CSV)</button>
       </div>
 
       <div class="btn-row">
         <button id="btnImportAll" class="btn">📥 Import Data</button>
         <input type="file" id="importFileInput" accept=".json,application/json" style="display:none" />
+      </div>
+
+      <div class="hint" style="margin-top:6px;">Bulk-import a library from a spreadsheet (CSV). Each merges into existing data by name.</div>
+      <div class="btn-row">
+        <button id="btnImportFieldsCSV" class="btn">📥 Import Fields CSV</button>
+        <input type="file" id="fieldsImportInput" accept=".csv,text/csv" style="display:none" />
+        <button id="btnImportEquipCSV" class="btn">📥 Import Equipment CSV</button>
+        <input type="file" id="equipImportInput" accept=".csv,text/csv" style="display:none" />
       </div>
 
       <div class="hint">
@@ -733,6 +742,8 @@
       <div class="btn-row">
         <button id="btnSeedSavePreset" class="btn">💾 Save / Update Preset</button>
         <button id="btnSeedExportCSV" class="btn">📊 Export Presets CSV</button>
+        <button id="btnSeedImportCSV" class="btn">📥 Import Presets CSV</button>
+        <input type="file" id="seedImportInput" accept=".csv,text/csv" style="display:none" />
       </div>
 
       <!-- Planting plan -->
@@ -1181,8 +1192,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260608-1935"></script>
-<script src="app.js?v=20260608-1935"></script>
+<script src="config.js?v=20260608-2045"></script>
+<script src="app.js?v=20260608-2045"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
