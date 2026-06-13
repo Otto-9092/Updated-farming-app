@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.13 · 14:30";
+window.APP_VERSION = "2026.06.13 · 15:40";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -3073,7 +3073,8 @@ function _shpBuildDbf(names) {
   u[p] = 0x1A;
   return u;
 }
-var _SHP_PRJ = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]';
+var _SHP_PRJ = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.0174532925199433],AUTHORITY["EPSG",4326]]';
+var _SHP_CPG = "UTF-8";
 var _SHP_CRC = (function () {
   var t = [];
   for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; }
@@ -3090,12 +3091,12 @@ function _shpZip(files) {
   files.forEach(function (f) {
     var nameB = sb(f.name), crc = _shpCrc32(f.data);
     var local = new Uint8Array(30 + nameB.length), dv = new DataView(local.buffer);
-    dv.setUint32(0, 0x04034b50, true); dv.setUint16(4, 20, true);
+    dv.setUint32(0, 0x04034b50, true); dv.setUint16(4, 10, true);
     dv.setUint32(14, crc, true); dv.setUint32(18, f.data.length, true); dv.setUint32(22, f.data.length, true);
     dv.setUint16(26, nameB.length, true); local.set(nameB, 30);
     parts.push(local, f.data);
     var cen = new Uint8Array(46 + nameB.length), cdv = new DataView(cen.buffer);
-    cdv.setUint32(0, 0x02014b50, true); cdv.setUint16(4, 20, true); cdv.setUint16(6, 20, true);
+    cdv.setUint32(0, 0x02014b50, true); cdv.setUint16(4, 10, true); cdv.setUint16(6, 10, true);
     cdv.setUint32(16, crc, true); cdv.setUint32(20, f.data.length, true); cdv.setUint32(24, f.data.length, true);
     cdv.setUint16(28, nameB.length, true); cdv.setUint32(42, offset, true); cen.set(nameB, 46);
     central.push(cen); offset += local.length + f.data.length;
@@ -3113,18 +3114,31 @@ function _shpZip(files) {
 function exportBoundariesShapefile() {
   var lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
   var fields = [];
+  var diag = [];   // per-field diagnostics so we can see WHY a field is missing/misplaced
   Object.keys(lib).forEach(function (k) {
     var f = lib[k];
+    var nm = (f && f.name) || k;
     var pts = (f && f.boundary && f.boundary.points) || [];
+    var raw = pts.length;
     var valid = pts.filter(function (p) {
       return p && isFinite(p.lat) && isFinite(p.lng) &&
              p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180 &&
              !(p.lat === 0 && p.lng === 0);
     });
-    if (valid.length >= 3) fields.push({ name: f.name || k, points: valid });
+    if (valid.length >= 3) {
+      var cLat = valid.reduce(function (a, p) { return a + p.lat; }, 0) / valid.length;
+      var cLng = valid.reduce(function (a, p) { return a + p.lng; }, 0) / valid.length;
+      diag.push(nm + ": " + valid.length + "/" + raw + " pts, center " +
+                cLat.toFixed(4) + ", " + cLng.toFixed(4));
+      fields.push({ name: nm, points: valid });
+    } else {
+      diag.push(nm + ": SKIPPED (" + valid.length + " valid of " + raw + " pts" +
+                (raw && !valid.length ? " — coords out of range, possible lat/lng swap" : "") + ")");
+    }
   });
+  try { console.log("[ShapefileExport]\n" + diag.join("\n")); } catch (e) {}
   if (!fields.length) {
-    appAlert("No saved field boundaries with at least 3 points to export.", "Nothing to export");
+    appAlert("No exportable boundaries.\n\n" + diag.join("\n"), "Nothing to export");
     return;
   }
   var ss = _shpBuildShpShx(fields.map(function (f) { return f.points; }));
@@ -3132,16 +3146,26 @@ function exportBoundariesShapefile() {
   var prj = new Uint8Array(_SHP_PRJ.length);
   for (var i = 0; i < _SHP_PRJ.length; i++) prj[i] = _SHP_PRJ.charCodeAt(i);
   var base = "field_boundaries";
+  var cpg = new Uint8Array(_SHP_CPG.length);
+  for (var ci = 0; ci < _SHP_CPG.length; ci++) cpg[ci] = _SHP_CPG.charCodeAt(ci);
   var zip = _shpZip([
     { name: base + ".shp", data: ss.shp },
     { name: base + ".shx", data: ss.shx },
     { name: base + ".dbf", data: dbf },
     { name: base + ".prj", data: prj },
+    { name: base + ".cpg", data: cpg },
   ]);
   var stamp = new Date().toISOString().slice(0, 10);
   downloadFile("field_boundaries_" + stamp + ".zip", zip, "application/zip");
   var hint = document.getElementById("shpExportHint");
-  if (hint) hint.textContent = "Exported " + fields.length + " field boundary(ies) to a zipped Shapefile.";
+  if (hint) {
+    hint.textContent = "Exported " + fields.length + " field boundary(ies). " +
+      "First field center: " +
+      (fields[0].points.reduce(function (a, p) { return a + p.lat; }, 0) / fields[0].points.length).toFixed(4) +
+      ", " +
+      (fields[0].points.reduce(function (a, p) { return a + p.lng; }, 0) / fields[0].points.length).toFixed(4) +
+      ". If ArcGIS shows nothing, use 'Zoom to layer' — check this matches your farm location.";
+  }
 }
 if (document.getElementById("btnExportShp")) {
   document.getElementById("btnExportShp").addEventListener("click", exportBoundariesShapefile);
