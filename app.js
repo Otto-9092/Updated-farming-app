@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.09 · 01:10";
+window.APP_VERSION = "2026.06.13 · 14:30";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -2802,6 +2802,30 @@ if ($("btnSaveField")) $("btnSaveField").addEventListener("click", () => {
   loadFieldsList();
   if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
+function fitMapToBoundary(points) {
+  if (!state.map || !points || !points.length) return;
+  var valid = points.filter(function (p) {
+    return p && isFinite(p.lat) && isFinite(p.lng) &&
+           p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180 &&
+           !(p.lat === 0 && p.lng === 0);
+  });
+  if (valid.length < 3) { if (valid.length) state.map.setCenter(valid[0]); return; }
+  var lats = valid.map(function (p) { return p.lat; });
+  var lngs = valid.map(function (p) { return p.lng; });
+  var dLat = Math.max.apply(null, lats) - Math.min.apply(null, lats);
+  var dLng = Math.max.apply(null, lngs) - Math.min.apply(null, lngs);
+  // A field spanning > ~0.5 deg (~55 km) almost certainly has a bad point.
+  if (dLat > 0.5 || dLng > 0.5) {
+    var cLat = lats.reduce(function (a, b) { return a + b; }, 0) / lats.length;
+    var cLng = lngs.reduce(function (a, b) { return a + b; }, 0) / lngs.length;
+    state.map.setCenter({ lat: cLat, lng: cLng });
+    state.map.setZoom(16);
+    return;
+  }
+  var bounds = new google.maps.LatLngBounds();
+  valid.forEach(function (p) { bounds.extend(p); });
+  state.map.fitBounds(bounds);
+}
 if ($("btnLoadField")) $("btnLoadField").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
   const k = $("fldLoad").value;
@@ -2817,9 +2841,7 @@ if ($("btnLoadField")) $("btnLoadField").addEventListener("click", () => {
   state.boundary.acres  = (f.boundary && f.boundary.acres)  || 0;
   if (state.boundary.points.length >= 3 && state.map) {
     drawBoundaryFinal();
-    const bounds = new google.maps.LatLngBounds();
-    state.boundary.points.forEach(p => bounds.extend(p));
-    state.map.fitBounds(bounds);
+    fitMapToBoundary(state.boundary.points);
   }
   $("boundAcres").textContent = state.boundary.acres.toFixed(2);
   if ($("fldStatus")) $("fldStatus").textContent = `Loaded: ${f.name} (${state.boundary.acres.toFixed(2)} ac)`;
@@ -2971,6 +2993,158 @@ function downloadFile(filename, content, mime) {
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ============================================================
+// SHAPEFILE EXPORT — write valid ESRI .shp/.shx/.dbf/.prj and zip
+// them (STORED method). Validated byte-for-byte against pyshp.
+// ============================================================
+function _shpRingArea(pts) {
+  var s = 0;
+  for (var i = 0; i < pts.length; i++) {
+    var a = pts[i], b = pts[(i + 1) % pts.length];
+    s += (b.lng - a.lng) * (b.lat + a.lat);
+  }
+  return s;
+}
+function _shpClockwise(pts) {
+  return _shpRingArea(pts) > 0 ? pts.slice() : pts.slice().reverse();
+}
+function _shpBuildShpShx(polys) {
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  polys.forEach(function (poly) {
+    poly.forEach(function (p) {
+      if (p.lng < minX) minX = p.lng; if (p.lng > maxX) maxX = p.lng;
+      if (p.lat < minY) minY = p.lat; if (p.lat > maxY) maxY = p.lat;
+    });
+  });
+  var recs = [];
+  polys.forEach(function (poly) {
+    var ring = _shpClockwise(poly); ring = ring.concat([ring[0]]);
+    var n = ring.length;
+    var rxmin = Infinity, rymin = Infinity, rxmax = -Infinity, rymax = -Infinity;
+    ring.forEach(function (p) {
+      if (p.lng < rxmin) rxmin = p.lng; if (p.lng > rxmax) rxmax = p.lng;
+      if (p.lat < rymin) rymin = p.lat; if (p.lat > rymax) rymax = p.lat;
+    });
+    var buf = new ArrayBuffer(4 + 32 + 4 + 4 + 4 + n * 16);
+    var dv = new DataView(buf), o = 0;
+    dv.setInt32(o, 5, true); o += 4;
+    dv.setFloat64(o, rxmin, true); o += 8; dv.setFloat64(o, rymin, true); o += 8;
+    dv.setFloat64(o, rxmax, true); o += 8; dv.setFloat64(o, rymax, true); o += 8;
+    dv.setInt32(o, 1, true); o += 4; dv.setInt32(o, n, true); o += 4; dv.setInt32(o, 0, true); o += 4;
+    ring.forEach(function (p) { dv.setFloat64(o, p.lng, true); o += 8; dv.setFloat64(o, p.lat, true); o += 8; });
+    recs.push(new Uint8Array(buf));
+  });
+  var shpWords = 50; recs.forEach(function (c) { shpWords += 4 + c.length / 2; });
+  var shxWords = 50 + recs.length * 4;
+  function header(dv, lenWords) {
+    dv.setInt32(0, 9994, false); dv.setInt32(24, lenWords, false);
+    dv.setInt32(28, 1000, true); dv.setInt32(32, 5, true);
+    dv.setFloat64(36, minX, true); dv.setFloat64(44, minY, true);
+    dv.setFloat64(52, maxX, true); dv.setFloat64(60, maxY, true);
+  }
+  var shp = new Uint8Array(shpWords * 2), shpDv = new DataView(shp.buffer); header(shpDv, shpWords);
+  var shx = new Uint8Array(shxWords * 2), shxDv = new DataView(shx.buffer); header(shxDv, shxWords);
+  var pos = 100, off = 50, sp = 100;
+  recs.forEach(function (c, i) {
+    var cw = c.length / 2;
+    shpDv.setInt32(pos, i + 1, false); pos += 4; shpDv.setInt32(pos, cw, false); pos += 4;
+    shp.set(c, pos); pos += c.length;
+    shxDv.setInt32(sp, off, false); sp += 4; shxDv.setInt32(sp, cw, false); sp += 4;
+    off += 4 + cw;
+  });
+  return { shp: shp, shx: shx };
+}
+function _shpBuildDbf(names) {
+  var nrec = names.length, headerLen = 65, recLen = 51;
+  var u = new Uint8Array(headerLen + nrec * recLen + 1), dv = new DataView(u.buffer);
+  u[0] = 3; u[1] = 125; u[2] = 1; u[3] = 1;
+  dv.setInt32(4, nrec, true); dv.setInt16(8, headerLen, true); dv.setInt16(10, recLen, true);
+  var nm = "NAME"; for (var i = 0; i < nm.length; i++) u[32 + i] = nm.charCodeAt(i);
+  u[32 + 11] = 67; u[32 + 16] = 50; u[64] = 0x0D;
+  var p = headerLen;
+  names.forEach(function (name) {
+    u[p++] = 0x20;
+    var s = String(name).replace(/[^\x00-\x7F]/g, "?").slice(0, 50);
+    for (var j = 0; j < 50; j++) u[p + j] = j < s.length ? s.charCodeAt(j) : 0x20;
+    p += 50;
+  });
+  u[p] = 0x1A;
+  return u;
+}
+var _SHP_PRJ = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]';
+var _SHP_CRC = (function () {
+  var t = [];
+  for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; }
+  return t;
+})();
+function _shpCrc32(bytes) {
+  var c = 0xFFFFFFFF;
+  for (var i = 0; i < bytes.length; i++) c = _SHP_CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function _shpZip(files) {
+  function sb(s) { var a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  var parts = [], central = [], offset = 0;
+  files.forEach(function (f) {
+    var nameB = sb(f.name), crc = _shpCrc32(f.data);
+    var local = new Uint8Array(30 + nameB.length), dv = new DataView(local.buffer);
+    dv.setUint32(0, 0x04034b50, true); dv.setUint16(4, 20, true);
+    dv.setUint32(14, crc, true); dv.setUint32(18, f.data.length, true); dv.setUint32(22, f.data.length, true);
+    dv.setUint16(26, nameB.length, true); local.set(nameB, 30);
+    parts.push(local, f.data);
+    var cen = new Uint8Array(46 + nameB.length), cdv = new DataView(cen.buffer);
+    cdv.setUint32(0, 0x02014b50, true); cdv.setUint16(4, 20, true); cdv.setUint16(6, 20, true);
+    cdv.setUint32(16, crc, true); cdv.setUint32(20, f.data.length, true); cdv.setUint32(24, f.data.length, true);
+    cdv.setUint16(28, nameB.length, true); cdv.setUint32(42, offset, true); cen.set(nameB, 46);
+    central.push(cen); offset += local.length + f.data.length;
+  });
+  var cs = central.reduce(function (a, c) { return a + c.length; }, 0);
+  var end = new Uint8Array(22), edv = new DataView(end.buffer);
+  edv.setUint32(0, 0x06054b50, true); edv.setUint16(8, files.length, true); edv.setUint16(10, files.length, true);
+  edv.setUint32(12, cs, true); edv.setUint32(16, offset, true);
+  var out = new Uint8Array(offset + cs + 22), pp = 0;
+  parts.forEach(function (a) { out.set(a, pp); pp += a.length; });
+  central.forEach(function (a) { out.set(a, pp); pp += a.length; });
+  out.set(end, pp);
+  return out;
+}
+function exportBoundariesShapefile() {
+  var lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+  var fields = [];
+  Object.keys(lib).forEach(function (k) {
+    var f = lib[k];
+    var pts = (f && f.boundary && f.boundary.points) || [];
+    var valid = pts.filter(function (p) {
+      return p && isFinite(p.lat) && isFinite(p.lng) &&
+             p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180 &&
+             !(p.lat === 0 && p.lng === 0);
+    });
+    if (valid.length >= 3) fields.push({ name: f.name || k, points: valid });
+  });
+  if (!fields.length) {
+    appAlert("No saved field boundaries with at least 3 points to export.", "Nothing to export");
+    return;
+  }
+  var ss = _shpBuildShpShx(fields.map(function (f) { return f.points; }));
+  var dbf = _shpBuildDbf(fields.map(function (f) { return f.name; }));
+  var prj = new Uint8Array(_SHP_PRJ.length);
+  for (var i = 0; i < _SHP_PRJ.length; i++) prj[i] = _SHP_PRJ.charCodeAt(i);
+  var base = "field_boundaries";
+  var zip = _shpZip([
+    { name: base + ".shp", data: ss.shp },
+    { name: base + ".shx", data: ss.shx },
+    { name: base + ".dbf", data: dbf },
+    { name: base + ".prj", data: prj },
+  ]);
+  var stamp = new Date().toISOString().slice(0, 10);
+  downloadFile("field_boundaries_" + stamp + ".zip", zip, "application/zip");
+  var hint = document.getElementById("shpExportHint");
+  if (hint) hint.textContent = "Exported " + fields.length + " field boundary(ies) to a zipped Shapefile.";
+}
+if (document.getElementById("btnExportShp")) {
+  document.getElementById("btnExportShp").addEventListener("click", exportBoundariesShapefile);
 }
 
 // ============================================================
@@ -4724,13 +4898,26 @@ var KmlImport = (function () {
   }
 
   // ---- Parse a coordinates string "lng,lat,alt lng,lat,alt ..." ----
+  function validLatLng(p) {
+    return isFinite(p.lat) && isFinite(p.lng) &&
+           p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180 &&
+           !(p.lat === 0 && p.lng === 0);   // drop stray null-island (0,0) points
+  }
   function parseCoords(s) {
     if (!s) return [];
-    return s.trim().split(/\s+/).map(function (tok) {
+    var raw = s.trim().split(/\s+/).map(function (tok) {
       var parts = tok.split(",");
-      var lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
+      var lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);  // KML order: lng,lat,alt
       return { lat: lat, lng: lng };
-    }).filter(function (p) { return isFinite(p.lat) && isFinite(p.lng); });
+    });
+    var pts = raw.filter(validLatLng);
+    // Auto-detect a fully lat,lng-swapped file: if almost everything fails but
+    // swapping fixes it, swap them all.
+    if (pts.length < 3 && raw.length >= 3) {
+      var swapped = raw.map(function (p) { return { lat: p.lng, lng: p.lat }; }).filter(validLatLng);
+      if (swapped.length > pts.length) pts = swapped;
+    }
+    return pts;
   }
 
   // ---- Parse KML text -> [{ name, points, acres }] (polygons only) ----
@@ -4905,9 +5092,7 @@ function showImportedFieldOnMap(f) {
   state.field = { name: f.name, crop: "Corn", variety: "" };
   if (state.boundary.points.length >= 3) {
     drawBoundaryFinal();
-    var bounds = new google.maps.LatLngBounds();
-    state.boundary.points.forEach(function (p) { bounds.extend(p); });
-    state.map.fitBounds(bounds);
+    fitMapToBoundary(state.boundary.points);
   }
   if ($("boundAcres")) $("boundAcres").textContent = f.acres.toFixed(2);
   if ($("fldName")) $("fldName").value = f.name;
