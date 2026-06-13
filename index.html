@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260609-0110" />
+<link rel="stylesheet" href="styles.css?v=20260613-1430" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* ===== Card reordering ===== */
@@ -400,7 +400,11 @@
 
   <div class="btn-row" style="margin-top:10px;">
     <button id="btnImportKml" class="btn">🌍 Import from Google Earth (KMZ/KML)</button>
+    <button id="btnExportShp" class="btn">📦 Export Boundaries (Shapefile)</button>
     <input type="file" id="kmlFileInput" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" style="display:none" />
+  </div>
+  <div class="hint" id="shpExportHint">
+    Export all saved field boundaries as a zipped ESRI <b>Shapefile</b> (.shp/.shx/.dbf/.prj, WGS84) for use in GIS, John Deere Ops Center, Climate FieldView, etc.
   </div>
   <div class="hint">
     Draw field boundaries in Google Earth, save as <b>KML</b> or <b>KMZ</b>,
@@ -1245,8 +1249,8 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260609-0110"></script>
-<script src="app.js?v=20260609-0110"></script>
+<script src="config.js?v=20260613-1430"></script>
+<script src="app.js?v=20260613-1430"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
