@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.13 · 15:40";
+window.APP_VERSION = "2026.06.13 · 16:10";
 try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
 
 /* ============================================================
@@ -2802,22 +2802,63 @@ if ($("btnSaveField")) $("btnSaveField").addEventListener("click", () => {
   loadFieldsList();
   if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
-function fitMapToBoundary(points) {
-  if (!state.map || !points || !points.length) return;
+function _median(arr) {
+  var a = arr.slice().sort(function (x, y) { return x - y; });
+  var m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+// Clean a set of boundary points: strip invalid/0,0, auto-correct a fully
+// swapped lat/lng dataset, then drop outliers that sit absurdly far from the
+// median (a single corrupt vertex that would otherwise blow up the zoom).
+function cleanBoundaryPoints(points) {
+  if (!points || !points.length) return [];
   var valid = points.filter(function (p) {
     return p && isFinite(p.lat) && isFinite(p.lng) &&
            p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180 &&
            !(p.lat === 0 && p.lng === 0);
   });
-  if (valid.length < 3) { if (valid.length) state.map.setCenter(valid[0]); return; }
+  if (valid.length < 3) return valid;
+
+  // Detect a fully swapped dataset: latitudes should be within +/-90.
+  // If many "lat" values exceed 90 in magnitude but the "lng" values are all
+  // valid latitudes, the columns are swapped — flip them.
+  var badLat = valid.filter(function (p) { return Math.abs(p.lat) > 90; }).length;
+  if (badLat > 0) {
+    var swapped = valid.map(function (p) { return { lat: p.lng, lng: p.lat }; })
+      .filter(function (p) {
+        return isFinite(p.lat) && isFinite(p.lng) &&
+               p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180;
+      });
+    if (swapped.length >= valid.length - badLat) valid = swapped;
+  }
+
+  // Drop outliers: keep points within ~0.25 deg (~27 km) of the median center.
+  var mLat = _median(valid.map(function (p) { return p.lat; }));
+  var mLng = _median(valid.map(function (p) { return p.lng; }));
+  var kept = valid.filter(function (p) {
+    return Math.abs(p.lat - mLat) <= 0.25 && Math.abs(p.lng - mLng) <= 0.25;
+  });
+  return kept.length >= 3 ? kept : valid;
+}
+function fitMapToBoundary(points) {
+  if (!state.map || !points || !points.length) return;
+  var valid = cleanBoundaryPoints(points);
+  try {
+    console.log("[fitMapToBoundary] raw=" + points.length + " clean=" + valid.length +
+      (valid.length ? " center=" +
+        (valid.reduce(function (a, p) { return a + p.lat; }, 0) / valid.length).toFixed(4) + "," +
+        (valid.reduce(function (a, p) { return a + p.lng; }, 0) / valid.length).toFixed(4) : ""));
+  } catch (e) {}
+  if (valid.length < 3) { if (valid.length) { state.map.setCenter(valid[0]); state.map.setZoom(16); } return; }
   var lats = valid.map(function (p) { return p.lat; });
   var lngs = valid.map(function (p) { return p.lng; });
+  var cLat = lats.reduce(function (a, b) { return a + b; }, 0) / lats.length;
+  var cLng = lngs.reduce(function (a, b) { return a + b; }, 0) / lngs.length;
   var dLat = Math.max.apply(null, lats) - Math.min.apply(null, lats);
   var dLng = Math.max.apply(null, lngs) - Math.min.apply(null, lngs);
-  // A field spanning > ~0.5 deg (~55 km) almost certainly has a bad point.
-  if (dLat > 0.5 || dLng > 0.5) {
-    var cLat = lats.reduce(function (a, b) { return a + b; }, 0) / lats.length;
-    var cLng = lngs.reduce(function (a, b) { return a + b; }, 0) / lngs.length;
+  // After cleaning, a span still > ~0.5 deg means genuinely huge/odd data:
+  // just center at a sane field zoom rather than zooming out to the planet.
+  if (dLat > 0.5 || dLng > 0.5 || dLat === 0 || dLng === 0) {
     state.map.setCenter({ lat: cLat, lng: cLng });
     state.map.setZoom(16);
     return;
@@ -2825,6 +2866,10 @@ function fitMapToBoundary(points) {
   var bounds = new google.maps.LatLngBounds();
   valid.forEach(function (p) { bounds.extend(p); });
   state.map.fitBounds(bounds);
+  // Safety clamp: never allow fitBounds to leave us zoomed way out.
+  google.maps.event.addListenerOnce(state.map, "idle", function () {
+    if (state.map.getZoom() < 13) state.map.setZoom(16);
+  });
 }
 if ($("btnLoadField")) $("btnLoadField").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
@@ -2912,7 +2957,7 @@ if ($("btnAutoZoom")) $("btnAutoZoom").addEventListener("click", () => {
 if ($("btnAutoCenter")) $("btnAutoCenter").addEventListener("click", () => {
   state.autoCenter = !state.autoCenter;
   const btn = $("btnAutoCenter");
-  btn.textContent = state.autoCenter ? "🎯 Auto-Center: ON" : "🎯 Auto-Center: OFF";
+  btn.textContent = state.autoCenter ? "�� Auto-Center: ON" : "🎯 Auto-Center: OFF";
   btn.classList.toggle("active-toggle", state.autoCenter);
   // When re-enabling, snap back to the machine immediately
   if (state.autoCenter && state.lastPos && state.map) {
@@ -3120,11 +3165,13 @@ function exportBoundariesShapefile() {
     var nm = (f && f.name) || k;
     var pts = (f && f.boundary && f.boundary.points) || [];
     var raw = pts.length;
-    var valid = pts.filter(function (p) {
-      return p && isFinite(p.lat) && isFinite(p.lng) &&
-             p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180 &&
-             !(p.lat === 0 && p.lng === 0);
-    });
+    var valid = (typeof cleanBoundaryPoints === "function")
+      ? cleanBoundaryPoints(pts)
+      : pts.filter(function (p) {
+          return p && isFinite(p.lat) && isFinite(p.lng) &&
+                 p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180 &&
+                 !(p.lat === 0 && p.lng === 0);
+        });
     if (valid.length >= 3) {
       var cLat = valid.reduce(function (a, p) { return a + p.lat; }, 0) / valid.length;
       var cLng = valid.reduce(function (a, p) { return a + p.lng; }, 0) / valid.length;
