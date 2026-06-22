@@ -489,6 +489,22 @@
   }
 
   // ==========================================================
+  // UNSAVED-WORK GUARD — prevents losing a session like before.
+  // _unsaved = true once coverage is painted; back to false once a
+  // report is saved. We warn before a NEW session starts and before
+  // the page is closed/refreshed while work is unsaved.
+  // ==========================================================
+  var _unsaved = false;
+  function markDirty() { _unsaved = true; }
+  function markClean() { _unsaved = false; }
+  function hasUnsavedWork() {
+    // unsaved flag AND there is actually coverage worth saving
+    return _unsaved &&
+           ((state.coveragePolys && state.coveragePolys.length > 0) ||
+            (state.acres && state.acres > 0));
+  }
+
+  // ==========================================================
   // RUNTIME PATCHING — wrap existing app.js globals (NO EDITS)
   // ==========================================================
   function applyPatches() {
@@ -517,13 +533,14 @@
     // 2) drawCoveragePolygon -> if bushels is locked, restore it after the
     //    original (which would otherwise add to the auto-estimate).
     if (typeof window.drawCoveragePolygon === "function" && !window.drawCoveragePolygon.__aaPatched) {
-      var _draw = window.drawCoveragePolygon;
       window.drawCoveragePolygon = function () {
         var locked = state.bushelsManual;
         var saved = state.bushels;
         var ret = _draw.apply(this, arguments);
         if (locked) state.bushels = saved;   // undo any auto-estimate bump
+        markDirty();                          // coverage painted -> unsaved
         return ret;
+      };
       };
       window.drawCoveragePolygon.__aaPatched = true;
     }
@@ -542,17 +559,28 @@
       window.updateMetrics.__aaPatched = true;
     }
 
-    // 4) startSession -> clear the manual lock + heat overlay for a new run.
+    // 4) startSession -> warn about unsaved work, then clear lock + overlay.
     if (typeof window.startSession === "function" && !window.startSession.__aaPatched) {
       var _ss = window.startSession;
-      window.startSession = function () {
+      window.startSession = async function () {
+        if (hasUnsavedWork()) {
+          var go = (typeof appConfirm === "function")
+            ? await appConfirm(
+                "You have an unsaved session (" + (state.acres || 0).toFixed(2) +
+                " acres painted). Starting a new session will ERASE it permanently.\n\n" +
+                "Tip: Cancel, then tap \u201CSave Report\u201D first.",
+                { title: "\u26A0\uFE0F Unsaved session", okLabel: "Discard & Start New",
+                  cancelLabel: "Cancel", danger: true })
+            : window.confirm("You have an unsaved session that will be ERASED. Continue?");
+          if (!go) return;   // abort start; keep their data
+        }
         state.bushelsManual = false;
         clearHeat();
+        markClean();         // new session begins clean
         return _ss.apply(this, arguments);
       };
       window.startSession.__aaPatched = true;
     }
-  }
 
   // ==========================================================
   // SAVE-REPORT HOOK — embed as-applied data into saved reports
@@ -562,7 +590,7 @@
   // Implemented by wrapping localStorage.setItem for the reports key.
   // ==========================================================
   function hookReportSave() {
-    var LS_REPS_KEY = (typeof LS_REPS !== "undefined") ? LS_REPS : "opio_reports";
+    var LS_REPS_KEY = (typeof LS_REPS !== "undefined") ? LS_REPS : "dof_reports";
     var _setItem = localStorage.setItem.bind(localStorage);
     if (localStorage.__aaSaveHooked) return;
     localStorage.setItem = function (key, value) {
@@ -586,6 +614,7 @@
             value = JSON.stringify(obj);
             // persist big geometry to IndexedDB too (best-effort)
             try { aaSave(newest, layer); } catch (e) {}
+            markClean();   // report saved -> no longer unsaved
           }
         } catch (e) { /* leave value untouched on any parse error */ }
       }
@@ -669,6 +698,57 @@
   }
 
   // ==========================================================
+  // SMART SHOW/HIDE — only show the as-applied buttons when the
+  // selected report (or the live session) actually HAS the data.
+  // Old reports saved before this update have no as-applied data,
+  // so the buttons stay hidden and you never see a "no data" msg.
+  // ==========================================================
+  function reportHasAsApplied(rep) {
+    if (!rep) return false;
+    if (rep.asApplied &&
+        ((rep.asApplied.points && rep.asApplied.points.length) ||
+         (rep.asApplied.polygons && rep.asApplied.polygons.length))) return true;
+    return false;
+  }
+
+  function liveHasAsApplied() {
+    return (state.coveragePolys && state.coveragePolys.length > 0) ||
+           (state.trailPoints && state.trailPoints.some(function (p) { return p && p.rate != null; }));
+  }
+
+  function getSelectedReport() {
+    try {
+      var sel = byId("repSelect");
+      if (!sel || !sel.value) return null;
+      var key = (typeof LS_REPS !== "undefined") ? LS_REPS : "dof_reports";
+      var all = JSON.parse(localStorage.getItem(key) || "{}");
+      return all[sel.value] || null;
+    } catch (e) { return null; }
+  }
+
+  function refreshAsAppliedButtons() {
+    var wrap = byId("aaExportWrap");
+    if (!wrap) return;
+    var rep = getSelectedReport();
+    var available = liveHasAsApplied() || reportHasAsApplied(rep);
+    wrap.style.display = available ? "" : "none";
+    var hint = byId("asAppliedHint");
+    if (hint && available && rep && reportHasAsApplied(rep) && !liveHasAsApplied()) {
+      hint.textContent = "This report has as-applied data — export it or view the rate map.";
+    }
+  }
+
+  function watchReportSelection() {
+    var sel = byId("repSelect");
+    if (sel && !sel.__aaWatched) {
+      sel.addEventListener("change", refreshAsAppliedButtons);
+      sel.__aaWatched = true;
+    }
+    setInterval(refreshAsAppliedButtons, 3000);
+    refreshAsAppliedButtons();
+  }
+
+  // ==========================================================
   // BOOT
   // ==========================================================
   ready(function () {
@@ -678,6 +758,18 @@
     injectDialog();
     injectBushelsPencil();
     injectExportButtons();
+    try { watchReportSelection(); } catch (e) { console.warn("[as-applied] watch failed", e); }
+
+    // Warn before closing/refreshing the app with unsaved coverage.
+    // The browser shows its own native "Leave site?" prompt; we just
+    // signal that there's unsaved work.
+    window.addEventListener("beforeunload", function (e) {
+      if (hasUnsavedWork()) {
+        e.preventDefault();
+        e.returnValue = "";   // required for the native prompt to appear
+        return "";
+      }
+    });
     // expose a few helpers for debugging / future use
     window.OPIO_buildDataLayer = buildDataLayer;
     window.OPIO_exportAsAppliedShapefile = exportAsAppliedShapefile;
