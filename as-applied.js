@@ -749,6 +749,270 @@
   }
 
   // ==========================================================
+  // RTK-AWARENESS (Step 1) — accuracy readout + fix-quality badge
+  // + optional paint-accuracy gate. Works with the browser's GPS
+  // today; lights up to cm-level automatically IF a precision fix
+  // ever reaches the iOS system GPS (e.g. an MFi receiver). Cheap
+  // ArduSimple boards need the native path (see scoping doc).
+  // ==========================================================
+
+  // Settings persist in localStorage so they survive reloads.
+  var RTK_LS = "opio_rtk_settings";
+  function rtkSettings() {
+    var def = { gateOn: false, gateMeters: 1.0, tipShown: false };
+    try {
+      var s = JSON.parse(localStorage.getItem(RTK_LS) || "{}");
+      return {
+        gateOn:    !!s.gateOn,
+        gateMeters: (s.gateMeters != null ? +s.gateMeters : def.gateMeters),
+        tipShown:  !!s.tipShown
+      };
+    } catch (e) { return def; }
+  }
+  function saveRtkSettings(s) {
+    try { localStorage.setItem(RTK_LS, JSON.stringify(s)); } catch (e) {}
+  }
+
+  // Last accuracy seen (meters). Updated via the setGpsPill wrapper.
+  var _lastAccM = null;
+
+  // Infer a fix-quality label from accuracy (we can't read true NMEA
+  // quality through the browser, so this is an honest approximation).
+  function fixQuality(accM) {
+    if (accM == null || !isFinite(accM)) return { label: "Acquiring…", cls: "warn", cm: null };
+    var cm = accM * 100;
+    if (accM <= 0.05) return { label: "RTK FIX",      cls: "good", cm: cm }; // <=5cm
+    if (accM <= 0.50) return { label: "RTK Float",    cls: "good", cm: cm }; // sub-half-meter
+    if (accM <= 1.50) return { label: "Sub-meter",    cls: "good", cm: cm };
+    if (accM <= 5.00) return { label: "Standard GPS", cls: "warn", cm: cm };
+    return                  { label: "Poor",          cls: "bad",  cm: cm };
+  }
+
+  function fmtAcc(accM) {
+    if (accM == null || !isFinite(accM)) return "—";
+    return accM < 1 ? Math.round(accM * 100) + " cm" : accM.toFixed(1) + " m";
+  }
+
+  function updateAccuracyBadge(accM) {
+    var badge = byId("rtkBadge");
+    if (!badge) return;
+    var q = fixQuality(accM);
+    badge.textContent = q.label + " · ±" + fmtAcc(accM);
+    badge.className = "rtk-badge rtk-" + q.cls;
+  }
+
+  // PAINT GATE: when enabled, block coverage painting on poor accuracy
+  // so a bad fix never pollutes your as-applied data.
+  function paintAllowed() {
+    var s = rtkSettings();
+    if (!s.gateOn) return true;
+    if (_lastAccM == null) return true;     // unknown -> don't block
+    return _lastAccM <= s.gateMeters;
+  }
+
+  // Wrap setGpsPill so every fix also updates our badge + gate state.
+  function patchGpsPill() {
+    if (typeof window.setGpsPill === "function" && !window.setGpsPill.__rtkPatched) {
+      var _pill = window.setGpsPill;
+      window.setGpsPill = function (ok, accuracyM) {
+        var ret = _pill.apply(this, arguments);
+        _lastAccM = (ok && isFinite(accuracyM)) ? accuracyM : null;
+        updateAccuracyBadge(_lastAccM);
+        return ret;
+      };
+      window.setGpsPill.__rtkPatched = true;
+    }
+  }
+
+  // Add the paint-gate check to the existing drawCoveragePolygon wrapper
+  // by wrapping AGAIN (idempotent via its own flag).
+  function patchPaintGate() {
+    if (typeof window.drawCoveragePolygon === "function" && !window.drawCoveragePolygon.__rtkGate) {
+      var _draw2 = window.drawCoveragePolygon;
+      window.drawCoveragePolygon = function () {
+        if (!paintAllowed()) return;        // skip painting on poor fix
+        return _draw2.apply(this, arguments);
+      };
+      window.drawCoveragePolygon.__rtkGate = true;
+    }
+  }
+
+  // Inject the accuracy badge near the GPS pill (or top of body).
+  function injectRtkBadge() {
+    if (byId("rtkBadge")) return;
+    var badge = document.createElement("div");
+    badge.id = "rtkBadge";
+    badge.className = "rtk-badge rtk-warn";
+    badge.textContent = "Acquiring…";
+    badge.title = "GPS fix quality (inferred from accuracy). Tap for RTK settings.";
+    badge.addEventListener("click", showRtkSettings);
+    var pill = byId("gpsPill");
+    if (pill && pill.parentNode) pill.parentNode.insertBefore(badge, pill.nextSibling);
+    else document.body.appendChild(badge);
+  }
+
+  function injectRtkCss() {
+    if (byId("rtkStyles")) return;
+    var css =
+      ".rtk-badge{display:inline-block;margin-left:6px;padding:3px 8px;border-radius:10px;" +
+      "font-size:12px;font-weight:700;cursor:pointer;vertical-align:middle;white-space:nowrap;}" +
+      ".rtk-good{background:#1e7e34;color:#fff;}" +
+      ".rtk-warn{background:#b8860b;color:#fff;}" +
+      ".rtk-bad{background:#a12;color:#fff;}";
+    var s = document.createElement("style");
+    s.id = "rtkStyles"; s.textContent = css;
+    document.head.appendChild(s);
+  }
+
+  // Themed RTK settings dialog (built on the fly; reuses dlg styles).
+  function injectRtkDialog() {
+    if (byId("rtkDlg")) return;
+    var div = document.createElement("div");
+    div.innerHTML =
+      '<div id="rtkDlg" class="dlg-overlay hidden" role="dialog" aria-modal="true">' +
+        '<div class="dlg-card">' +
+          '<div class="dlg-header"><div class="dlg-title">\uD83D\uDCE1 GPS / RTK Settings</div></div>' +
+          '<div class="dlg-body">' +
+            '<div class="hint" id="rtkLiveLine" style="margin-bottom:10px;"></div>' +
+            '<label style="display:flex;align-items:center;gap:8px;">' +
+              '<input id="rtkGateOn" type="checkbox" /> Only paint coverage when accuracy is good' +
+            '</label>' +
+            '<label style="margin-top:8px;">Minimum accuracy to paint (meters)' +
+              '<input id="rtkGateM" type="number" inputmode="decimal" min="0.02" step="0.1" />' +
+            '</label>' +
+            '<div class="hint" style="margin-top:8px;">Set ~0.05 for an RTK receiver, or ~1\u20133 for phone GPS. ' +
+            'Leave the gate off until you have precision hardware.</div>' +
+          '</div>' +
+          '<div class="dlg-footer">' +
+            '<button id="rtkDlgCancel" class="btn btn-ghost">Cancel</button>' +
+            '<button id="rtkDlgSave" class="btn btn-primary">\uD83D\uDCBE Save</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(div.firstChild);
+  }
+
+  function showRtkSettings() {
+    injectRtkDialog();
+    var s = rtkSettings();
+    if (byId("rtkGateOn")) byId("rtkGateOn").checked = s.gateOn;
+    if (byId("rtkGateM"))  byId("rtkGateM").value = s.gateMeters;
+    var live = byId("rtkLiveLine");
+    if (live) {
+      var q = fixQuality(_lastAccM);
+      live.textContent = "Live: " + q.label + " (±" + fmtAcc(_lastAccM) + "). " +
+        "Cheap boards (ArduSimple) need the native app path to reach cm-level here.";
+    }
+    openDlg("rtkDlg", "rtkGateOn");
+    function cleanup() {
+      byId("rtkDlgSave").removeEventListener("click", onSave);
+      byId("rtkDlgCancel").removeEventListener("click", onCancel);
+      byId("rtkDlg").removeEventListener("click", onBackdrop);
+    }
+    function onSave() {
+      var ns = rtkSettings();
+      ns.gateOn = byId("rtkGateOn") ? !!byId("rtkGateOn").checked : false;
+      var v = parseFloat(byId("rtkGateM") && byId("rtkGateM").value);
+      ns.gateMeters = (isNaN(v) || v <= 0) ? 1.0 : v;
+      saveRtkSettings(ns);
+      closeDlg("rtkDlg"); cleanup();
+    }
+    function onCancel() { closeDlg("rtkDlg"); cleanup(); }
+    function onBackdrop(ev) { if (ev.target === byId("rtkDlg")) onCancel(); }
+    byId("rtkDlgSave").addEventListener("click", onSave);
+    byId("rtkDlgCancel").addEventListener("click", onCancel);
+    byId("rtkDlg").addEventListener("click", onBackdrop);
+  }
+
+  // One-time antenna-placement tip.
+  function maybeShowAntennaTip() {
+    var s = rtkSettings();
+    if (s.tipShown) return;
+    if (typeof appAlert !== "function") return;
+    appAlert(
+      "For best accuracy with an external RTK antenna:\n\n" +
+      "• Mount the antenna on the CENTERLINE of the cab/implement roof.\n" +
+      "• Give it a clear, open view of the sky.\n" +
+      "• Keep the phone in the cab — only the antenna needs sky view.",
+      "📡 Antenna Placement"
+    );
+    s.tipShown = true; saveRtkSettings(s);
+  }
+
+  // ==========================================================
+  // EXTERNAL FIX BRIDGE (future-proofing for ArduSimple path)
+  // A native Android wrapper (WebView) can feed precise positions
+  // straight into the app with ONE call:
+  //
+  //   window.OPIO_externalFix(lat, lng, accuracyMeters, quality, opts)
+  //
+  //   lat, lng        : decimal degrees (required)
+  //   accuracyMeters  : horizontal accuracy in meters (optional; if
+  //                     omitted we infer from `quality`)
+  //   quality         : NMEA GGA fix-quality int (optional):
+  //                     4 = RTK Fix, 5 = RTK Float, 2 = DGPS, 1 = GPS
+  //   opts            : { heading, speedMps, ts } (all optional)
+  //
+  // It builds a standard geolocation-shaped object and routes it
+  // through the app's existing onPos() so ALL downstream logic
+  // (painting, metrics, trail, as-applied rate tagging) just works.
+  // Returns true if the fix was accepted/forwarded.
+  // ==========================================================
+  function qualityToAccuracy(q) {
+    switch (+q) {
+      case 4: return 0.02;   // RTK Fix  -> ~2 cm
+      case 5: return 0.30;   // RTK Float-> ~30 cm
+      case 2: return 0.80;   // DGPS     -> ~0.8 m
+      case 1: return 3.00;   // GPS      -> ~3 m
+      default: return null;
+    }
+  }
+
+  function externalFix(lat, lng, accuracyMeters, quality, opts) {
+    opts = opts || {};
+    if (typeof lat !== "number" || typeof lng !== "number" ||
+        !isFinite(lat) || !isFinite(lng)) {
+      try { console.warn("[rtk] OPIO_externalFix: bad lat/lng", lat, lng); } catch (e) {}
+      return false;
+    }
+    var acc = (typeof accuracyMeters === "number" && isFinite(accuracyMeters))
+      ? accuracyMeters
+      : qualityToAccuracy(quality);
+    if (acc == null) acc = 5.0;   // unknown -> conservative
+
+    var pos = {
+      coords: {
+        latitude: lat,
+        longitude: lng,
+        accuracy: acc,
+        heading: (opts.heading != null ? opts.heading : null),
+        speed:   (opts.speedMps != null ? opts.speedMps : null),
+        altitude: (opts.altitude != null ? opts.altitude : null),
+        altitudeAccuracy: null
+      },
+      timestamp: (opts.ts != null ? opts.ts : Date.now()),
+      // mark the source so we can tell external fixes apart if needed
+      __source: "OPIO_externalFix",
+      __quality: (quality != null ? +quality : null)
+    };
+
+    // Update our RTK badge directly (so it reflects the true fix quality
+    // even when accuracy alone would be ambiguous).
+    try {
+      _lastAccM = acc;
+      updateAccuracyBadge(acc);
+      if (typeof window.setGpsPill === "function") window.setGpsPill(true, acc);
+    } catch (e) {}
+
+    // Route through the app's real position handler.
+    if (typeof window.onPos === "function") {
+      try { window.onPos(pos); return true; }
+      catch (e) { try { console.warn("[rtk] onPos failed", e); } catch (e2) {} return false; }
+    }
+    return false;
+  }
+
+  // ==========================================================
   // BOOT
   // ==========================================================
   ready(function () {
@@ -759,6 +1023,14 @@
     injectBushelsPencil();
     injectExportButtons();
     try { watchReportSelection(); } catch (e) { console.warn("[as-applied] watch failed", e); }
+
+    // --- RTK-awareness (Step 1) ---
+    try {
+      injectRtkCss();
+      injectRtkBadge();
+      patchGpsPill();
+      patchPaintGate();
+    } catch (e) { console.warn("[rtk] init failed", e); }
 
     // Warn before closing/refreshing the app with unsaved coverage.
     // The browser shows its own native "Leave site?" prompt; we just
@@ -777,4 +1049,7 @@
     window.OPIO_showAsAppliedMap = showHeatMap;
     try { console.log("O\u03c0O As-Applied module loaded (all-in-one, no edits)."); } catch (e) {}
   });
-})();
+    window.OPIO_showAsAppliedMap = showHeatMap;
+    window.OPIO_showRtkSettings = showRtkSettings;
+    window.OPIO_showAntennaTip = maybeShowAntennaTip;
+    window.OPIO_externalFix = externalFix;
