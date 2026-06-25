@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260613-1610" />
+<link rel="stylesheet" href="styles.css?v=20260625-1" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* ===== Card reordering ===== */
@@ -202,7 +202,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.05 · 17:45</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.06.25 · 01</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -306,6 +306,11 @@
   <div class="hint">Reset clears coverage paint + acres while keeping your GPS, trail, and boundary intact.</div>
 </div>
 
+<!-- ⋯ More controls — secondary tools collapsed by default (UX: declutter Operate) -->
+<div class="btn-row" style="margin-top:8px;">
+  <button id="btnToggleMore" class="btn btn-ghost" aria-expanded="false" aria-controls="operateMore">⋯ More controls</button>
+</div>
+<div id="operateMore" class="hidden">
 <!-- 🆕 Map View -->
 <div class="card">
   <div class="card-title">Map View</div>
@@ -370,6 +375,7 @@
         </div>
       </div>
     </div>
+  </div><!-- /#operateMore -->
   </section>
 
   <!-- ===== SETUP TAB ===== -->
@@ -524,6 +530,21 @@
       Farm utilities — calculators and lookups. The Mix Calculator and
       Cost &amp; Profit tools moved here from “Field &amp; Equipment”.
     </div>
+  </div>
+
+  <!-- ===== SETTINGS ===== -->
+  <div class="card" id="settingsCard">
+    <div class="card-title">⚙️ Settings</div>
+    <label class="setting-row">
+      <span>📳 Haptic feedback (vibrate on taps)</span>
+      <input type="checkbox" id="setHaptics" class="setting-toggle" />
+    </label>
+    <div class="hint">Buzzes briefly when you start a session, save a report, or tap a control. Turn off to save a little battery. (Works on phones that support vibration.)</div>
+    <label class="setting-row">
+      <span>🔊 Spoken confirmations</span>
+      <input type="checkbox" id="setVoiceFeedback" class="setting-toggle" />
+    </label>
+    <div class="hint">Reads short confirmations aloud (“Session started”, “Report saved”) — handy when your eyes are on the field.</div>
   </div>
 
   <!-- ===== UNIT CONVERTER ===== -->
@@ -1230,7 +1251,10 @@
     </div>
     <div class="dlg-body">
       <label>Note
-        <textarea id="noteText" rows="3" placeholder="e.g. Washout near east waterway, weeds in NW corner..."></textarea>
+        <div class="note-input-wrap">
+          <textarea id="noteText" rows="3" placeholder="e.g. Washout near east waterway, weeds in NW corner..."></textarea>
+          <button type="button" id="noteMicBtn" class="note-mic" aria-label="Start voice dictation" title="Dictate note">🎤</button>
+        </div>
       </label>
       <label>Photo (optional)
         <input id="notePhoto" type="file" accept="image/*" capture="environment" />
@@ -1249,8 +1273,9 @@
 <!-- Put your Google Maps API key + OAuth Client ID in config.js -->
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260613-1610"></script>
-<script src="app.js?v=20260613-1610"></script>
+<script src="config.js?v=20260625-1"></script>
+<script src="app.js?v=20260625-1"></script>
+<script src="ux-enhancements.js?v=20260625-1"></script>
 <script src="asapplied.js?v=20260622-5"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
