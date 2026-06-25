@@ -1,4 +1,4 @@
-[Uploading README.md…]()
+[README (4).md](https://github.com/user-attachments/files/29358454/README.4.md)
 # 🚜 Diamond O Farms — Data Systems Pro
 
 A precision agriculture web app built for Diamond O Farms LLC. Turn any iPhone, iPad, or browser into a full-featured field computer for spraying, planting, harvesting, tillage, and spreading — with live GPS, swath painting, multi-equipment management, complete record-keeping, and cloud sync across all your devices.
@@ -7,6 +7,8 @@ A precision agriculture web app built for Diamond O Farms LLC. Turn any iPhone, 
 
 ---
 
+> **🆕 Version v2026.06.25 · 01** — added field-ready UX upgrades: haptic feedback, on-screen toast confirmations with **Undo**, hands-free **voice dictation** for notes, optional **spoken confirmations**, a peripheral **GPS-quality border**, bigger Start/Stop + live-metric text, a decluttered Operate screen (**⋯ More controls**), and a new **⚙️ Settings** panel (Tools tab) to toggle haptics and voice. See the [Changelog](#-changelog) at the bottom.
+
 ## 📸 What it does
 
 Live GPS-driven precision ag display that runs entirely in your browser. Drive any equipment in your field, see real-time coverage painted onto a satellite map, get live metrics, save reports for every job, import field boundaries straight from Google Earth, and sync your entire setup across devices through your own Google account.
@@ -14,6 +16,18 @@ Live GPS-driven precision ag display that runs entirely in your browser. Drive a
 ---
 
 ## ✨ Features
+
+### 🎛️ Field-Ready UX (v2026.06.25)
+- **Haptic feedback** — a short buzz confirms key taps (start session, save report, refill, etc.) so you don't have to look down. Toggle in ⚙️ Settings.
+- **On-screen toasts with Undo** — quick confirmations slide up from the bottom; destructive actions (**Reset Painted Area**, **Clear Trail**) show a 6-second **UNDO**.
+- **Voice dictation for notes** — tap the 🎤 in *Add Field Note* and speak; no typing in the cab.
+- **Spoken confirmations** *(optional, off by default)* — hear "Session started" / "Report saved" read aloud. Toggle in ⚙️ Settings.
+- **Peripheral GPS-quality border** — the screen edge glows amber/red when your fix degrades, visible from the corner of your eye.
+- **Bigger primary controls** — larger, bolder **Start/Stop** and live-metric numbers for at-a-glance reading.
+- **Decluttered Operate screen** — secondary map/boundary/guidance tools tuck behind a **⋯ More controls** button (your choice is remembered).
+- **⚙️ Settings panel** *(Tools tab)* — turn haptics and spoken confirmations on/off.
+- **Accessibility** — dynamically-created icon buttons now carry ARIA labels for VoiceOver.
+
 
 ### 🗺️ Live Operating Display
 - **Real-time satellite map** with auto-following machine arrow
@@ -209,6 +223,7 @@ This is a **static web app** — no server required. You can:
 ├── index.html          # Main app structure
 ├── styles.css          # All styling
 ├── app.js              # Application logic
+├── ux-enhancements.js  # Field-ready UX layer (haptics, toasts, voice, settings)
 ├── sw.js               # Service worker (offline cache + update prompts)
 ├── config.js           # Your API key + OAuth client ID (gitignored)
 ├── manifest.json       # PWA manifest
@@ -269,6 +284,28 @@ Three constants control GPS behavior — tweak if you find the defaults too aggr
 - **GPS quality depends on phone hardware** — modern iPhones (X+) give 3-5m accuracy; older devices may be 10-15m
 - **Battery drain** — continuous GPS + screen-on is hard on batteries; a 12V cab charger is recommended for full-day use
 - **Google API quotas** — Maps free tier covers ~28,000 map loads per month per key; Drive API free quotas are far more than personal sync use will ever reach
+
+---
+
+---
+
+## 📋 Changelog
+
+### v2026.06.25 · 01
+- **NEW:** Haptic feedback on key actions (toggle in ⚙️ Settings)
+- **NEW:** Toast confirmations with **Undo** for Reset Painted Area & Clear Trail
+- **NEW:** Voice dictation (🎤) for field notes
+- **NEW:** Optional spoken confirmations (toggle in ⚙️ Settings)
+- **NEW:** Peripheral GPS-quality border (amber/red screen edge)
+- **NEW:** ⚙️ Settings panel on the Tools tab
+- **IMPROVED:** Larger Start/Stop buttons and live-metric text
+- **IMPROVED:** Operate screen decluttered behind a **⋯ More controls** toggle
+- **IMPROVED:** ARIA labels added to dynamically-generated icon buttons
+- **FIXED:** Removed leftover debug `console.log` calls
+- **FIXED:** Repaired several emoji/character encodings (🎯 🌾 🔄, em-dashes, curly quotes)
+- **INTERNAL:** New `ux-enhancements.js` module loads after `app.js`; each enhancement is isolated so one failure can't disable the others.
+
+> **Deploying this release:** upload the new `ux-enhancements.js` **and** replace `index.html`, `styles.css`, `app.js`, and `sw.js`. The version trio (`APP_VERSION`, the `?v=` stamps, and `CACHE_NAME`) is already bumped to `2026.06.25-1` to trigger the in-app update banner.
 
 ---
 
