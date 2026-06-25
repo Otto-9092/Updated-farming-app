@@ -421,16 +421,23 @@
 
   // ----------------------------------------------------------
   // BOOTSTRAP
-  // ----------------------------------------------------------
   function init() {
-    wireHaptics();
-    wireUndoableActions();
-    wireVoiceDictation();
-    wireAriaObserver();
-    wireGpsBorder();
-    wireMoreToggle();
-    wireSettings();
-    wireSuccessToasts();
+    // Each wiring step is isolated so one failure can never prevent the
+    // others from running (e.g. a missing API must not disable the More toggle).
+    var steps = [
+      ["haptics", wireHaptics],
+      ["undoableActions", wireUndoableActions],
+      ["voiceDictation", wireVoiceDictation],
+      ["ariaObserver", wireAriaObserver],
+      ["gpsBorder", wireGpsBorder],
+      ["moreToggle", wireMoreToggle],
+      ["settings", wireSettings],
+      ["successToasts", wireSuccessToasts]
+    ];
+    steps.forEach(function (s) {
+      try { s[1](); }
+      catch (e) { try { console.warn("[ux] " + s[0] + " failed:", e); } catch (_) {} }
+    });
   }
   if (D.readyState === "loading") D.addEventListener("DOMContentLoaded", init);
   else init();
