@@ -2,8 +2,8 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.13 · 16:10";
-try { console.log("OπO Farming v" + window.APP_VERSION); } catch (e) {}
+window.APP_VERSION = "2026.06.25 · 01";
+// (startup version log removed for production)
 
 /* ============================================================
    OπO Farming (Diamond O Farms LLC) — Data Systems Pro
@@ -2843,12 +2843,7 @@ function cleanBoundaryPoints(points) {
 function fitMapToBoundary(points) {
   if (!state.map || !points || !points.length) return;
   var valid = cleanBoundaryPoints(points);
-  try {
-    console.log("[fitMapToBoundary] raw=" + points.length + " clean=" + valid.length +
-      (valid.length ? " center=" +
-        (valid.reduce(function (a, p) { return a + p.lat; }, 0) / valid.length).toFixed(4) + "," +
-        (valid.reduce(function (a, p) { return a + p.lng; }, 0) / valid.length).toFixed(4) : ""));
-  } catch (e) {}
+  // [fitMapToBoundary] debug logging removed for production
   if (valid.length < 3) { if (valid.length) { state.map.setCenter(valid[0]); state.map.setZoom(16); } return; }
   var lats = valid.map(function (p) { return p.lat; });
   var lngs = valid.map(function (p) { return p.lng; });
@@ -2957,7 +2952,7 @@ if ($("btnAutoZoom")) $("btnAutoZoom").addEventListener("click", () => {
 if ($("btnAutoCenter")) $("btnAutoCenter").addEventListener("click", () => {
   state.autoCenter = !state.autoCenter;
   const btn = $("btnAutoCenter");
-  btn.textContent = state.autoCenter ? "�� Auto-Center: ON" : "🎯 Auto-Center: OFF";
+  btn.textContent = state.autoCenter ? "🎯 Auto-Center: ON" : "🎯 Auto-Center: OFF";
   btn.classList.toggle("active-toggle", state.autoCenter);
   // When re-enabling, snap back to the machine immediately
   if (state.autoCenter && state.lastPos && state.map) {
@@ -3183,7 +3178,7 @@ function exportBoundariesShapefile() {
                 (raw && !valid.length ? " — coords out of range, possible lat/lng swap" : "") + ")");
     }
   });
-  try { console.log("[ShapefileExport]\n" + diag.join("\n")); } catch (e) {}
+  // [ShapefileExport] debug logging removed for production
   if (!fields.length) {
     appAlert("No exportable boundaries.\n\n" + diag.join("\n"), "Nothing to export");
     return;
@@ -4717,7 +4712,7 @@ function migrateLegacyPhotos() {
     if (pending.length) {
       Promise.all(pending).then(function () {
         localStorage.setItem(LS_REPS, JSON.stringify(all));
-        console.log("[migrate] Moved " + pending.length + " inline photo(s) to IndexedDB.");
+        // [migrate] inline-photo migration log removed for production
       });
     }
   } catch (e) { console.warn("[migrate] skipped:", e); }
@@ -5725,7 +5720,7 @@ if ("serviceWorker" in navigator) {
 
   window.addEventListener("load", function () {
     navigator.serviceWorker.register("sw.js").then(function (reg) {
-      console.log("[PWA] Service worker registered:", reg.scope);
+      // [PWA] service-worker registration log removed for production
 
       // If one is already waiting (e.g. installed on a previous visit), prompt.
       if (reg.waiting && navigator.serviceWorker.controller) {
