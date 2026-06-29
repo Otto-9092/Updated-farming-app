@@ -15,7 +15,7 @@ const CORE_ASSETS = [
   "./styles.css?v=20260625-1",
   "./config.js?v=20260625-1",
   "./app.js?v=20260625-1",
-  "./ux-enhancements.js?v=20260625-1",
+  "./uxenhancements.js?v=20260625-1",
   "./asapplied.js?v=20260622-5",
   "./manifest.json",
   "./icon-16.png",
