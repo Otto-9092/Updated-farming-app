@@ -301,17 +301,48 @@
     }
     var pill = byId("gpsPill");
     if (!pill) return;
+
+    // Show the border ONLY when a session is actively running.
+    function sessionRunning() {
+      try {
+        if (window.state && typeof window.state.running === "boolean") return window.state.running;
+      } catch (e) {}
+      // Fallback: the Stop button is enabled only while running.
+      var stop = byId("btnStop");
+      return !!(stop && stop.disabled === false);
+    }
+    // User on/off switch (default ON). Stored in localStorage as "gpsBorder".
+    function borderEnabled() {
+      try { return localStorage.getItem("gpsBorder") !== "off"; } catch (e) { return true; }
+    }
+
     function sync() {
-      var c = pill.className || "";
       frame.classList.remove("gps-good", "gps-warn", "gps-bad");
+      // Hidden entirely unless enabled AND a session is running.
+      if (!borderEnabled() || !sessionRunning()) return;
+      var c = pill.className || "";
       if (c.indexOf("pill-good") !== -1) frame.classList.add("gps-good");
       else if (c.indexOf("pill-warn") !== -1) frame.classList.add("gps-warn");
       else if (c.indexOf("pill-bad") !== -1) frame.classList.add("gps-bad");
     }
+    // Expose so the Settings toggle can refresh the border live.
+    window._opioSyncGpsBorder = sync;
+
     sync();
     try {
+      // React to GPS-quality changes (pill class) ...
       var mo = new MutationObserver(sync);
       mo.observe(pill, { attributes: true, attributeFilter: ["class"] });
+      // ... and to Start/Stop (which enable/disable the Stop button).
+      var stop = byId("btnStop");
+      var start = byId("btnStart");
+      if (stop) {
+        var mo2 = new MutationObserver(sync);
+        mo2.observe(stop, { attributes: true, attributeFilter: ["disabled"] });
+      }
+      // Belt-and-suspenders: also re-check on clicks.
+      if (start) start.addEventListener("click", function () { setTimeout(sync, 50); });
+      if (stop) stop.addEventListener("click", function () { setTimeout(sync, 50); });
     } catch (e) {}
   }
 
@@ -385,6 +416,17 @@
       v.addEventListener("change", function () {
         try { localStorage.setItem("voiceFeedback", v.checked ? "on" : "off"); } catch (e) {}
         if (v.checked) speak("Spoken confirmations on");
+      });
+    }
+    var g = byId("setGpsBorder");
+    if (g) {
+      var gOff = false;
+      try { gOff = localStorage.getItem("gpsBorder") === "off"; } catch (e) {}
+      g.checked = !gOff;   // default ON unless explicitly turned off
+      g.addEventListener("change", function () {
+        try { localStorage.setItem("gpsBorder", g.checked ? "on" : "off"); } catch (e) {}
+        // Refresh the border immediately so the change is visible.
+        try { if (window._opioSyncGpsBorder) window._opioSyncGpsBorder(); } catch (e) {}
       });
     }
   }
