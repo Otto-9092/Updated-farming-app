@@ -1047,9 +1047,9 @@
     window.OPIO_exportAsAppliedShapefile = exportAsAppliedShapefile;
     window.OPIO_showBushelsDialog = showBushelsDialog;
     window.OPIO_showAsAppliedMap = showHeatMap;
-    try { console.log("O\u03c0O As-Applied module loaded (all-in-one, no edits)."); } catch (e) {}
-  });
-    window.OPIO_showAsAppliedMap = showHeatMap;
     window.OPIO_showRtkSettings = showRtkSettings;
     window.OPIO_showAntennaTip = maybeShowAntennaTip;
     window.OPIO_externalFix = externalFix;
+    try { console.log("O\u03c0O As-Applied module loaded (all-in-one, no edits)."); } catch (e) {}
+  });
+})();
