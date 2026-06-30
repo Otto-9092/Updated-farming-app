@@ -4,7 +4,7 @@
    Google Maps tiles/scripts are NEVER cached (they need network).
    Bump CACHE_VERSION whenever you ship new files.
    ============================================================ */
-const CACHE_VERSION = "opio-2026.06.30-1";
+const CACHE_VERSION = "opio-2026.06.30-2";
 const CACHE_NAME = "opio-cache-" + CACHE_VERSION;
 
 // Core files that make up the app shell. The ?v= query strings match the
@@ -12,11 +12,11 @@ const CACHE_NAME = "opio-cache-" + CACHE_VERSION;
 const CORE_ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=20260630-1",
-  "./config.js?v=20260630-1",
-  "./app.js?v=20260630-1",
-  "./uxenhancements.js?v=20260630-1",
-  "./asapplied.js?v=20260630-1",
+  "./styles.css?v=20260630-2",
+  "./config.js?v=20260630-2",
+  "./app.js?v=20260630-2",
+  "./uxenhancements.js?v=20260630-2",
+  "./asapplied.js?v=20260630-2",
   "./manifest.json",
   "./icon-16.png",
   "./icon-32.png",
