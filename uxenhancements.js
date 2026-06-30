@@ -461,6 +461,134 @@
   }
 
   // ----------------------------------------------------------
+  // SESSION SUMMARY (shown when a session ends via hold-to-Stop)
+  //   captureSessionSummary() reads the live totals BEFORE stopSession
+  //   resets anything; showSessionSummary() renders a recap card with a
+  //   one-tap "Save Report" that routes to the app's existing Save flow.
+  // ----------------------------------------------------------
+  function captureSessionSummary() {
+    var st = window.state || {};
+    function n(v) { return (typeof v === "number" && isFinite(v)) ? v : 0; }
+    var avg = (st.speedCount > 0) ? (st.speedSum / st.speedCount) : 0;
+    var elapsedMs = st.sessionStart ? (Date.now() - st.sessionStart) : 0;
+    var elapsedHr = elapsedMs / 3600000;
+    var acres = n(st.acres);
+    var acresPerHr = elapsedHr > 0 ? (acres / elapsedHr) : 0;
+    var type = (st.equipment && st.equipment.type) || "none";
+    return {
+      fieldName: (st.field && st.field.name) || "",
+      crop: (st.field && st.field.crop) || "",
+      equipName: (st.equipment && st.equipment.name) || "",
+      equipType: type,
+      acres: acres,
+      boundaryAcres: n(st.boundary && st.boundary.acres),
+      bushels: n(st.bushels),
+      gallons: n(st.gallons),
+      loads: n(st.loads),
+      bales: n(st.bales),
+      avgSpeed: avg,
+      maxSpeed: n(st.speedMax),
+      acresPerHr: acresPerHr,
+      elapsedMs: elapsedMs
+    };
+  }
+
+  function fmtDuration(ms) {
+    var mins = Math.max(0, Math.round(ms / 60000));
+    var h = Math.floor(mins / 60), m = mins % 60;
+    return h > 0 ? (h + "h " + m + "m") : (m + "m");
+  }
+
+  function showSessionSummary(s) {
+    if (!s) return;
+    var existing = byId("sessionSummaryOverlay");
+    if (existing) existing.remove();
+
+    var overlay = D.createElement("div");
+    overlay.id = "sessionSummaryOverlay";
+    overlay.className = "ss-overlay";
+
+    var card = D.createElement("div");
+    card.className = "ss-card";
+    overlay.appendChild(card);
+
+    // Header
+    var title = s.fieldName ? ("\u201c" + s.fieldName + "\u201d") : "Session";
+    var sub = [s.crop, s.equipName].filter(Boolean).join(" \u00b7 ");
+    var head = D.createElement("div");
+    head.className = "ss-head";
+    head.innerHTML = "<div class=\"ss-title\">\u2705 Session complete</div>" +
+      "<div class=\"ss-sub\">" + title + (sub ? (" &middot; " + sub) : "") + "</div>";
+    card.appendChild(head);
+
+    // Build the stat rows relevant to this equipment type.
+    var stats = [];
+    stats.push(["\u23f1 Time", fmtDuration(s.elapsedMs)]);
+    var acresStr = s.acres.toFixed(2) + " ac";
+    if (s.boundaryAcres > 0) {
+      var pct = Math.min(100, Math.round((s.acres / s.boundaryAcres) * 100));
+      acresStr += " of " + s.boundaryAcres.toFixed(2) + " (" + pct + "%)";
+    }
+    stats.push(["\ud83c\udf3e Acres", acresStr]);
+    stats.push(["\u26a1 Acres/hr", s.acresPerHr.toFixed(2)]);
+    stats.push(["\ud83d\ude9c Avg speed", s.avgSpeed.toFixed(1) + " mph"]);
+    stats.push(["\ud83d\udca8 Max speed", s.maxSpeed.toFixed(1) + " mph"]);
+    if (s.equipType === "combine") {
+      stats.push(["\ud83c\udf3d Bushels", Math.round(s.bushels).toLocaleString()]);
+      if (s.loads > 0) stats.push(["\ud83d\ude9b Unloads", String(s.loads)]);
+    } else if (s.equipType === "sprayer") {
+      if (s.gallons > 0) stats.push(["\ud83d\udca7 Gallons", Math.round(s.gallons).toLocaleString()]);
+      if (s.loads > 0) stats.push(["\ud83d\udd04 Refills", String(s.loads)]);
+    } else if (s.equipType === "baler") {
+      if (s.bales > 0) stats.push(["\ud83d\udfe1 Bales", String(s.bales)]);
+    } else if (s.equipType === "spreader") {
+      if (s.loads > 0) stats.push(["\ud83d\udd04 Refills", String(s.loads)]);
+    }
+
+    var grid = D.createElement("div");
+    grid.className = "ss-grid";
+    stats.forEach(function (row) {
+      var cell = D.createElement("div");
+      cell.className = "ss-stat";
+      cell.innerHTML = "<div class=\"ss-label\">" + row[0] + "</div>" +
+                       "<div class=\"ss-value\">" + row[1] + "</div>";
+      grid.appendChild(cell);
+    });
+    card.appendChild(grid);
+
+    // Action buttons.
+    var actions = D.createElement("div");
+    actions.className = "ss-actions";
+    var saveBtn = D.createElement("button");
+    saveBtn.className = "btn btn-primary";
+    saveBtn.textContent = "\ud83d\udcbe Save Report";
+    var closeBtn = D.createElement("button");
+    closeBtn.className = "btn btn-ghost";
+    closeBtn.textContent = "Close";
+
+    saveBtn.addEventListener("click", function () {
+      haptic("ok");
+      overlay.remove();
+      // Route to the app's existing Save Report flow.
+      var realSave = byId("btnSave");
+      if (realSave) realSave.click();
+      else showToast("Save Report button not found", { kind: "warn" });
+    });
+    closeBtn.addEventListener("click", function () {
+      haptic("tap");
+      overlay.remove();
+    });
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) overlay.remove();   // tap backdrop to dismiss
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(closeBtn);
+    card.appendChild(actions);
+
+    D.body.appendChild(overlay);
+  }
+  // ----------------------------------------------------------
   // 11. HOLD-TO-STOP GUARD
   //     A single tap on Stop no longer ends the session (too easy to
   //     hit by accident in a moving cab). The user must PRESS AND HOLD
@@ -516,13 +644,17 @@
         clearHold();
         haptic("warn");
         try { speak("Session stopped"); } catch (_) {}
-        // Run the app's real stop. Prefer the global function; fall back
-        // to a synthetic click that bypasses our guard.
+        // Capture the session totals BEFORE stopping (stopSession may
+        // reset UI tiles), then run the app's real stop, then show the
+        // summary card.
+        var summary = captureSessionSummary();
         if (typeof window.stopSession === "function") {
-          try { window.stopSession(); return; } catch (_) {}
+          try { window.stopSession(); } catch (_) {}
+        } else {
+          btn._opioForceStop = true;
+          btn.click();
         }
-        btn._opioForceStop = true;
-        btn.click();
+        try { showSessionSummary(summary); } catch (e) { try { console.warn("[ux] summary failed:", e); } catch (_) {} }
       }, HOLD_MS);
     }
 
