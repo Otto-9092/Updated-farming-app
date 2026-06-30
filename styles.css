@@ -905,3 +905,36 @@ input, select {
 .conn-pill.conn-offline { background: rgba(214,59,41,0.16);  color: var(--red);   border-color: rgba(214,59,41,0.5);
   animation: connPulse 2s ease-in-out infinite; }
 @keyframes connPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.62; } }
+
+/* ===== First-run onboarding tour ===== */
+#tourOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+  background: rgba(0,0,0,0.62);
+  animation: ssFade 0.2s ease-out;
+}
+#tourOverlay .tour-cutout {
+  position: absolute;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.62), 0 0 0 3px var(--green);
+  background: transparent;
+  pointer-events: none;
+  transition: top 0.2s, left 0.2s, width 0.2s, height 0.2s;
+}
+#tourOverlay .tour-pop {
+  position: absolute;
+  width: min(88vw, 320px);
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 10px 36px rgba(0,0,0,0.4);
+  padding: 16px;
+  transition: top 0.2s, left 0.2s;
+}
+#tourOverlay .tour-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+#tourOverlay .tour-body  { font-size: 14px; line-height: 1.45; color: var(--muted); margin-bottom: 14px; }
+#tourOverlay .tour-actions { display: flex; align-items: center; gap: 8px; }
+#tourOverlay .tour-spacer { flex: 1 1 auto; }
+#tourOverlay .tour-actions .btn { min-height: 40px; }
