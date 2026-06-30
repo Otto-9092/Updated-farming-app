@@ -727,6 +727,88 @@
   }
 
   // ----------------------------------------------------------
+  // 13. FIELD ALERTS — GPS-lost + low-battery warnings
+  //     Loud, glanceable, and spoken (if voice is on) so problems are
+  //     caught even when your eyes are on the field. Active only while
+  //     a session is running. Debounced so they never spam.
+  // ----------------------------------------------------------
+  function wireFieldAlerts() {
+    var st = window.state;
+
+    function sessionRunning() {
+      try { if (st && typeof st.running === "boolean") return st.running; } catch (e) {}
+      var stop = byId("btnStop");
+      return !!(stop && stop.disabled === false);
+    }
+
+    // ---- GPS-lost / poor-signal alert ----
+    var pill = byId("gpsPill");
+    if (pill) {
+      var lastBad = false;
+      var lastAlertTs = 0;
+      var GPS_COOLDOWN = 20000;   // at most one GPS alert per 20s
+
+      function checkGps() {
+        if (!sessionRunning()) { lastBad = false; return; }
+        var c = pill.className || "";
+        var isBad = c.indexOf("pill-bad") !== -1;
+        // Fire only on the GOOD/usable -> BAD transition.
+        if (isBad && !lastBad) {
+          var now = Date.now();
+          if (now - lastAlertTs > GPS_COOLDOWN) {
+            lastAlertTs = now;
+            haptic("warn");
+            showToast("\u26a0\ufe0f GPS signal lost or weak \u2014 coverage may be inaccurate",
+                      { kind: "warn", duration: 6000 });
+            try { speak("Warning. GPS signal lost."); } catch (e) {}
+          }
+        }
+        lastBad = isBad;
+      }
+      checkGps();
+      try {
+        var mo = new MutationObserver(checkGps);
+        mo.observe(pill, { attributes: true, attributeFilter: ["class"] });
+      } catch (e) {}
+    }
+
+    // ---- Low-battery alert (Battery Status API; unsupported on iOS) ----
+    // Warns once at <=20% and again at <=10% while a session runs.
+    function setupBattery(bat) {
+      var warned20 = false, warned10 = false;
+      function level() { return Math.round((bat.level || 0) * 100); }
+      function check() {
+        if (bat.charging) { warned20 = warned10 = false; return; }  // plugged in: reset
+        if (!sessionRunning()) return;
+        var pct = level();
+        if (pct <= 10 && !warned10) {
+          warned10 = true; warned20 = true;
+          haptic("warn");
+          showToast("\ud83d\udd0b Battery critical (" + pct + "%) \u2014 plug in to avoid losing your session",
+                    { kind: "warn", duration: 8000 });
+          try { speak("Battery critical. " + pct + " percent."); } catch (e) {}
+        } else if (pct <= 20 && !warned20) {
+          warned20 = true;
+          haptic("warn");
+          showToast("\ud83d\udd0b Battery low (" + pct + "%) \u2014 consider charging soon",
+                    { kind: "warn", duration: 6000 });
+          try { speak("Battery low. " + pct + " percent."); } catch (e) {}
+        }
+        if (pct > 25) { warned20 = false; }   // re-arm 20% warning after recovery
+        if (pct > 12) { warned10 = false; }
+      }
+      bat.addEventListener("levelchange", check);
+      bat.addEventListener("chargingchange", check);
+      check();
+    }
+    try {
+      if (navigator.getBattery) {
+        navigator.getBattery().then(setupBattery).catch(function () {});
+      }
+    } catch (e) { /* unsupported (e.g. iOS Safari) - silently skip */ }
+  }
+
+  // ----------------------------------------------------------
   // BOOTSTRAP
   function init() {
     // Each wiring step is isolated so one failure can never prevent the
@@ -741,7 +823,8 @@
       ["settings", wireSettings],
       ["successToasts", wireSuccessToasts],
       ["holdToStop", wireHoldToStop],
-      ["autoResume", wireAutoResume]
+      ["autoResume", wireAutoResume],
+      ["fieldAlerts", wireFieldAlerts]
     ];
     steps.forEach(function (s) {
       try { s[1](); }
