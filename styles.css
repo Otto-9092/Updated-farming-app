@@ -938,3 +938,59 @@ input, select {
 #tourOverlay .tour-actions { display: flex; align-items: center; gap: 8px; }
 #tourOverlay .tour-spacer { flex: 1 1 auto; }
 #tourOverlay .tour-actions .btn { min-height: 40px; }
+
+/* ===== Pinned quick-actions bar (during a session) ===== */
+.quick-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--safe-bottom) + 10px);
+  z-index: 3500;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.28);
+  max-width: calc(100vw - 20px);
+}
+.quick-bar.hidden { display: none; }
+.quick-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 10px;
+  min-height: 52px;
+  min-width: 76px;
+  padding: 0 14px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.quick-btn:active { transform: scale(0.95); background: var(--green); color: #fff; }
+.quick-btn:disabled { opacity: 0.4; }
+
+/* ===== Pull-to-refresh indicator ===== */
+#ptrIndicator {
+  position: fixed;
+  top: calc(var(--safe-top) + 4px);
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  z-index: 5500;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+}
+#ptrIndicator .ptr-spin { font-size: 22px; line-height: 1; color: var(--muted); display: inline-block; }
+#ptrIndicator.ptr-ready .ptr-spin { color: var(--green); }
+#ptrIndicator.ptr-spinning .ptr-spin { animation: ptrSpin 0.7s linear infinite; color: var(--green); }
+@keyframes ptrSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
