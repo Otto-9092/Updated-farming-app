@@ -941,6 +941,115 @@
   }
 
   // ----------------------------------------------------------
+  // 14. CONNECTIVITY + SYNC STATUS PILL (offline banner + last-synced)
+  //     A glanceable pill in the header status row. Reads the SAME data
+  //     the app's own sync system uses (navigator.onLine, the
+  //     dof_last_synced timestamp, and GoogleSync.isSignedIn) so it can
+  //     never disagree with the Settings sync panel. Tapping it jumps to
+  //     the Tools tab where sync lives.
+  // ----------------------------------------------------------
+  function wireConnectivityBar() {
+    var LS_LAST_SYNCED = "dof_last_synced";   // must match app.js
+
+    // Inject the pill into the header status row (next to GPS/IDLE).
+    var host = D.querySelector(".status-pills");
+    var pill = byId("connPill");
+    if (!pill) {
+      pill = D.createElement("button");
+      pill.id = "connPill";
+      pill.className = "pill conn-pill";
+      pill.type = "button";
+      pill.setAttribute("aria-label", "Connection and sync status");
+      if (host) host.insertBefore(pill, host.firstChild);
+      else D.body.appendChild(pill);
+    }
+
+    function signedIn() {
+      try { return !!(window.GoogleSync && window.GoogleSync.isSignedIn && window.GoogleSync.isSignedIn()); }
+      catch (e) { return false; }
+    }
+
+    function ago(iso) {
+      if (!iso) return null;
+      var then = new Date(iso).getTime();
+      if (!isFinite(then)) return null;
+      var s = Math.max(0, Math.round((Date.now() - then) / 1000));
+      if (s < 60) return "just now";
+      var m = Math.round(s / 60);
+      if (m < 60) return m + "m ago";
+      var h = Math.round(m / 60);
+      if (h < 24) return h + "h ago";
+      var d = Math.round(h / 24);
+      return d + "d ago";
+    }
+
+    var wasOffline = false;
+
+    function render() {
+      var online = (typeof navigator.onLine === "boolean") ? navigator.onLine : true;
+      pill.classList.remove("conn-offline", "conn-ok", "conn-warn", "conn-idle");
+
+      if (!online) {
+        pill.classList.add("conn-offline");
+        pill.textContent = "\ud83d\udcf4 Offline \u2014 saved locally";
+        pill.title = "You're offline. Work is saved on this device and will sync when you're back online.";
+        // Announce the transition into offline once.
+        if (!wasOffline) {
+          wasOffline = true;
+          haptic("warn");
+          showToast("\ud83d\udcf4 You\u2019re offline \u2014 data is saved locally and will sync later",
+                    { kind: "warn", duration: 5000 });
+        }
+        return;
+      }
+
+      // Back online: announce recovery if we were offline.
+      if (wasOffline) {
+        wasOffline = false;
+        showToast("\u2705 Back online", { kind: "ok", duration: 3000 });
+      }
+
+      if (!signedIn()) {
+        pill.classList.add("conn-idle");
+        pill.textContent = "\u2601\ufe0f Sync off";
+        pill.title = "Online. Sign in under Tools \u203a Cloud Sync to back up across devices.";
+        return;
+      }
+
+      var iso = null;
+      try { iso = localStorage.getItem(LS_LAST_SYNCED); } catch (e) {}
+      var rel = ago(iso);
+      if (rel) {
+        pill.classList.add("conn-ok");
+        pill.textContent = "\u2601\ufe0f Synced " + rel;
+        pill.title = "Last synced: " + new Date(iso).toLocaleString();
+      } else {
+        pill.classList.add("conn-warn");
+        pill.textContent = "\u2601\ufe0f Not synced yet";
+        pill.title = "Signed in, but no sync has completed on this device yet.";
+      }
+    }
+
+    // Tap the pill -> jump to the Tools tab (where Cloud Sync lives).
+    pill.addEventListener("click", function () {
+      haptic("tap");
+      var toolsTab = D.querySelector('.tab[data-tab="tools"]');
+      if (toolsTab) toolsTab.click();
+      var box = byId("syncSignedIn") || byId("syncSignedOut");
+      if (box && box.scrollIntoView) {
+        setTimeout(function () { box.scrollIntoView({ behavior: "smooth", block: "center" }); }, 120);
+      }
+    });
+
+    window.addEventListener("online", render);
+    window.addEventListener("offline", render);
+    setInterval(render, 30000);   // refresh "x min ago" + catch sync updates
+    // Also expose so app.js could call it after a sync if desired.
+    window._opioRefreshConnPill = render;
+    render();
+  }
+
+  // ----------------------------------------------------------
   // BOOTSTRAP
   function init() {
     // Each wiring step is isolated so one failure can never prevent the
@@ -956,7 +1065,8 @@
       ["successToasts", wireSuccessToasts],
       ["holdToStop", wireHoldToStop],
       ["autoResume", wireAutoResume],
-      ["fieldAlerts", wireFieldAlerts]
+      ["fieldAlerts", wireFieldAlerts],
+      ["connectivityBar", wireConnectivityBar]
     ];
     steps.forEach(function (s) {
       try { s[1](); }
