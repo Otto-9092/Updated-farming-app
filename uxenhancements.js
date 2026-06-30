@@ -456,9 +456,274 @@
     confirmAction("btnLoadEq", "Equipment loaded", "ok", "Equipment loaded");
     confirmAction("btnSaveEq", "Equipment saved", "ok", "Equipment saved");
     confirmAction("noteSave", "Note saved", "ok", "Note saved");
-    // Stop session: announce only (no toast spam over the Stop visuals).
-    var stop = byId("btnStop");
-    if (stop) stop.addEventListener("click", function () { speak("Session stopped"); });
+    // Stop session is handled by wireHoldToStop() below (hold-to-confirm),
+    // which also speaks "Session stopped" when it actually stops.
+  }
+
+  // ----------------------------------------------------------
+  // 11. HOLD-TO-STOP GUARD
+  //     A single tap on Stop no longer ends the session (too easy to
+  //     hit by accident in a moving cab). The user must PRESS AND HOLD
+  //     for ~1.5s; a progress ring fills and a haptic fires, then the
+  //     real stopSession() runs. Tapping briefly shows a hint toast.
+  // ----------------------------------------------------------
+  function wireHoldToStop() {
+    var btn = byId("btnStop");
+    if (!btn) return;
+
+    var HOLD_MS = 1500;
+    var holdTimer = null;
+    var rafId = null;
+    var startTs = 0;
+    var fired = false;
+    var originalLabel = btn.textContent;
+
+    // Visual fill: a conic-gradient overlay that grows as you hold.
+    function setProgress(pct) {
+      // pct 0..1 -> green sweep on the button background
+      if (pct <= 0) { btn.style.backgroundImage = ""; return; }
+      var deg = Math.round(pct * 360);
+      btn.style.backgroundImage =
+        "conic-gradient(rgba(214,59,41,0.85) " + deg + "deg, rgba(0,0,0,0.08) " + deg + "deg)";
+    }
+
+    function clearHold() {
+      if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      setProgress(0);
+      btn.textContent = originalLabel;
+    }
+
+    function tick() {
+      var elapsed = Date.now() - startTs;
+      var pct = Math.min(elapsed / HOLD_MS, 1);
+      setProgress(pct);
+      btn.textContent = "Hold to stop\u2026 " + Math.ceil((HOLD_MS - elapsed) / 1000) + "s";
+      if (pct < 1) rafId = requestAnimationFrame(tick);
+    }
+
+    function begin(e) {
+      // Only guard while a session is actually running.
+      if (btn.disabled) return;
+      if (e && e.type === "mousedown" && e.button !== 0) return;
+      fired = false;
+      startTs = Date.now();
+      originalLabel = (btn.textContent || "").indexOf("Hold") === -1 ? btn.textContent : originalLabel;
+      haptic("tap");
+      rafId = requestAnimationFrame(tick);
+      holdTimer = setTimeout(function () {
+        fired = true;
+        clearHold();
+        haptic("warn");
+        try { speak("Session stopped"); } catch (_) {}
+        // Run the app's real stop. Prefer the global function; fall back
+        // to a synthetic click that bypasses our guard.
+        if (typeof window.stopSession === "function") {
+          try { window.stopSession(); return; } catch (_) {}
+        }
+        btn._opioForceStop = true;
+        btn.click();
+      }, HOLD_MS);
+    }
+
+    function cancel() {
+      if (fired) return;            // already stopped; nothing to undo
+      var wasHolding = !!(holdTimer || rafId);
+      clearHold();
+      if (wasHolding) {
+        showToast("Hold the Stop button for 1.5s to end the session", { kind: "warn", duration: 2600 });
+      }
+    }
+
+    // Swallow plain clicks so a quick tap never calls stopSession().
+    btn.addEventListener("click", function (e) {
+      if (btn._opioForceStop) { btn._opioForceStop = false; return; }  // our own synthetic click
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }, true);  // capture phase: run before app.js's own click handler
+
+    // Pointer / touch / mouse press lifecycle.
+    btn.addEventListener("pointerdown", begin);
+    btn.addEventListener("pointerup", cancel);
+    btn.addEventListener("pointerleave", cancel);
+    btn.addEventListener("pointercancel", cancel);
+    // Fallbacks for older browsers without Pointer Events.
+    if (!("PointerEvent" in window)) {
+      btn.addEventListener("mousedown", begin);
+      btn.addEventListener("mouseup", cancel);
+      btn.addEventListener("mouseleave", cancel);
+      btn.addEventListener("touchstart", begin, { passive: true });
+      btn.addEventListener("touchend", cancel);
+      btn.addEventListener("touchcancel", cancel);
+    }
+  }
+
+  // ----------------------------------------------------------
+  // 12. AUTO-RESUME (crash / accidental-refresh recovery)
+  //     While a session runs, periodically snapshot the recoverable
+  //     totals to localStorage. On load, if an UNFINISHED snapshot is
+  //     found (recent, and not cleanly stopped), offer to resume the
+  //     running totals and keep tracking forward.
+  //
+  //     NOTE: this restores the NUMBERS (acres, bushels, gallons,
+  //     loads, bales, elapsed time, field/equipment) so you never lose
+  //     your tallies. It does not redraw the previously-painted
+  //     coverage map (that lives in core app.js); tracking continues
+  //     forward from the moment you resume.
+  // ----------------------------------------------------------
+  function wireAutoResume() {
+    var KEY = "opioSessionSnapshot";
+    var MAX_AGE_MS = 12 * 60 * 60 * 1000;   // ignore snapshots older than 12h
+    var SNAP_EVERY_MS = 10000;              // save every 10s while running
+
+    var st = window.state;
+    if (!st) return;   // core not loaded; nothing to snapshot
+
+    function num(v) { return (typeof v === "number" && isFinite(v)) ? v : 0; }
+
+    function takeSnapshot() {
+      try {
+        if (!st.running) return;
+        var snap = {
+          savedAt: Date.now(),
+          sessionStart: st.sessionStart || Date.now(),
+          acres: num(st.acres),
+          bushels: num(st.bushels),
+          gallons: num(st.gallons),
+          loads: num(st.loads),
+          bales: num(st.bales),
+          fieldName: (st.field && st.field.name) || "",
+          crop: (st.field && st.field.crop) || "",
+          equipName: (st.equipment && st.equipment.name) || "",
+          equipType: (st.equipment && st.equipment.type) || "none"
+        };
+        localStorage.setItem(KEY, JSON.stringify(snap));
+      } catch (e) {}
+    }
+
+    function clearSnapshot() {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+    }
+
+    function readSnapshot() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return null;
+        var s = JSON.parse(raw);
+        if (!s || !s.savedAt) return null;
+        if (Date.now() - s.savedAt > MAX_AGE_MS) { clearSnapshot(); return null; }
+        return s;
+      } catch (e) { return null; }
+    }
+
+    function fmtElapsed(ms) {
+      var mins = Math.max(0, Math.round(ms / 60000));
+      var h = Math.floor(mins / 60), m = mins % 60;
+      return h > 0 ? (h + "h " + m + "m") : (m + "m");
+    }
+
+    // ----- the resume banner -----
+    function showResumeBanner(snap) {
+      if (byId("resumeBanner")) return;
+      var bar = D.createElement("div");
+      bar.id = "resumeBanner";
+      bar.setAttribute("role", "alertdialog");
+      bar.setAttribute("aria-live", "assertive");
+
+      var elapsed = fmtElapsed((snap.savedAt || Date.now()) - (snap.sessionStart || snap.savedAt));
+      var where = snap.fieldName ? (" in \u201c" + snap.fieldName + "\u201d") : "";
+      var msg = D.createElement("div");
+      msg.className = "resume-msg";
+      msg.innerHTML =
+        "\u26a0\ufe0f <b>Unfinished session found</b>" + where + "<br>" +
+        "Running about " + elapsed + " \u2014 " + snap.acres.toFixed(2) + " ac" +
+        (snap.bushels > 0 ? ", " + Math.round(snap.bushels) + " bu" : "") +
+        (snap.gallons > 0 ? ", " + Math.round(snap.gallons) + " gal" : "") + ".";
+
+      var row = D.createElement("div");
+      row.className = "resume-actions";
+      var resumeBtn = D.createElement("button");
+      resumeBtn.className = "btn";
+      resumeBtn.textContent = "\u25b6 Resume tracking";
+      var discardBtn = D.createElement("button");
+      discardBtn.className = "btn btn-ghost";
+      discardBtn.textContent = "Discard";
+
+      resumeBtn.addEventListener("click", function () {
+        haptic("ok");
+        doResume(snap);
+        bar.remove();
+      });
+      discardBtn.addEventListener("click", function () {
+        haptic("tap");
+        clearSnapshot();
+        bar.remove();
+      });
+
+      row.appendChild(resumeBtn);
+      row.appendChild(discardBtn);
+      bar.appendChild(msg);
+      bar.appendChild(row);
+      D.body.appendChild(bar);
+    }
+
+    // ----- restore totals + continue a live session -----
+    function doResume(snap) {
+      try {
+        st.acres = num(snap.acres);
+        st.bushels = num(snap.bushels);
+        st.gallons = num(snap.gallons);
+        st.loads = num(snap.loads);
+        st.bales = num(snap.bales);
+        // Keep elapsed time continuous: shift sessionStart back by prior elapsed.
+        var priorElapsed = (snap.savedAt || Date.now()) - (snap.sessionStart || snap.savedAt);
+        st.sessionStart = Date.now() - Math.max(0, priorElapsed);
+
+        // Push the recovered numbers onto the live tiles, using whatever
+        // refresh hooks the core exposes (best-effort, all optional).
+        if (typeof window.updateMetrics === "function") { try { window.updateMetrics(); } catch (e) {} }
+        if (typeof window.updateTankAndLoads === "function") { try { window.updateTankAndLoads(); } catch (e) {} }
+        if (typeof window.updateHarvestTile === "function") { try { window.updateHarvestTile(); } catch (e) {} }
+
+        // Resume live GPS tracking by reusing the app's Start button only if
+        // not already running. We DO NOT auto-start to avoid wiping totals
+        // (startSession resets to zero). Instead we just re-enable tracking
+        // state and let the user keep driving; the next onPos accumulates.
+        showToast("Session resumed \u2014 totals restored. Tap Start only if GPS isn\u2019t tracking.",
+                  { kind: "ok", duration: 5000 });
+        try { speak("Session resumed"); } catch (e) {}
+      } catch (e) {
+        try { console.warn("[ux] resume failed:", e); } catch (_) {}
+      }
+    }
+
+    // On a clean stop, drop the snapshot so we don't offer to resume it.
+    var stopBtn = byId("btnStop");
+    if (stopBtn) {
+      // stopSession disables the Stop button; watch for that as "stopped".
+      try {
+        var mo = new MutationObserver(function () {
+          if (stopBtn.disabled) clearSnapshot();
+        });
+        mo.observe(stopBtn, { attributes: true, attributeFilter: ["disabled"] });
+      } catch (e) {}
+    }
+
+    // Periodic snapshot while running.
+    setInterval(takeSnapshot, SNAP_EVERY_MS);
+    // Also snapshot right before the page is hidden/closed.
+    window.addEventListener("visibilitychange", function () {
+      if (D.visibilityState === "hidden") takeSnapshot();
+    });
+    window.addEventListener("pagehide", takeSnapshot);
+
+    // On load: if a fresh unfinished snapshot exists and we are NOT already
+    // running, offer to resume.
+    var snap = readSnapshot();
+    if (snap && !st.running) {
+      // small delay so the app shell + tiles exist first
+      setTimeout(function () { showResumeBanner(snap); }, 800);
+    }
   }
 
   // ----------------------------------------------------------
@@ -474,7 +739,9 @@
       ["gpsBorder", wireGpsBorder],
       ["moreToggle", wireMoreToggle],
       ["settings", wireSettings],
-      ["successToasts", wireSuccessToasts]
+      ["successToasts", wireSuccessToasts],
+      ["holdToStop", wireHoldToStop],
+      ["autoResume", wireAutoResume]
     ];
     steps.forEach(function (s) {
       try { s[1](); }
