@@ -1188,6 +1188,246 @@
   }
 
   // ----------------------------------------------------------
+  // 16. HAPTIC MILESTONES
+  //     Celebratory buzz at meaningful moments during a session, read
+  //     non-invasively from the live metric tiles:
+  //       - every whole 10 acres covered
+  //       - 25 / 50 / 75 % of the field boundary
+  //       - field complete (acres-left hits ~0)
+  //     Respects the existing haptics opt-out (haptic() checks it).
+  // ----------------------------------------------------------
+  function wireMilestones() {
+    var st = window.state;
+
+    function running() {
+      try { if (st && typeof st.running === "boolean") return st.running; } catch (e) {}
+      var stop = byId("btnStop");
+      return !!(stop && stop.disabled === false);
+    }
+
+    var lastAcreTier = 0;     // last 10-ac tier celebrated
+    var pctHit = {};          // which % milestones fired this session
+    var completed = false;
+
+    function celebrate(msg, big) {
+      haptic(big ? "warn" : "ok");   // 'warn' pattern is the strongest buzz
+      if (big) {
+        // double-buzz for the big one
+        setTimeout(function () { haptic("ok"); }, 220);
+      }
+      showToast(msg, { kind: "ok", duration: big ? 6000 : 3500 });
+      try { if (big) speak("Field complete"); } catch (e) {}
+    }
+
+    function resetForNewSession() {
+      lastAcreTier = 0; pctHit = {}; completed = false;
+    }
+
+    // Reset milestone memory whenever a session starts (Start enables Stop).
+    var startBtn = byId("btnStart");
+    if (startBtn) startBtn.addEventListener("click", function () { setTimeout(resetForNewSession, 50); });
+
+    function check() {
+      if (!running()) return;
+      var acres = 0, boundary = 0;
+      try { acres = (typeof st.acres === "number") ? st.acres : parseFloat((byId("mAcres") || {}).textContent) || 0; } catch (e) {}
+      try { boundary = (st.boundary && st.boundary.acres) || 0; } catch (e) {}
+
+      // 10-acre tiers
+      var tier = Math.floor(acres / 10);
+      if (tier > lastAcreTier && tier >= 1) {
+        lastAcreTier = tier;
+        celebrate("\ud83c\udf3e " + (tier * 10) + " acres covered \u2014 keep rolling!", false);
+      }
+
+      // Percentage milestones (only when a boundary is set)
+      if (boundary > 0) {
+        var pct = (acres / boundary) * 100;
+        [25, 50, 75].forEach(function (m) {
+          if (!pctHit[m] && pct >= m) {
+            pctHit[m] = true;
+            celebrate("\u2705 " + m + "% of the field done", false);
+          }
+        });
+        if (!completed && pct >= 99.5) {
+          completed = true;
+          celebrate("\ud83c\udf89 Field complete! Nice work.", true);
+        }
+      }
+    }
+
+    // Watch the acres tile for changes (updated by core updateMetrics).
+    var acTile = byId("mAcres");
+    if (acTile) {
+      try {
+        var mo = new MutationObserver(check);
+        mo.observe(acTile, { childList: true, characterData: true, subtree: true });
+      } catch (e) {}
+    }
+    // Safety-net poll (covers tiles updated without a DOM mutation event).
+    setInterval(check, 4000);
+  }
+
+  // ----------------------------------------------------------
+  // 17. PINNED QUICK-ACTIONS BAR
+  //     A floating bottom bar shown only during a session, mirroring the
+  //     equipment-relevant action buttons (Refill / Unload / + Bale /
+  //     Add Note). Tapping a quick button simply clicks the real one, so
+  //     all existing logic runs unchanged. Visibility follows the same
+  //     hidden/disabled state the core already manages.
+  // ----------------------------------------------------------
+  function wireQuickActions() {
+    // Source buttons in the Operate screen.
+    var SOURCES = [
+      { id: "btnRefill",  label: "\ud83d\udeb0 Refill" },
+      { id: "btnUnload",  label: "\ud83d\udce4 Unload" },
+      { id: "btnBale",    label: "\ud83c\udf3e Bale" },
+      { id: "btnAddNote", label: "\u2795 Note" }
+    ];
+
+    function running() {
+      var stop = byId("btnStop");
+      return !!(stop && stop.disabled === false);
+    }
+
+    // Build the bar.
+    var bar = byId("quickBar");
+    if (!bar) {
+      bar = D.createElement("div");
+      bar.id = "quickBar";
+      bar.className = "quick-bar hidden";
+      D.body.appendChild(bar);
+    }
+
+    // Create a mirror button for each source (kept in sync for visibility).
+    var mirrors = [];
+    SOURCES.forEach(function (s) {
+      var src = byId(s.id);
+      if (!src) return;
+      var b = D.createElement("button");
+      b.className = "quick-btn";
+      b.type = "button";
+      b.textContent = s.label;
+      b.addEventListener("click", function () {
+        haptic("tap");
+        src.click();   // run the real action
+      });
+      bar.appendChild(b);
+      mirrors.push({ btn: b, src: src });
+    });
+
+    if (!mirrors.length) { bar.remove(); return; }
+
+    function sync() {
+      var on = running();
+      bar.classList.toggle("hidden", !on);
+      // Mirror each button's availability: hide if the source is hidden,
+      // disable if the source is disabled.
+      mirrors.forEach(function (m) {
+        var srcHidden = m.src.classList.contains("hidden") ||
+                        m.src.offsetParent === null;
+        m.btn.style.display = srcHidden ? "none" : "";
+        m.btn.disabled = !!m.src.disabled;
+      });
+    }
+
+    // React to Start/Stop and to source-button class changes.
+    var stop = byId("btnStop");
+    var start = byId("btnStart");
+    if (stop) {
+      try {
+        var mo = new MutationObserver(sync);
+        mo.observe(stop, { attributes: true, attributeFilter: ["disabled"] });
+      } catch (e) {}
+    }
+    if (start) start.addEventListener("click", function () { setTimeout(sync, 60); });
+    // Also re-sync periodically (covers equipment-type changes mid-setup).
+    setInterval(sync, 2000);
+    sync();
+  }
+
+  // ----------------------------------------------------------
+  // 18. PULL-TO-REFRESH
+  //     Pull down from the very top of the Operate screen to recenter
+  //     the map on your location and refresh the sync pill — a familiar
+  //     mobile gesture. A spinner indicator follows the pull. Only arms
+  //     when the page is already scrolled to the top, so it never fights
+  //     normal scrolling.
+  // ----------------------------------------------------------
+  function wirePullToRefresh() {
+    var THRESHOLD = 70;     // px pull needed to trigger
+    var MAX = 110;          // cap the visual pull
+    var startY = 0, pulling = false, armed = false;
+
+    // Indicator element.
+    var ind = byId("ptrIndicator");
+    if (!ind) {
+      ind = D.createElement("div");
+      ind.id = "ptrIndicator";
+      ind.innerHTML = '<span class="ptr-spin">\u21ba</span>';
+      D.body.appendChild(ind);
+    }
+
+    function scrollTop() {
+      return window.pageYOffset || D.documentElement.scrollTop || D.body.scrollTop || 0;
+    }
+
+    function setPull(px) {
+      var clamped = Math.min(px, MAX);
+      ind.style.transform = "translateX(-50%) translateY(" + clamped + "px)";
+      ind.style.opacity = Math.min(1, px / THRESHOLD).toFixed(2);
+      ind.classList.toggle("ptr-ready", px >= THRESHOLD);
+    }
+
+    function reset() {
+      ind.style.transition = "transform 0.2s, opacity 0.2s";
+      ind.style.transform = "translateX(-50%) translateY(0)";
+      ind.style.opacity = "0";
+      ind.classList.remove("ptr-ready", "ptr-spinning");
+      setTimeout(function () { ind.style.transition = ""; }, 220);
+    }
+
+    function doRefresh() {
+      ind.classList.add("ptr-spinning");
+      haptic("ok");
+      // 1) Recenter the map (reuse the app's Recenter button if present).
+      var rc = byId("btnRecenter");
+      if (rc) { try { rc.click(); } catch (e) {} }
+      // 2) Refresh the connectivity / sync pill.
+      try { if (window._opioRefreshConnPill) window._opioRefreshConnPill(); } catch (e) {}
+      // 3) Refresh the app's own sync UI if available.
+      try { if (window.refreshSyncUI) window.refreshSyncUI(); } catch (e) {}
+      showToast("\ud83d\udd04 Refreshed", { kind: "ok", duration: 1800 });
+      setTimeout(reset, 600);
+    }
+
+    D.addEventListener("touchstart", function (e) {
+      if (e.touches.length !== 1) { armed = false; return; }
+      armed = scrollTop() <= 0;     // only arm at the very top
+      startY = e.touches[0].clientY;
+      pulling = false;
+    }, { passive: true });
+
+    D.addEventListener("touchmove", function (e) {
+      if (!armed) return;
+      var dy = e.touches[0].clientY - startY;
+      if (dy <= 0) { if (pulling) { pulling = false; setPull(0); } return; }
+      // Only treat as a pull if still at the top.
+      if (scrollTop() > 0) { armed = false; if (pulling) { pulling = false; setPull(0); } return; }
+      pulling = true;
+      setPull(dy * 0.5);            // rubber-band damping
+    }, { passive: true });
+
+    D.addEventListener("touchend", function () {
+      if (!pulling) return;
+      var px = parseFloat((ind.style.transform.match(/translateY\(([-0-9.]+)px\)/) || [])[1]) || 0;
+      pulling = false; armed = false;
+      if (px >= THRESHOLD) doRefresh();
+      else reset();
+    });
+  }
+
+  // ----------------------------------------------------------
   // BOOTSTRAP
   function init() {
     // Each wiring step is isolated so one failure can never prevent the
@@ -1205,7 +1445,10 @@
       ["autoResume", wireAutoResume],
       ["fieldAlerts", wireFieldAlerts],
       ["connectivityBar", wireConnectivityBar],
-      ["onboardingTour", wireOnboardingTour]
+      ["onboardingTour", wireOnboardingTour],
+      ["milestones", wireMilestones],
+      ["quickActions", wireQuickActions],
+      ["pullToRefresh", wirePullToRefresh]
     ];
     steps.forEach(function (s) {
       try { s[1](); }
