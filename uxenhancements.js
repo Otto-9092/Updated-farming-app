@@ -429,6 +429,13 @@
         try { if (window._opioSyncGpsBorder) window._opioSyncGpsBorder(); } catch (e) {}
       });
     }
+    var rt = byId("btnReplayTour");
+    if (rt) {
+      rt.addEventListener("click", function () {
+        haptic("tap");
+        if (window._opioStartTour) window._opioStartTour();
+      });
+    }
   }
 
   // ----------------------------------------------------------
@@ -1050,6 +1057,137 @@
   }
 
   // ----------------------------------------------------------
+  // 15. FIRST-RUN ONBOARDING TOUR
+  //     A lightweight spotlight tour shown once on first launch (and
+  //     re-runnable from Settings). Each step highlights a real element
+  //     with a cutout + tooltip. Skippable at any time.
+  // ----------------------------------------------------------
+  function wireOnboardingTour() {
+    var SEEN_KEY = "opioTourSeen";
+
+    // Steps reference live elements by a resolver so missing ones are skipped.
+    function steps() {
+      return [
+        { sel: null, title: "\ud83d\udc4b Welcome to O\u03c0O Farming",
+          body: "Quick 6-step tour so you can start tracking in under a minute. Tap Next \u2014 or Skip anytime." },
+        { sel: '.tab[data-tab="setup"]', title: "1\ufe0f\u20e3 Set up your gear",
+          body: "Start here. Pick your equipment type and field so the app knows what you\u2019re running." },
+        { sel: "#btnStart", title: "2\ufe0f\u20e3 Start a session",
+          body: "Back on Operate, tap Start to begin tracking your coverage, speed, and acres live." },
+        { sel: "#connPill", title: "3\ufe0f\u20e3 Stay synced",
+          body: "This pill shows if you\u2019re online and how fresh your last cloud backup is. Tap it to manage sync." },
+        { sel: "#btnSave", title: "4\ufe0f\u20e3 Save your report",
+          body: "When the job\u2019s done, save a report \u2014 acres, bushels, time and more, ready to review or export." },
+        { sel: "#btnToggleMore", title: "5\ufe0f\u20e3 More controls",
+          body: "Tap here for extra tools when you need them. That\u2019s it \u2014 you\u2019re ready to roll!" }
+      ];
+    }
+
+    var idx = 0, list = [], overlay = null;
+
+    function cleanup() {
+      if (overlay) { overlay.remove(); overlay = null; }
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    }
+
+    function finish() {
+      try { localStorage.setItem(SEEN_KEY, "1"); } catch (e) {}
+      cleanup();
+    }
+
+    function buildOverlay() {
+      overlay = D.createElement("div");
+      overlay.id = "tourOverlay";
+      overlay.innerHTML =
+        '<div class="tour-cutout"></div>' +
+        '<div class="tour-pop">' +
+        '  <div class="tour-title"></div>' +
+        '  <div class="tour-body"></div>' +
+        '  <div class="tour-actions">' +
+        '    <button class="btn btn-ghost tour-skip">Skip</button>' +
+        '    <span class="tour-spacer"></span>' +
+        '    <button class="btn btn-ghost tour-back">Back</button>' +
+        '    <button class="btn btn-primary tour-next">Next</button>' +
+        '  </div>' +
+        '</div>';
+      D.body.appendChild(overlay);
+      overlay.querySelector(".tour-skip").addEventListener("click", function () { haptic("tap"); finish(); });
+      overlay.querySelector(".tour-back").addEventListener("click", function () { haptic("tap"); if (idx > 0) { idx--; renderStep(); } });
+      overlay.querySelector(".tour-next").addEventListener("click", function () {
+        haptic("tap");
+        if (idx < list.length - 1) { idx++; renderStep(); } else { finish(); }
+      });
+    }
+
+    function reposition() {
+      if (!overlay) return;
+      var step = list[idx];
+      var cut = overlay.querySelector(".tour-cutout");
+      var pop = overlay.querySelector(".tour-pop");
+      var el = step.sel ? D.querySelector(step.sel) : null;
+
+      if (el && el.getBoundingClientRect) {
+        var r = el.getBoundingClientRect();
+        var pad = 8;
+        cut.style.display = "block";
+        cut.style.top = (r.top - pad) + "px";
+        cut.style.left = (r.left - pad) + "px";
+        cut.style.width = (r.width + pad * 2) + "px";
+        cut.style.height = (r.height + pad * 2) + "px";
+        // Place the popover below the target if room, else above.
+        var below = r.bottom + 12;
+        var popH = pop.offsetHeight || 160;
+        if (below + popH > window.innerHeight - 8) {
+          pop.style.top = Math.max(8, r.top - popH - 12) + "px";
+        } else {
+          pop.style.top = below + "px";
+        }
+        var left = Math.min(Math.max(8, r.left), window.innerWidth - (pop.offsetWidth || 300) - 8);
+        pop.style.left = left + "px";
+        pop.style.transform = "";
+      } else {
+        // Centered (welcome / missing element)
+        cut.style.display = "none";
+        pop.style.top = "50%";
+        pop.style.left = "50%";
+        pop.style.transform = "translate(-50%, -50%)";
+      }
+    }
+
+    function renderStep() {
+      var step = list[idx];
+      // If a step targets a missing element, skip forward/back past it.
+      if (step.sel && !D.querySelector(step.sel)) {
+        if (idx < list.length - 1) { idx++; return renderStep(); }
+        else { return finish(); }
+      }
+      overlay.querySelector(".tour-title").textContent = step.title;
+      overlay.querySelector(".tour-body").textContent = step.body;
+      overlay.querySelector(".tour-back").style.visibility = idx === 0 ? "hidden" : "visible";
+      overlay.querySelector(".tour-next").textContent = (idx === list.length - 1) ? "Done" : "Next";
+      reposition();
+    }
+
+    function start() {
+      list = steps();
+      idx = 0;
+      if (!overlay) buildOverlay();
+      window.addEventListener("resize", reposition);
+      window.addEventListener("scroll", reposition, true);
+      renderStep();
+    }
+
+    // Expose so a Settings button can replay the tour.
+    window._opioStartTour = start;
+
+    // Auto-run once, after the shell settles.
+    var seen = false;
+    try { seen = localStorage.getItem(SEEN_KEY) === "1"; } catch (e) {}
+    if (!seen) setTimeout(start, 1200);
+  }
+
+  // ----------------------------------------------------------
   // BOOTSTRAP
   function init() {
     // Each wiring step is isolated so one failure can never prevent the
@@ -1066,7 +1204,8 @@
       ["holdToStop", wireHoldToStop],
       ["autoResume", wireAutoResume],
       ["fieldAlerts", wireFieldAlerts],
-      ["connectivityBar", wireConnectivityBar]
+      ["connectivityBar", wireConnectivityBar],
+      ["onboardingTour", wireOnboardingTour]
     ];
     steps.forEach(function (s) {
       try { s[1](); }
