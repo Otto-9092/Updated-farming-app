@@ -994,3 +994,43 @@ input, select {
 #ptrIndicator.ptr-ready .ptr-spin { color: var(--green); }
 #ptrIndicator.ptr-spinning .ptr-spin { animation: ptrSpin 0.7s linear infinite; color: var(--green); }
 @keyframes ptrSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ============================================================
+   TABLET POLISH (Samsung Tab S9 FE & similar, >=768px wide)
+   Additive & scoped: only affects large screens. Phone layout
+   (<=767px) is completely untouched. Makes better use of the
+   extra space — wider content, bigger glanceable numbers,
+   two-column forms. No core logic changes.
+   ============================================================ */
+@media (min-width: 768px) {
+  /* 1. Give the card-style screens (Setup, Tools, Reports, Season)
+        a comfortable centered max-width instead of stretching edge
+        to edge or floating narrow in empty space. Operate keeps its
+        full-width map layout. */
+  #tab-setup, #tab-tools, #tab-reports, #tab-season {
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* 2. Bigger, more glanceable live metric numbers on the big screen. */
+  .metrics .m-val, .m-val { font-size: 24px; }
+  .metrics .m-label, .m-label { font-size: 12px; }
+  .metric { padding: 10px 12px; }
+
+  /* 4. Keep individual setting rows from stretching awkwardly wide on the
+        big card. A comfortable readable width keeps the label and its
+        toggle visually associated instead of pushed to opposite edges. */
+  .setting-row {
+    max-width: 560px;
+  }
+}
+
+/* 3. Landscape refinement for the Tab S9 FE (~1080px wide in landscape):
+      taller map + even larger metric numbers when cab-mounted sideways. */
+@media (min-width: 1000px) and (orientation: landscape) {
+  #map { height: 80vh; }
+  .metrics { max-height: 80vh; flex-basis: 240px; }
+  .metrics .m-val, .m-val { font-size: 28px; }
+  .metrics .m-label, .m-label { font-size: 13px; }
+}
