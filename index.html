@@ -185,6 +185,28 @@
   .kml-item .kml-name { font-weight: bold; }
   .kml-item .kml-meta { margin-left: auto; text-align: right; font-size: 12px; opacity: 0.8; }
   .kml-item .kml-warn { color: #ffb703; font-size: 11px; }
+
+  /* ===== Profit & Loss tab ===== */
+  .pl-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .pl-kpi { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
+  .pl-kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .pl-kpi-val { font-size: 18px; font-weight: 700; margin-top: 4px; color: var(--text); }
+  .pl-kpi.profit .pl-kpi-val { color: var(--green); }
+  .pl-kpi.loss .pl-kpi-val { color: var(--red); }
+  @media (max-width: 560px) { .pl-summary { grid-template-columns: repeat(2, 1fr); } }
+
+  .pl-field-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .pl-field-head input.pl-name { font-weight: 700; font-size: 15px; flex: 1; min-width: 120px; }
+  .pl-field-head .pl-net { font-weight: 700; font-size: 15px; white-space: nowrap; }
+  .pl-field-head .pl-net.profit { color: var(--green); }
+  .pl-field-head .pl-net.loss { color: var(--red); }
+  .pl-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 6px 12px; align-items: center; margin-bottom: 6px; }
+  .pl-row label { margin: 0; font-size: 12px; color: var(--text); }
+  .pl-row input, .pl-row select { margin: 0; }
+  .pl-row input[type=number] { text-align: right; }
+  .pl-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 12px 0 6px; font-weight: 700; border-bottom: 1px dashed var(--border); padding-bottom: 3px; }
+  .pl-subtotal { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-top: 1px solid var(--border); margin-top: 6px; font-weight: 600; }
+  .pl-subtotal.grand { border-top: 2px solid var(--green); }
 </style>
 </head>
 <body>
@@ -219,6 +241,7 @@
   <button class="tab" data-tab="tools">Tools</button>
   <button class="tab" data-tab="reports">Reports</button>
   <button class="tab" data-tab="season">Season</button>
+  <button class="tab" data-tab="pl">Profit &amp; Loss</button>
 </nav>
 
 <!-- ============== MAIN ============== -->
@@ -661,7 +684,7 @@
 
     <div class="btn-row">
       <button id="btnGpsDist" class="btn btn-primary">Measure A → B</button>
-      <button id="btnGpsMaps" class="btn">🗺️ Open A in Maps</button>
+      <button id="btnGpsMaps" class="btn">���️ Open A in Maps</button>
       <button id="btnGpsReset" class="btn btn-ghost">Clear</button>
     </div>
 
@@ -983,6 +1006,28 @@
     <div class="card-title">By Field</div>
     <div id="seasonFieldTable"></div>
   </div>
+</section>
+
+<!-- ============================================== -->
+<!-- PROFIT & LOSS TAB (manual entry, per field/crop) -->
+<!-- ============================================== -->
+<section id="tab-pl" class="tab-panel">
+  <div class="card">
+    <div class="card-title">💰 Farm Profit &amp; Loss</div>
+    <div class="pl-summary">
+      <div class="pl-kpi"><div class="pl-kpi-label">Total Income</div><div class="pl-kpi-val" id="plIncome">$0</div></div>
+      <div class="pl-kpi"><div class="pl-kpi-label">Total Expenses</div><div class="pl-kpi-val" id="plExpense">$0</div></div>
+      <div class="pl-kpi" id="plNetCard"><div class="pl-kpi-label">Net Farm Income</div><div class="pl-kpi-val" id="plNet">$0</div></div>
+      <div class="pl-kpi"><div class="pl-kpi-label">Total Acres</div><div class="pl-kpi-val" id="plAcres">0</div></div>
+    </div>
+    <div class="btn-row btn-row-compact" style="margin-top:10px;">
+      <button class="btn" id="plAddField">+ Add Field / Crop</button>
+      <button class="btn btn-ghost" id="plExportCSV">📄 Export CSV</button>
+      <button class="btn btn-ghost" id="plClearAll">🗑️ Clear All</button>
+    </div>
+  </div>
+
+  <div id="plFields"></div>
 </section>
 
 </main>
