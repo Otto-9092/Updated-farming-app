@@ -128,6 +128,7 @@ document.querySelectorAll(".tab").forEach((t) => {
     if (state.map) setTimeout(() => google.maps.event.trigger(state.map, "resize"), 100);
     if (t.dataset.tab === "tools") { seedMixCalcFromState(); seedCostAcresFromState(); }   // ← refresh calc inputs
     if (t.dataset.tab === "season") renderSeason();   // ← refresh season dashboard
+    if (t.dataset.tab === "pl") plRender();   // ← refresh Profit & Loss tab
   });
 });
 
@@ -3633,7 +3634,7 @@ $("btnPdfRep").addEventListener("click", async () => {
     window.location.href = url;
     setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
   } else if (win) {
-    // Blob unsupported but we have a window — fall back to document.write.
+    // Blob unsupported but we have a window ��� fall back to document.write.
     try { win.document.open(); win.document.write(html); win.document.close(); } catch (e) {}
   } else {
     appAlert("Could not open the report view. Please allow pop-ups for this site and try again.", "PDF");
@@ -6224,5 +6225,174 @@ if ("serviceWorker" in navigator) {
     document.addEventListener("DOMContentLoaded", start);
   } else {
     start();
+  }
+})();
+
+/* ============================================================
+ * PROFIT & LOSS MODULE  (manual entry, per field/crop)
+ * Self-contained; stores under localStorage key 'opio_farmPL'.
+ * Exposes plRender() globally for the tab switcher.
+ * ============================================================ */
+(function () {
+  const PL_KEY = 'opio_farmPL';
+  const CROPS = {
+    "Alfalfa Hay":"tons","Grass Hay":"tons","Corn":"bu","Soybeans":"bu",
+    "Wheat":"bu","Oats":"bu","Sorghum":"bu","Other":"units"
+  };
+  const EXPENSE_LINES = {
+    variable:["Seed","Fertilizer / Lime","Chemicals","Fuel & Oil","Repairs","Custom Hire","Hired Labor","Supplies","Hauling / Marketing"],
+    fixed:["Land Rent","Water Rights","Equipment Depreciation","Property Taxes","Insurance","Interest","Dues & Fees"]
+  };
+
+  let plFields = [];
+
+  function blankField(){
+    const ex = {};
+    [...EXPENSE_LINES.variable, ...EXPENSE_LINES.fixed].forEach(l => ex[l] = 0);
+    return { id: Date.now() + Math.random(), name:"New Field", crop:"Alfalfa Hay",
+      acres:0, yield:0, price:0, otherIncome:0, expenses:ex };
+  }
+
+  function money(n){ return (n<0?"-$":"$") + Math.abs(Math.round(n)).toLocaleString(); }
+  function esc(s){ return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+  function calc(f){
+    const production = (+f.acres||0) * (+f.yield||0);
+    const cropIncome = production * (+f.price||0);
+    const income = cropIncome + (+f.otherIncome||0);
+    let variable=0, fixed=0;
+    EXPENSE_LINES.variable.forEach(l => variable += (+f.expenses[l]||0));
+    EXPENSE_LINES.fixed.forEach(l => fixed += (+f.expenses[l]||0));
+    const expense = variable + fixed;
+    return { production, income, variable, fixed, expense, net: income - expense };
+  }
+
+  function plSave(){ try { localStorage.setItem(PL_KEY, JSON.stringify(plFields)); } catch(e){} }
+  function plLoad(){
+    try { const d = localStorage.getItem(PL_KEY); plFields = d ? JSON.parse(d) : []; }
+    catch(e){ plFields = []; }
+  }
+
+  function expenseRow(idx, label){
+    const v = plFields[idx].expenses[label] || 0;
+    const safe = label.replace(/'/g,"");
+    return '<div class="pl-row"><label>' + label + '</label>' +
+      '<input type="number" value="' + v + '" data-pl-exp="' + idx + '|' + safe + '"></div>';
+  }
+
+  function plRender(){
+    const host = document.getElementById('plFields');
+    if (!host) return;
+    host.innerHTML = '';
+    let tIncome=0, tExpense=0, tAcres=0;
+
+    plFields.forEach((f, idx) => {
+      const c = calc(f);
+      tIncome += c.income; tExpense += c.expense; tAcres += (+f.acres||0);
+      const unit = CROPS[f.crop] || "units";
+      const varRows = EXPENSE_LINES.variable.map(l => expenseRow(idx, l)).join('');
+      const fixRows = EXPENSE_LINES.fixed.map(l => expenseRow(idx, l)).join('');
+
+      host.insertAdjacentHTML('beforeend',
+      '<div class="card">' +
+        '<div class="pl-field-head">' +
+          '<input class="pl-name" value="' + esc(f.name) + '" data-pl-field="' + idx + '|name">' +
+          '<span class="pl-net ' + (c.net>=0?'profit':'loss') + '">' + money(c.net) + '</span>' +
+        '</div>' +
+        '<div class="pl-section-title">Crop &amp; Production</div>' +
+        '<div class="pl-row"><label>Crop</label><select data-pl-field="' + idx + '|crop">' +
+          Object.keys(CROPS).map(cn => '<option ' + (cn===f.crop?'selected':'') + '>' + cn + '</option>').join('') +
+        '</select></div>' +
+        '<div class="pl-row"><label>Acres</label><input type="number" value="' + f.acres + '" data-pl-field="' + idx + '|acres"></div>' +
+        '<div class="pl-row"><label>Yield (' + unit + '/acre)</label><input type="number" value="' + f.yield + '" data-pl-field="' + idx + '|yield"></div>' +
+        '<div class="pl-row"><label>Price ($/' + unit + ')</label><input type="number" value="' + f.price + '" data-pl-field="' + idx + '|price"></div>' +
+        '<div class="pl-row"><label>Other Income ($)</label><input type="number" value="' + f.otherIncome + '" data-pl-field="' + idx + '|otherIncome"></div>' +
+        '<div class="pl-subtotal"><span>Total Income (' + c.production.toLocaleString() + ' ' + unit + ')</span><span>' + money(c.income) + '</span></div>' +
+        '<div class="pl-section-title">Variable Costs</div>' + varRows +
+        '<div class="pl-subtotal"><span>Variable Subtotal</span><span>' + money(c.variable) + '</span></div>' +
+        '<div class="pl-section-title">Fixed Costs</div>' + fixRows +
+        '<div class="pl-subtotal"><span>Fixed Subtotal</span><span>' + money(c.fixed) + '</span></div>' +
+        '<div class="pl-subtotal grand"><span>Net (Profit / Loss)</span>' +
+          '<span class="' + (c.net>=0?'profit':'loss') + '" style="color:' + (c.net>=0?'var(--green)':'var(--red)') + '">' + money(c.net) + '</span></div>' +
+        '<div class="btn-row"><button class="btn btn-ghost btn-sm" data-pl-del="' + idx + '">Delete Field</button></div>' +
+      '</div>');
+    });
+
+    const net = tIncome - tExpense;
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set('plIncome', money(tIncome));
+    set('plExpense', money(tExpense));
+    set('plNet', money(net));
+    set('plAcres', tAcres.toLocaleString());
+    const card = document.getElementById('plNetCard');
+    if (card) card.className = 'pl-kpi ' + (net>=0 ? 'profit' : 'loss');
+  }
+
+  function plExportCSV(){
+    const rows = [["Field","Crop","Acres","Yield/ac","Price","Production","Total Income","Variable Cost","Fixed Cost","Total Expense","Net Profit/Loss"]];
+    plFields.forEach(f => { const c = calc(f);
+      rows.push([f.name,f.crop,f.acres,f.yield,f.price,c.production,c.income,c.variable,c.fixed,c.expense,c.net]); });
+    const csv = rows.map(r => r.map(x => '"' + x + '"').join(",")).join("\n");
+    const blob = new Blob([csv], {type:"text/csv"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "farm_profit_loss.csv"; a.click();
+  }
+
+  function wire(){
+    plLoad();
+    const addBtn = document.getElementById('plAddField');
+    const csvBtn = document.getElementById('plExportCSV');
+    const clrBtn = document.getElementById('plClearAll');
+    if (addBtn) addBtn.addEventListener('click', () => { plFields.push(blankField()); plSave(); plRender(); });
+    if (csvBtn) csvBtn.addEventListener('click', plExportCSV);
+    if (clrBtn) clrBtn.addEventListener('click', () => { if (confirm('Clear ALL Profit & Loss fields?')) { plFields = []; plSave(); plRender(); } });
+
+    const host = document.getElementById('plFields');
+    if (host) {
+      // delegated input handling for field + expense values
+      host.addEventListener('input', (e) => {
+        const t = e.target;
+        if (t.dataset.plField){
+          const [i, key] = t.dataset.plField.split('|');
+          const idx = +i;
+          plFields[idx][key] = (key==='name'||key==='crop') ? t.value : (+t.value||0);
+          plSave();
+          // crop change relabels units -> re-render; simple value edits update totals only
+          if (key==='crop') plRender(); else plRenderTotals();
+        } else if (t.dataset.plExp){
+          const [i, label] = t.dataset.plExp.split('|');
+          plFields[+i].expenses[label] = (+t.value||0);
+          plSave(); plRenderTotals();
+        }
+      });
+      host.addEventListener('change', (e) => {
+        if (e.target.dataset.plField && e.target.dataset.plField.endsWith('|crop')) plRender();
+      });
+      host.addEventListener('click', (e) => {
+        const del = e.target.dataset.plDel;
+        if (del !== undefined){ if (confirm('Delete this field?')){ plFields.splice(+del,1); plSave(); plRender(); } }
+      });
+    }
+  }
+
+  // Lightweight totals-only refresh so typing in an input doesn't steal focus.
+  function plRenderTotals(){
+    let tIncome=0, tExpense=0, tAcres=0;
+    plFields.forEach(f => { const c = calc(f); tIncome+=c.income; tExpense+=c.expense; tAcres+=(+f.acres||0); });
+    const net = tIncome - tExpense;
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set('plIncome', money(tIncome)); set('plExpense', money(tExpense));
+    set('plNet', money(net)); set('plAcres', tAcres.toLocaleString());
+    const card = document.getElementById('plNetCard');
+    if (card) card.className = 'pl-kpi ' + (net>=0 ? 'profit' : 'loss');
+  }
+
+  // Expose render for the tab switcher.
+  window.plRender = plRender;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else {
+    wire();
   }
 })();
