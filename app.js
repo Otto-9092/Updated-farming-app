@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.08.02 · 09";
+window.APP_VERSION = "2026.08.02 · 10";
 // (startup version log removed for production)
 
 /* ============================================================
@@ -2726,7 +2726,7 @@ $("btnSaveEq").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const type = state.equipment.type;
   lib[state.equipment.name] = {
-    _modified: new Date().toISOString(),   // ������� for sync conflict resolution
+    _modified: new Date().toISOString(),   // ����������� for sync conflict resolution
     name:  state.equipment.name,
     type:  type,
     width: state.equipment.width,
@@ -4097,7 +4097,6 @@ $("btnExportAll")?.addEventListener("click", async () => {
         `${totals.profitLoss} P&L field${totals.profitLoss !== 1 ? "s" : ""}\n` +
         `${photoCount} photo${photoCount !== 1 ? "s" : ""}\n\n` +
         `File: ${filename}`, "Backup exported");
-        `File: ${filename}`, "Backup exported");
 });
 
 // ===== Import =====
@@ -5397,7 +5396,7 @@ function buildMerge(cloud) {
     tombstones: { fields: f.tombstones, equipment: e.tombstones, reports: r.tombstones, seedPresets: s.tombstones, profitLoss: p.tombstones },
     conflicts: conflicts
   };
-
+}
 // Apply the user's conflict choices into the merged set.
 // choices: { "fields::North 40": "cloud" | "local", ... }
 function applyConflictChoices(mergeResult, choices) {
@@ -5411,15 +5410,13 @@ function applyConflictChoices(mergeResult, choices) {
 
 // Persist a merged dataset locally.
 function saveMergedLocal(merged) {
-// Persist a merged dataset locally.
-function saveMergedLocal(merged) {
   localStorage.setItem(LS_FIELDS, JSON.stringify(merged.fields || {}));
   localStorage.setItem(LS_EQ,     JSON.stringify(merged.equipment || {}));
   localStorage.setItem(LS_REPS,   JSON.stringify(merged.reports || {}));
   localStorage.setItem(LS_SEED,   JSON.stringify(merged.seedPresets || {}));
   localStorage.setItem(LS_PL,     JSON.stringify(merged.profitLoss || {}));
 }
-function saveMergedTombstones(tomb) {
+
 // Persist merged tombstones locally so future syncs keep propagating deletes.
 function saveMergedTombstones(tomb) {
   tomb = tomb || {};
@@ -5436,9 +5433,9 @@ function describeConflict(c) {
   var fieldsByLib = {
     fields:    ["crop", "variety", "boundary", "cost"],
     equipment: ["type", "width"],
-    equipment: ["type", "width"],
     reports:   ["name", "acres", "bushels", "gallons", "date"],
     profitLoss: ["name", "crop", "acres", "yield", "price", "otherIncome"]
+  };
   var rowsOut = [];
   function fmt(v) {
     if (v == null) return "—";
@@ -6455,7 +6452,6 @@ if ("serviceWorker" in navigator) {
           plSave(); plUpdateCard(+i); plRenderTotals();
         }
       });
-      });
       host.addEventListener('change', (e) => {
         if (e.target.dataset.plField && e.target.dataset.plField.endsWith('|crop')) plRender();
       });
@@ -6479,7 +6475,6 @@ if ("serviceWorker" in navigator) {
     }
   }
 
-  // Lightweight totals-only refresh so typing in an input doesn't steal focus.
   // Lightweight totals-only refresh so typing in an input doesn't steal focus.
   function plRenderTotals(){
     let tIncome=0, tExpense=0, tAcres=0;
