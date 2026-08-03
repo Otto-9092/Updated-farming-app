@@ -1,320 +1,287 @@
-[README (4).md](https://github.com/user-attachments/files/29358454/README.4.md)
-# 🚜 Diamond O Farms — Data Systems Pro
+[README (7).md](https://github.com/user-attachments/files/30667144/README.7.md)
+# 🌾 OπO Farming — Data Systems Pro
 
-A precision agriculture web app built for Diamond O Farms LLC. Turn any iPhone, iPad, or browser into a full-featured field computer for spraying, planting, harvesting, tillage, and spreading — with live GPS, swath painting, multi-equipment management, complete record-keeping, and cloud sync across all your devices.
+A mobile-first **Progressive Web App (PWA)** for farm field operations: live GPS
+coverage mapping, equipment/field management, spray & seed calculators, season
+reporting, and per-field **Profit & Loss** tracking — all with **Google Drive
+cross-device sync** and full **offline** support.
 
-**No cab monitor required. No monthly subscription. No proprietary hardware.**
+Built to run on an in-cab tablet (Samsung Galaxy Tab) as part of the larger
+**"Combine Brain"** retrofit project (RTK GPS guidance + machine telemetry on a
+1979 Case IH 1480).
 
 ---
 
-> **🆕 Version v2026.06.25 · 01** — added field-ready UX upgrades: haptic feedback, on-screen toast confirmations with **Undo**, hands-free **voice dictation** for notes, optional **spoken confirmations**, a peripheral **GPS-quality border**, bigger Start/Stop + live-metric text, a decluttered Operate screen (**⋯ More controls**), and a new **⚙️ Settings** panel (Tools tab) to toggle haptics and voice. See the [Changelog](#-changelog) at the bottom.
-
-## 📸 What it does
-
-Live GPS-driven precision ag display that runs entirely in your browser. Drive any equipment in your field, see real-time coverage painted onto a satellite map, get live metrics, save reports for every job, import field boundaries straight from Google Earth, and sync your entire setup across devices through your own Google account.
+## 📖 Table of Contents
+1. [Features](#-features)
+2. [Tech Stack](#-tech-stack)
+3. [File Structure](#-file-structure)
+4. [Architecture](#-architecture)
+5. [Data Model & Storage](#-data-model--storage)
+6. [Cross-Device Sync](#-cross-device-sync)
+7. [The Tabs](#-the-tabs)
+8. [Profit & Loss Tab](#-profit--loss-tab)
+9. [Releasing / Versioning](#-releasing--versioning-read-this-before-you-ship)
+10. [Local Development](#-local-development)
+11. [Troubleshooting](#-troubleshooting)
+12. [Roadmap](#-roadmap)
 
 ---
 
 ## ✨ Features
 
-### 🎛️ Field-Ready UX (v2026.06.25)
-- **Haptic feedback** — a short buzz confirms key taps (start session, save report, refill, etc.) so you don't have to look down. Toggle in ⚙️ Settings.
-- **On-screen toasts with Undo** — quick confirmations slide up from the bottom; destructive actions (**Reset Painted Area**, **Clear Trail**) show a 6-second **UNDO**.
-- **Voice dictation for notes** — tap the 🎤 in *Add Field Note* and speak; no typing in the cab.
-- **Spoken confirmations** *(optional, off by default)* — hear "Session started" / "Report saved" read aloud. Toggle in ⚙️ Settings.
-- **Peripheral GPS-quality border** — the screen edge glows amber/red when your fix degrades, visible from the corner of your eye.
-- **Bigger primary controls** — larger, bolder **Start/Stop** and live-metric numbers for at-a-glance reading.
-- **Decluttered Operate screen** — secondary map/boundary/guidance tools tuck behind a **⋯ More controls** button (your choice is remembered).
-- **⚙️ Settings panel** *(Tools tab)* — turn haptics and spoken confirmations on/off.
-- **Accessibility** — dynamically-created icon buttons now carry ARIA labels for VoiceOver.
-
-
-### 🗺️ Live Operating Display
-- **Real-time satellite map** with auto-following machine arrow
-- **Swath painting** — green where you've covered, red where you've overlapped
-- **Color-coded breadcrumb trail** (slow / target / fast)
-- **Auto-zoom** that adjusts with your speed
-- **Heading-up or North-up** map orientation
-- **Auto-center toggle** — pan around freely without the map snapping back
-- **Section control** — Left ½ / Full / Right ½ for partial-width passes
-- **A-B straight-line guidance**
-
-### 📊 Live Metrics (11 tiles)
-- Current speed, average speed, max speed
-- Acres covered, acres remaining, ETA to completion
-- Acres per hour, efficiency %
-- Bushels (combine) or Total GPM + Per-Nozzle GPM (sprayer)
-- Live GPS accuracy in meters with color-coded quality
-
-### 🏞️ Field Management
-- **Save unlimited fields** with crop, variety, and boundary
-- **Walk or drive the perimeter** to record boundary → auto-calculates acres
-- **Import from Google Earth** — draw boundaries in Google Earth, save as KML or KMZ, and import them directly (auto-calculates acreage)
-- **Load saved fields** instantly with full boundary recall
-
-### 🌍 Google Earth Import (KML / KMZ)
-- Draw field boundaries in **Google Earth** — far easier than tracing on a phone
-- Export as **KML** or **KMZ** and import directly into the app
-- **KMZ files are automatically unzipped** in the browser (no external tools)
-- **Multiple fields per file** — each polygon becomes its own saved field
-- **Field names pulled from your Google Earth placemarks**
-- **Acreage auto-calculated** from each polygon
-- **Preview before importing** — pick exactly which fields to bring in, with duplicate-overwrite warnings
-- **Pins and paths are ignored** — only polygons import as fields
-
-### 🚜 Equipment Library
-Six fully-supported equipment types with type-specific parameters:
-
-| Type | Tracked Parameters |
-|---|---|
-| 🚿 Sprayer | GPA, nozzle spacing, target speed, tank capacity, current product |
-| 🌾 Combine | Expected yield, grain tank capacity, current moisture |
-| 🚜 Planter | Row spacing, rows in use, population, variety, downforce |
-| 🍂 Tillage | Working depth, pass type, implement notes |
-| 🟫 Spreader | Product type, rate, bin capacity, product name |
-| ❓ Other | Free-text notes for any unsupported implement |
-
-- **Smart modal interface** auto-opens with type-specific fields when you change equipment
-- **Save unlimited machines** — switch between sprayers, combines, planters in one tap
-- **Live planter width calculation** — auto-suggests working width from rows × spacing
-- **Sprayer GPM math** — Total GPM and per-nozzle GPM update live with speed
-
-### 📄 Reports Library
-- **Auto-save** every session with full field, equipment, and performance details
-- **Searchable** — match across name, field, crop, equipment, ID
-- **Filterable** by date (Today / Last 7 days / Last 30 days / This year)
-- **Sortable** by date, name, or acres
-- **Renameable** — give every job a meaningful name
-- **Printable as PDF** with mobile-friendly back-to-app button
-- **Live count display** — "Showing 3 of 47" when filters are active
-
-### ☁️ Cloud Sync (Google Drive)
-Sync your equipment, fields, and reports across every device through your own Google account — no servers, no subscriptions, no third-party storage.
-
-- **Sign in with Google** — uses Google Identity Services (secure OAuth, no passwords stored)
-- **One-tap Sync Now** — merges equipment, fields, and reports both ways
-- **Private app storage** — data lives in your Drive's hidden `appDataFolder`; the app **cannot see your other Drive files**
-- **Smart conflict resolution** — if the same item differs on two devices, a dialog shows you exactly what's different (field by field) and lets you choose **Keep Mine** or **Keep Cloud** per item, with "Keep all" shortcuts
-- **Newest-edit-wins** by default for non-conflicting changes
-- **Deletes sync correctly** — uses tombstones so a deleted machine/field/report stays deleted everywhere (and a newer re-add still wins). Tombstones auto-expire after 90 days.
-- **"Last synced" timestamp** persists on each device
-- **Offline-aware** — clear messaging when there's no connection; your data stays safe locally
-- **Manual by design** — nothing syncs until *you* tap Sync Now
-- **Photos stay local** — note photos remain on each device (they still travel inside any PDF you share)
-
-### 💾 Backup & Sync (Manual / Offline)
-- **Export all data** to a single `.json` file (includes photos)
-- **Import on any device** — merge with existing or replace entirely
-- **Auto-rollback** in case of accidental replace
-- **Computer ⇄ phone transfer** via email or AirDrop
-- **Doubles as disaster recovery** — phone dies? Restore from backup.
-- Great as a belt-and-suspenders backup alongside cloud sync
-
-### 📤 Trail Export
-- Export your machine path as **KML** (Google Earth, ag software) or **GPX** (most ag software, fitness apps)
-- Includes boundary polygon and timestamped track points with speed
-
-### 📱 iPhone-Optimized PWA
-- **Add to Home Screen** — launches like a native app
-- **Works fully offline** — the app shell is cached by a service worker, so it loads and runs with no signal
-- **Automatic update banner** — when a new version ships, a banner prompts you to refresh
-- **Custom Diamond O Farms logo** as app icon
-- **Wake lock** — screen stays on during active sessions
-- **iOS-safe inputs** — no auto-zoom on form focus
-- **Full-screen modal dialogs** for distraction-free editing
-- **Touch-optimized buttons** sized for gloves
-
-### 🛰️ GPS Quality Management
-- **Accuracy filtering** — rejects fixes worse than 15 meters
-- **Speed smoothing** via exponential moving average
-- **Jitter rejection** — ignores micro-movements under 0.5 meters
-- **Impossible-jump filter** — rejects fixes implying >60 mph delta
-- **Live quality pill** shows current GPS accuracy in real-time
+- **Live coverage mapping** — Google Maps overlay paints acres as you drive; boundary capture with offset (left/right/center of machine).
+- **Field & Equipment library** — reusable fields (with boundaries) and machines (sprayer, combine, planter, tillage, spreader, swather, baler).
+- **Tools / Calculators** — product/chemical mix calculator, cost-per-acre calculator.
+- **Reports** — per-operation records (acres, bushels, gallons, bales, etc.).
+- **Season dashboard** — totals grouped by crop / field / equipment / month, with CSV & PDF export.
+- **Profit & Loss** — manual per-field/crop income & expense tracking, to the penny.
+- **Google Drive sync** — per-item merge with conflict resolution and delete propagation.
+- **Offline-first** — service worker caches the app shell; works with no signal.
+- **Import / Export** — full JSON backup (optionally including note photos).
+- **Light & dark themes** — via CSS variables.
 
 ---
 
-## 🚀 Getting Started
+## 🧱 Tech Stack
 
-### Run it locally or host it
-
-This is a **static web app** — no server required. You can:
-
-1. **Host on GitHub Pages** (recommended — free)
-2. **Host on Netlify, Vercel, Cloudflare Pages** (free)
-3. **Open `index.html` directly** in a browser for local testing
-   - *Note: cloud sync and "Add to Home Screen" require HTTPS hosting; they won't work from a local `file://` open.*
-
-### Setup steps
-
-1. **Clone or download** this repository
-2. **Get a Google Maps API key**
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Enable **Maps JavaScript API** + **Geometry library**
-   - Restrict the key to your domain(s)
-3. **(For cloud sync) Set up Google sign-in**
-   - In the same Google Cloud project, enable the **Google Drive API**
-   - Create an **OAuth 2.0 Client ID** (type: Web application)
-   - Add your hosting origin (e.g. `https://yourname.github.io`) to **Authorized JavaScript origins**
-   - While the app is in "Testing" mode, add each user's Google address under **Test users**
-4. **Create `config.js`** in the root with:
-   ```javascript
-   window.GOOGLE_MAPS_API_KEY = "your_maps_api_key_here";
-   window.GOOGLE_OAUTH_CLIENT_ID = "your_oauth_client_id.apps.googleusercontent.com"; // optional — only needed for cloud sync
-   ```
-   > The OAuth Client ID is a public identifier and is safe to include. **Never** put a client *secret* here — the app doesn't use one.
-5. **Commit and deploy** to your hosting platform
-6. **Open the app** on any device, allow location, and you're running
-
-### Add to iPhone home screen
-
-1. Open the app in **Safari** on iPhone
-2. Tap the **Share** button → **Add to Home Screen**
-3. The Diamond O Farms logo will appear on your home screen
-4. Tap it to launch full-screen, no Safari chrome
+- **Vanilla JS / HTML / CSS** — no framework, no build step.
+- **PWA** — `manifest.json` + `sw.js` service worker.
+- **localStorage** — primary data store (keyed objects).
+- **IndexedDB** — note photo blobs.
+- **Google APIs** — Maps JavaScript API (mapping) + Google Identity Services / Drive (sync).
 
 ---
 
-## 🌾 Real-world workflow
+## 📂 File Structure
 
-### Start of season — one-time setup
-1. **Field & Equipment tab** → add each field with crop type
-2. Draw field boundaries in **Google Earth** and import them (KML/KMZ), **or** walk/drive each perimeter to capture the boundary
-3. Add each machine with type-specific parameters
-4. **Sign in with Google** on each device and tap **Sync Now** so everything matches
-5. *(Optional)* **Backup & Sync** → Export → save the file as your "season start" snapshot
-
-### Daily use
-1. Open app from home screen
-2. **Field & Equipment** → load field, load equipment
-3. **Operate** → tap Start Session
-4. Drive — watch live coverage paint, monitor metrics
-5. End of pass → tap Stop → tap Save Report
-6. Repeat for next field
-7. End of day → **Sync Now** to push the day's reports to your other devices
-
-### End of day
-1. **Reports tab** → review the day's jobs
-2. Rename any reports for clarity
-3. Print PDFs for records if needed
-4. **Sync Now** (and/or **Export** for a manual snapshot)
-
-### Adding equipment on the computer
-1. On computer browser: set up the new machine in Equipment Library
-2. Tap **Sync Now**
-3. On your phone: tap **Sync Now** → the new machine appears
-   - *(No-Google fallback: Export the `.json`, send it to your phone, and Import → Merge.)*
+| File | Purpose |
+|------|---------|
+| `index.html` | App shell: markup for all tabs, inline styles, script includes |
+| `app.js` | Core logic: tabs, mapping, sessions, sync engine, calculators, **P&L module** |
+| `styles.css` | Global styles + theme variables (`--panel`, `--accent`, `--green`, …) |
+| `config.js` | Google Maps API key + OAuth Client ID (NOT committed with real keys) |
+| `uxenhancements.js` | UI niceties (card reordering, etc.) |
+| `asapplied.js` | As-applied data handling |
+| `sw.js` | Service worker: cache versioning + offline strategy |
+| `manifest.json` | PWA metadata (icons, theme color, display mode) |
+| `icon-*.png`, `favicon.ico` | App icons |
 
 ---
 
-## 🛠️ Tech Stack
+## 🏗️ Architecture
 
-- **Pure HTML, CSS, JavaScript** — no frameworks, no build step
-- **Google Maps JavaScript API** — satellite imagery, geometry calculations
-- **HTML5 Geolocation API** — high-accuracy GPS with watchPosition
-- **Google Identity Services + Google Drive API** — cloud sync via your own account (private `appDataFolder`)
-- **Service Worker** — offline app-shell caching + automatic update prompts
-- **localStorage** — all data persists locally on each device
-- **DecompressionStream API** — in-browser KMZ (ZIP) extraction for Google Earth import
-- **Wake Lock API** — keeps screen on during sessions (iOS 16.4+)
-
-**File structure:**
 ```
-/
-├── index.html          # Main app structure
-├── styles.css          # All styling
-├── app.js              # Application logic
-├── ux-enhancements.js  # Field-ready UX layer (haptics, toasts, voice, settings)
-├── sw.js               # Service worker (offline cache + update prompts)
-├── config.js           # Your API key + OAuth client ID (gitignored)
-├── manifest.json       # PWA manifest
-├── icon-180.png        # iPhone home-screen icon
-├── icon-192.png        # Android PWA icon
-├── icon-512.png        # Android splash icon
-├── icon-32.png         # Browser favicon
-├── icon-16.png         # Small favicon
-├── favicon.ico         # Multi-size browser favicon
-└── README.md           # This file
+┌──────────────────────────────────────────────┐
+│  index.html  (tabs + panels + inline styles)  │
+└───────────────┬──────────────────────────────┘
+                │ loads
+     ┌──────────┼───────────┬──────────────┐
+     ▼          ▼           ▼              ▼
+  config.js  app.js   uxenhancements.js  asapplied.js
+                │
+     ┌──────────┼─────────────────────────────┐
+     ▼          ▼             ▼                ▼
+ localStorage IndexedDB  Google Maps   Google Drive (sync)
 ```
 
-> **Versioning note:** Each release bumps a matching version stamp in three places — the `APP_VERSION` string in `app.js`, the `?v=` query strings in `index.html`, and the `CACHE_NAME` in `sw.js`. This trio is what forces browsers/PWAs to fetch the new files instead of serving stale cached copies, and it triggers the in-app update banner. Always deploy all three together.
+**Tab system** (simple + robust):
+- Nav button: `<button class="tab" data-tab="X">Label</button>`
+- Panel: `<section id="tab-X" class="tab-panel">…</section>`
+- Switcher in `app.js` toggles `.active` and can run a render hook per tab
+  (e.g. `renderSeason()` for Season, `window.plRender()` for Profit & Loss).
 
 ---
 
-## ⚙️ Configuration
+## 🗃️ Data Model & Storage
 
-### GPS tuning (in `app.js`)
+All primary data lives in `localStorage` as **keyed objects** (`{ id: {…item} }`),
+each item carrying a `_modified` (or `savedAt`) ISO timestamp used for sync
+conflict resolution.
 
-Three constants control GPS behavior — tweak if you find the defaults too aggressive or too loose:
+| Data | localStorage key | Tombstone key | Timestamp field |
+|------|------------------|---------------|-----------------|
+| Fields | `dof_fields_library` | `dof_tomb_fields` | `_modified` |
+| Equipment | `dof_equipment_library` | `dof_tomb_equipment` | `_modified` |
+| Reports | `dof_reports` | `dof_tomb_reports` | `savedAt` |
+| Seed presets | `dof_seed_presets` | `dof_tomb_seed` | `_modified` |
+| **Profit & Loss** | `dof_pl_library` | `dof_tomb_pl` | `_modified` |
+| Note photos | *(IndexedDB)* | — | — |
 
-| Constant | Default | Effect |
-|---|---|---|
-| `GPS_MAX_ACCURACY_M` | 15 | Reject fixes worse than this (meters) |
-| `GPS_MIN_MOVE_M` | 0.5 | Ignore micro-jitter below this (meters) |
-| `SPEED_EMA_ALPHA` | 0.25 | Speed smoothing — lower = smoother, higher = more responsive |
-
-### Coverage cell size
-
-`CELL_SIZE_DEG` controls how finely overlap is detected. Default is ~5 meters — finer detection at higher CPU cost.
-
-### Sync tuning (in `app.js`)
-
-| Constant | Default | Effect |
-|---|---|---|
-| `TOMB_MAX_AGE_DAYS` | 90 | How long deletion records (tombstones) are kept before expiring |
+**Tombstones** record deletions (`{ id: deletedAtISO }`) so a delete on one
+device propagates to others instead of the item reappearing. They auto-expire
+after `TOMB_MAX_AGE_DAYS` (90).
 
 ---
 
-## 🔒 Privacy
+## 🔄 Cross-Device Sync
 
-- **All data stored locally** in your browser's localStorage by default
-- **Cloud sync is optional and account-private** — data goes only to *your* Google Drive's hidden app folder, which the app alone can access; it cannot read your other Drive files
-- **Nothing sent to any server** except Google Maps tile requests and (if you enable sync) your own Google Drive
-- **No analytics, no tracking, no ads**
-- **Your reports, fields, and equipment never leave your device** unless you explicitly export or sync them
-- **Photos stay on-device** and are never uploaded by cloud sync
+Sync runs against a single JSON file in the user's Google Drive. Trigger points:
+**sign-in** and the **"Sync Now"** button (not on every keystroke).
 
----
+**Flow (`syncNow()`):**
+1. Download the cloud copy from Drive.
+2. `buildMerge(cloud)` → `mergeLibrary()` merges each collection item-by-item:
+   - newest `_modified` wins on a straight update,
+   - deletions win when a tombstone is newer than the item,
+   - **same item edited on both devices → conflict** (user picks Mine vs Cloud).
+3. Snapshot current data to a rollback key, save merged data locally.
+4. Upload the merged payload back to Drive.
+5. Refresh visible lists (fields, equipment, reports, seed presets, **P&L**).
 
-## 🐛 Known limitations
+```mermaid
+flowchart LR
+    A["Device edits"] --> B["Sync Now"]
+    B --> C["Download cloud"]
+    C --> D["mergeLibrary()<br/>per-item"]
+    D --> E{"Same item<br/>edited both?"}
+    E -->|No| F["Silent merge"]
+    E -->|Yes| G["Conflict dialog<br/>Mine vs Cloud"]
+    F --> H["Save local + upload"]
+    G --> H
+```
 
-- **Single-machine view only** — can't see other tractors in real-time (would require a live backend)
-- **Manual sync** — sync runs when you tap **Sync Now** (by design); there's no automatic background sync
-- **KMZ on older iOS** — KMZ unzipping needs the `DecompressionStream` API (iOS Safari 16.4+ / modern desktop browsers). On older devices, export from Google Earth as **KML** instead — KML works everywhere.
-- **Photos don't cloud-sync** — by design, to keep the sync file small; use Export/Import or share a PDF to move photos between devices
-- **GPS quality depends on phone hardware** — modern iPhones (X+) give 3-5m accuracy; older devices may be 10-15m
-- **Battery drain** — continuous GPS + screen-on is hard on batteries; a 12V cab charger is recommended for full-day use
-- **Google API quotas** — Maps free tier covers ~28,000 map loads per month per key; Drive API free quotas are far more than personal sync use will ever reach
-
----
-
----
-
-## 📋 Changelog
-
-### v2026.06.25 · 01
-- **NEW:** Haptic feedback on key actions (toggle in ⚙️ Settings)
-- **NEW:** Toast confirmations with **Undo** for Reset Painted Area & Clear Trail
-- **NEW:** Voice dictation (🎤) for field notes
-- **NEW:** Optional spoken confirmations (toggle in ⚙️ Settings)
-- **NEW:** Peripheral GPS-quality border (amber/red screen edge)
-- **NEW:** ⚙️ Settings panel on the Tools tab
-- **IMPROVED:** Larger Start/Stop buttons and live-metric text
-- **IMPROVED:** Operate screen decluttered behind a **⋯ More controls** toggle
-- **IMPROVED:** ARIA labels added to dynamically-generated icon buttons
-- **FIXED:** Removed leftover debug `console.log` calls
-- **FIXED:** Repaired several emoji/character encodings (🎯 🌾 🔄, em-dashes, curly quotes)
-- **INTERNAL:** New `ux-enhancements.js` module loads after `app.js`; each enhancement is isolated so one failure can't disable the others.
-
-> **Deploying this release:** upload the new `ux-enhancements.js` **and** replace `index.html`, `styles.css`, `app.js`, and `sw.js`. The version trio (`APP_VERSION`, the `?v=` stamps, and `CACHE_NAME`) is already bumped to `2026.06.25-1` to trigger the in-app update banner.
+The sync **payload** includes: `fields`, `equipment`, `reports`, `seedPresets`,
+`profitLoss`, and `tombstones`.
 
 ---
 
-## 📜 License
+## 🗂️ The Tabs
 
-Built for Diamond O Farms LLC. All rights reserved.
+| Tab | ID | Render hook | What it does |
+|-----|----|-----------|--------------|
+| Operate | `tab-operate` | — | Live mapping / active session |
+| Field & Equipment | `tab-setup` | — | Manage fields & machines |
+| Tools | `tab-tools` | `seedMixCalcFromState()` etc. | Mix & cost calculators |
+| Reports | `tab-reports` | — | Operation records |
+| Season | `tab-season` | `renderSeason()` | Season totals + charts + export |
+| **Profit & Loss** | `tab-pl` | `window.plRender()` | Per-field income/expense tracking |
 
 ---
 
-## 🚜 Built with grit, code, and a whole lot of acres
+## 💰 Profit & Loss Tab
 
-*A precision ag platform that does what the $1000/year commercial systems do — without the subscription, without the lock-in, without the cab monitor.*
+Manual per-field/crop P&L, matching the app's look, theme, and sync behavior.
+
+**Location:** self-contained module at the bottom of `app.js`
+(`/* PROFIT & LOSS MODULE */`). Exposes `window.plRender()` for the tab switcher
+and post-sync refresh.
+
+**Behavior:**
+- **KPI cards:** Total Income, Total Expenses, Net Farm Income (green/red), Total Acres.
+- **Per field:** crop (with unit), acres, yield, price, other income, plus
+  **Variable** and **Fixed** cost line items, with subtotals and a Net (P/L).
+- **To the penny:** all money formats to 2 decimals; inputs accept cents (`step="0.01"`).
+- **Live subtotals:** editing a value updates that card's subtotals **in place**
+  (no full re-render → cursor stays put) plus the top KPI cards.
+- **CSV export** and **Clear All**.
+
+**Storage & sync:** stored as a keyed object under `dof_pl_library`, each field
+with an `id` and `_modified` stamp. Syncs exactly like Fields/Equipment
+(merge + conflict dialog + tombstones on delete/clear). A one-time migration
+converts any legacy `opio_farmPL` array data to the new format.
+
+**Crops (with units):** Alfalfa Hay (tons), Grass Hay (tons), Corn (bu),
+Soybeans (bu), Wheat (bu), Oats (bu), Sorghum (bu), Other (units).
+
+**Expense lines:**
+- *Variable:* Seed, Fertilizer / Lime, Chemicals, Fuel & Oil, Repairs, Custom Hire, Hired Labor, Supplies, Hauling / Marketing
+- *Fixed:* Land Rent, Water Rights, Equipment Depreciation, Property Taxes, Insurance, Interest, Dues & Fees
+
+---
+
+## 🚀 Releasing / Versioning (READ THIS BEFORE YOU SHIP)
+
+Because this is a **cached PWA**, shipping code changes is only half the job —
+you must **bust the cache** or devices keep running the old files. There are
+**THREE things to bump** on every release, and they must all use the same build
+number.
+
+### The 3 bumps
+
+1. **Cache version — `sw.js`**
+   - `const CACHE_VERSION = "opio-YYYY.MM.DD-N";`
+   - Every `?v=YYYYMMDD-N` in the `CORE_ASSETS` list.
+
+2. **Asset query strings — `index.html`**
+   - `styles.css?v=YYYYMMDD-N`
+   - `config.js?v=…`, `app.js?v=…`, `uxenhancements.js?v=…`, `asapplied.js?v=…`
+
+3. **User-visible version label**
+   - `app.js`: `window.APP_VERSION = "YYYY.MM.DD · NN";`  ← the authoritative one
+   - `index.html`: the `#appVersion` fallback span (keep it matching)
+
+> ⚠️ **Keep `N` / `NN` consistent** across all three so the cache version, asset
+> URLs, and the label all tell the same story. The `?v=` strings in `sw.js` must
+> match those in `index.html` or precaching will fetch the wrong copies.
+
+### Deploying to a device
+After deploying the new files, the old service worker can cling on. Once per
+release, on each device:
+- **Fully close** the app (swipe away from recents), then reopen; **or**
+- Browser → clear site data / reset, then reload; **or**
+- If installed to the home screen: uninstall + re-add.
+
+You'll know it worked when the header shows the new **vYYYY.MM.DD · NN**.
+
+### Current version
+`v2026.08.02 · 09` (cache `opio-2026.08.02-9`)
+
+---
+
+## 💻 Local Development
+
+No build step — it's plain files. To run locally you need a static server
+(service workers require http/https, not `file://`):
+
+```bash
+# any static server works, e.g.:
+npx serve .
+# or
+python3 -m http.server 8080
+```
+
+Then open `http://localhost:8080`.
+
+**Config:** put your Google Maps API key + OAuth Client ID in `config.js`.
+Do **not** commit real keys.
+
+**Editing tips:**
+- The P&L module is self-contained at the end of `app.js` — safe to edit in isolation.
+- New tabs = add a `data-tab` button + a `#tab-X` panel + (optional) a render hook in the tab switcher.
+- Style with the existing CSS variables so light/dark themes both work.
+
+---
+
+## 🛠️ Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| New feature/tab doesn't appear | Old cache still served | Do all **3 version bumps**, then fully reload / reinstall the PWA |
+| "Add Field" / buttons do nothing | Running an old cached `app.js` | Same as above — cache bust |
+| Version label shows an old date | `window.APP_VERSION` in `app.js` not bumped | Update it (and the `#appVersion` fallback) |
+| P&L not syncing | Not signed in, or didn't tap Sync Now | Sign in to Google, then **Sync Now** on both devices |
+| Same field differs across devices | Edited on both between syncs | Resolve via the **conflict dialog** (Mine vs Cloud) |
+| Deleted item reappears after sync | Tombstone not recorded | Ensure deletes call `recordTombstone(LS_TOMB_*, id)` |
+| Subtotals not updating live | Full re-render vs in-place update | P&L updates the edited card in place + KPIs; crop change does a full re-render |
+
+---
+
+## 🗺️ Roadmap
+
+This app is **Phase 1's software layer** of the larger "Combine Brain" build.
+
+- ✅ **RTK GPS** — centimeter guidance feeding the tablet (FRTK achieved).
+- ✅ **Farming PWA** — mapping, reports, season, **P&L**, cross-device sync.
+- ⏭️ **Phase 2:** Rotor tach (Case IH 1480 rotor RPM → ESP32 → app).
+- ⏭️ **Phase 3:** Fuel level.
+- ⏭️ **Phase 4:** Engine-bay temp + buzzer alarm.
+- ⏭️ **Phase 5:** Permanent in-cab HMI dashboard tying it all together.
+
+**Golden rules for old iron:** protect the 3.3V ESP32 from the 12V machine, use
+clean buck-regulated power, seal against heat/vibration/dust, keep a solid common
+ground, engine OFF near the rotor, and buy the HMI last.
+
+---
+
+*OπO Farming — Data Systems Pro · built for the field, works offline, syncs when you're back in range.* 🚜
