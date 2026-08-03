@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.06.30 · 06";
+window.APP_VERSION = "2026.08.02 · 09";
 // (startup version log removed for production)
 
 /* ============================================================
@@ -88,6 +88,7 @@ const LS_EQ     = "dof_equipment_library";
 const LS_REPS   = "dof_reports";
 const LS_FIELDS = "dof_fields_library";
 const LS_SEED   = "dof_seed_presets";
+const LS_PL     = "dof_pl_library";   // Profit & Loss fields (keyed object, syncs like the others)
 
 // ===== DOM helper =====
 const $ = (id) => document.getElementById(id);
@@ -2557,7 +2558,7 @@ function saveEqModal() {
       state.equipment.width = Math.max(1, subW);
     }
   }
-  applyEquipmentUI();                        // ← refresh which metric tiles show
+  applyEquipmentUI();                        // ����� refresh which metric tiles show
   updateEqSummary();
   closeEqModal();
 }
@@ -2725,7 +2726,7 @@ $("btnSaveEq").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const type = state.equipment.type;
   lib[state.equipment.name] = {
-    _modified: new Date().toISOString(),   // ← for sync conflict resolution
+    _modified: new Date().toISOString(),   // ������� for sync conflict resolution
     name:  state.equipment.name,
     type:  type,
     width: state.equipment.width,
@@ -2801,7 +2802,7 @@ if ($("btnSaveField")) $("btnSaveField").addEventListener("click", () => {
   state.loadedFieldKey = name;
   if ($("fldStatus")) $("fldStatus").textContent = `Saved field: ${name} (${lib[name].boundary.acres.toFixed(2)} ac)`;
   loadFieldsList();
-  if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
+  if (typeof updateDataStats === "function") updateDataStats();   // �� NEW LINE
 });
 function _median(arr) {
   var a = arr.slice().sort(function (x, y) { return x - y; });
@@ -2898,7 +2899,7 @@ if ($("btnDeleteField")) $("btnDeleteField").addEventListener("click", async () 
   recordTombstone(LS_TOMB_FIELDS, k);   // ← remember the deletion for sync
   loadFieldsList();
   if ($("fldStatus")) $("fldStatus").textContent = `Deleted: ${k}`;
-  if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
+  if (typeof updateDataStats === "function") updateDataStats();   // �� NEW LINE
 });
 
 // ============================================================
@@ -3647,7 +3648,7 @@ function formatReport(r) {
     `ID:        ${r.id}`,
     `Date:      ${new Date(r.date).toLocaleString()}`,
     `Field:     ${r.field.name} (${r.field.crop}${r.field.variety ? " / " + r.field.variety : ""})`,
-    `Machine:   ${r.equipment.name} — ${r.equipment.type} ${r.equipment.width} ft`,
+    `Machine:   ${r.equipment.name} ��� ${r.equipment.type} ${r.equipment.width} ft`,
     `Acres:     ${r.acres}`,
     `Coverage:  ${r.coverage != null ? r.coverage + "%" : "—"} of ${r.boundaryAcres} ac boundary`,
     `Avg Speed: ${r.avgSpeed} mph`,
@@ -4017,6 +4018,7 @@ const LS_TOMB_FIELDS = "dof_tomb_fields";
 const LS_TOMB_EQ     = "dof_tomb_equipment";
 const LS_TOMB_REPS   = "dof_tomb_reports";
 const LS_TOMB_SEED   = "dof_tomb_seed";
+const LS_TOMB_PL     = "dof_tomb_pl";
 const TOMB_MAX_AGE_DAYS = 90;   // expire old tombstones so they don't pile up
 
 function recordTombstone(lsKey, itemKey) {
@@ -4062,6 +4064,7 @@ function buildBackup(includePhotos) {
     equipment: JSON.parse(localStorage.getItem(LS_EQ)     || "{}"),
     reports:   JSON.parse(localStorage.getItem(LS_REPS)   || "{}"),
     seedPresets: JSON.parse(localStorage.getItem(LS_SEED) || "{}"),
+    profitLoss:  JSON.parse(localStorage.getItem(LS_PL)   || "{}"),
   };
   if (!includePhotos) return base;
   return photoExportAll().then(function (photos) {
@@ -4084,13 +4087,16 @@ $("btnExportAll")?.addEventListener("click", async () => {
     equipment: Object.keys(backup.equipment).length,
     reports:   Object.keys(backup.reports).length,
     seedPresets: Object.keys(backup.seedPresets || {}).length,
+    profitLoss: Object.keys(backup.profitLoss || {}).length,
   };
   appAlert(`✅ Exported successfully!\n\n` +
         `${totals.fields} fields\n` +
         `${totals.equipment} machines\n` +
         `${totals.reports} reports\n` +
         `${totals.seedPresets} seed preset${totals.seedPresets !== 1 ? "s" : ""}\n` +
+        `${totals.profitLoss} P&L field${totals.profitLoss !== 1 ? "s" : ""}\n` +
         `${photoCount} photo${photoCount !== 1 ? "s" : ""}\n\n` +
+        `File: ${filename}`, "Backup exported");
         `File: ${filename}`, "Backup exported");
 });
 
@@ -4161,12 +4167,14 @@ async function handleImport(data) {
     equipment: Object.keys(data.equipment || {}).length,
     reports:   Object.keys(data.reports   || {}).length,
     seedPresets: Object.keys(data.seedPresets || {}).length,
+    profitLoss: Object.keys(data.profitLoss || {}).length,
   };
   const current = {
     fields:    Object.keys(JSON.parse(localStorage.getItem(LS_FIELDS) || "{}")).length,
     equipment: Object.keys(JSON.parse(localStorage.getItem(LS_EQ)     || "{}")).length,
     reports:   Object.keys(JSON.parse(localStorage.getItem(LS_REPS)   || "{}")).length,
     seedPresets: Object.keys(JSON.parse(localStorage.getItem(LS_SEED) || "{}")).length,
+    profitLoss: Object.keys(JSON.parse(localStorage.getItem(LS_PL) || "{}")).length,
   };
 
   const summary =
@@ -4174,15 +4182,16 @@ async function handleImport(data) {
     `  • ${incoming.fields} fields\n` +
     `  • ${incoming.equipment} machines\n` +
     `  • ${incoming.reports} reports\n` +
-    `  • ${incoming.seedPresets} seed presets\n\n` +
+    `  • ${incoming.seedPresets} seed presets\n` +
+    `  • ${incoming.profitLoss} P&L fields\n\n` +
     `Currently on this device:\n` +
     `  • ${current.fields} fields\n` +
     `  • ${current.equipment} machines\n` +
     `  • ${current.reports} reports\n` +
-    `  • ${current.seedPresets} seed presets\n\n` +
+    `  • ${current.seedPresets} seed presets\n` +
+    `  • ${current.profitLoss} P&L fields\n\n` +
     `MERGE adds the backup's data and keeps yours.\n` +
     `REPLACE deletes everything here first, then loads the backup.`;
-
   // OK = Merge (safe default), Cancel = go to Replace path
   const mergeChoice = await appConfirm(summary, {
     title: "Import backup",
@@ -4217,7 +4226,8 @@ function performImport(data, mode) {
   if (mode === "replace") {
     localStorage.setItem(LS_FIELDS, JSON.stringify(data.fields    || {}));
     localStorage.setItem(LS_EQ,     JSON.stringify(data.equipment || {}));
-    localStorage.setItem(LS_REPS,   JSON.stringify(data.reports   || {}));
+    localStorage.setItem(LS_SEED,   JSON.stringify(data.seedPresets || {}));
+    localStorage.setItem(LS_PL,     JSON.stringify(data.profitLoss  || {}));
     localStorage.setItem(LS_SEED,   JSON.stringify(data.seedPresets || {}));
   } else {
     // merge: incoming keys win on conflict
@@ -4230,6 +4240,7 @@ function performImport(data, mode) {
     mergeLib(LS_EQ,     data.equipment);
     mergeLib(LS_REPS,   data.reports);
     mergeLib(LS_SEED,   data.seedPresets);
+    mergeLib(LS_PL,     data.profitLoss);
   }
 
   // 3. Reload all UI
@@ -4237,6 +4248,7 @@ function performImport(data, mode) {
   loadEquipmentList();
   loadReportsList();
   if (typeof loadSeedPresetList === "function") loadSeedPresetList();
+  if (typeof window.plRender === "function") window.plRender();
   updateDataStats();
 
   appAlert(`✅ Import complete (${mode === "replace" ? "REPLACED" : "MERGED"})!\n\n` +
@@ -4488,7 +4500,7 @@ function seasonTable(groups, label, tot) {
 }
 
 // ============================================================
-// SEASON SUMMARY — export current view (CSV / PDF)
+// SEASON SUMMARY �� export current view (CSV / PDF)
 // Rebuilds the exact filtered + grouped + sorted data that is
 // currently shown, so exports always match the dashboard.
 // ============================================================
@@ -4678,7 +4690,7 @@ window.addEventListener("DOMContentLoaded", () => {
   if (_vEl && window.APP_VERSION) _vEl.textContent = "v" + window.APP_VERSION;
   applyEquipmentUI();
   renderSectionButtons();
-  if (typeof refreshSyncUI === "function") refreshSyncUI();   // ← Stage 1: sync UI
+  if (typeof refreshSyncUI === "function") refreshSyncUI();   // �������� Stage 1: sync UI
   startLocationFollow();
   showEqSubmenu($("eqType").value);
   updateEqSummary();
@@ -4762,7 +4774,7 @@ function migrateLegacyPhotos() {
     if (btnExpand && mapCol) {
       btnExpand.addEventListener("click", function () {
         const expanded = mapCol.classList.toggle("map-expanded");
-        btnExpand.textContent = expanded ? "🗗 Exit Full Map" : "⛶ Expand Map";
+        btnExpand.textContent = expanded ? "��� Exit Full Map" : "⛶ Expand Map";
         // Prevent body scroll while the map is fullscreen
         document.body.style.overflow = expanded ? "hidden" : "";
         resizeMap();
@@ -4792,7 +4804,7 @@ function migrateLegacyPhotos() {
           if (btn) btn.textContent = "☀️ Day";
         } else {
           body.classList.remove("night-mode");
-          if (btn) btn.textContent = "🌙 Night";
+          if (btn) btn.textContent = "��� Night";
         }
         // Redraw the Google map ONLY if it actually exists. Guarded so a
         // missing/failed Google Maps load can never break the toggle.
@@ -5346,40 +5358,45 @@ function buildMerge(cloud) {
   var localEq     = JSON.parse(localStorage.getItem(LS_EQ)     || "{}");
   var localReps   = JSON.parse(localStorage.getItem(LS_REPS)   || "{}");
   var localSeed   = JSON.parse(localStorage.getItem(LS_SEED)   || "{}");
+  var localPL     = JSON.parse(localStorage.getItem(LS_PL)     || "{}");
 
   var cFields = (cloud && cloud.fields)    || {};
   var cEq     = (cloud && cloud.equipment) || {};
   var cReps   = (cloud && cloud.reports)   || {};
   var cSeed   = (cloud && cloud.seedPresets) || {};
+  var cPL     = (cloud && cloud.profitLoss) || {};
 
   // Local + cloud tombstones (pruned of anything too old)
   var ltFields = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_FIELDS) || "{}"));
   var ltEq     = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_EQ)     || "{}"));
   var ltReps   = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_REPS)   || "{}"));
   var ltSeed   = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_SEED)   || "{}"));
+  var ltPL     = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_PL)     || "{}"));
   var ctTomb   = (cloud && cloud.tombstones) || {};
   var ctFields = pruneTombstones(ctTomb.fields || {});
   var ctEq     = pruneTombstones(ctTomb.equipment || {});
   var ctReps   = pruneTombstones(ctTomb.reports || {});
   var ctSeed   = pruneTombstones(ctTomb.seedPresets || {});
+  var ctPL     = pruneTombstones(ctTomb.profitLoss || {});
 
   var f = mergeLibrary(localFields, cFields, "_modified", ltFields, ctFields);
   var e = mergeLibrary(localEq,     cEq,     "_modified", ltEq,     ctEq);
   var r = mergeLibrary(localReps,   cReps,   "savedAt",   ltReps,   ctReps);
   var s = mergeLibrary(localSeed,   cSeed,   "_modified", ltSeed,   ctSeed);
+  var p = mergeLibrary(localPL,     cPL,     "_modified", ltPL,     ctPL);
 
   var conflicts = []
     .concat(f.conflicts.map(function (c) { c.lib = "fields";    c.label = "Field";   return c; }))
     .concat(e.conflicts.map(function (c) { c.lib = "equipment"; c.label = "Machine"; return c; }))
     .concat(r.conflicts.map(function (c) { c.lib = "reports";   c.label = "Report";  return c; }))
-    .concat(s.conflicts.map(function (c) { c.lib = "seedPresets"; c.label = "Seed preset"; return c; }));
+    .concat(s.conflicts.map(function (c) { c.lib = "seedPresets"; c.label = "Seed preset"; return c; }))
+    .concat(p.conflicts.map(function (c) { c.lib = "profitLoss"; c.label = "P&L field"; return c; }));
 
   return {
-    merged: { fields: f.merged, equipment: e.merged, reports: r.merged, seedPresets: s.merged },
-    tombstones: { fields: f.tombstones, equipment: e.tombstones, reports: r.tombstones, seedPresets: s.tombstones },
+    merged: { fields: f.merged, equipment: e.merged, reports: r.merged, seedPresets: s.merged, profitLoss: p.merged },
+    tombstones: { fields: f.tombstones, equipment: e.tombstones, reports: r.tombstones, seedPresets: s.tombstones, profitLoss: p.tombstones },
     conflicts: conflicts
   };
-}
 
 // Apply the user's conflict choices into the merged set.
 // choices: { "fields::North 40": "cloud" | "local", ... }
@@ -5394,12 +5411,15 @@ function applyConflictChoices(mergeResult, choices) {
 
 // Persist a merged dataset locally.
 function saveMergedLocal(merged) {
+// Persist a merged dataset locally.
+function saveMergedLocal(merged) {
   localStorage.setItem(LS_FIELDS, JSON.stringify(merged.fields || {}));
   localStorage.setItem(LS_EQ,     JSON.stringify(merged.equipment || {}));
   localStorage.setItem(LS_REPS,   JSON.stringify(merged.reports || {}));
   localStorage.setItem(LS_SEED,   JSON.stringify(merged.seedPresets || {}));
+  localStorage.setItem(LS_PL,     JSON.stringify(merged.profitLoss || {}));
 }
-
+function saveMergedTombstones(tomb) {
 // Persist merged tombstones locally so future syncs keep propagating deletes.
 function saveMergedTombstones(tomb) {
   tomb = tomb || {};
@@ -5407,8 +5427,8 @@ function saveMergedTombstones(tomb) {
   localStorage.setItem(LS_TOMB_EQ,     JSON.stringify(tomb.equipment || {}));
   localStorage.setItem(LS_TOMB_REPS,   JSON.stringify(tomb.reports || {}));
   localStorage.setItem(LS_TOMB_SEED,   JSON.stringify(tomb.seedPresets || {}));
+  localStorage.setItem(LS_TOMB_PL,     JSON.stringify(tomb.profitLoss || {}));
 }
-
 // Produce a small human-readable summary of how two versions differ.
 function describeConflict(c) {
   var L = c.local || {}, C = c.cloud || {};
@@ -5416,9 +5436,9 @@ function describeConflict(c) {
   var fieldsByLib = {
     fields:    ["crop", "variety", "boundary", "cost"],
     equipment: ["type", "width"],
-    reports:   ["name", "acres", "bushels", "gallons", "date"]
-  };
-  var list = fieldsByLib[c.lib] || [];
+    equipment: ["type", "width"],
+    reports:   ["name", "acres", "bushels", "gallons", "date"],
+    profitLoss: ["name", "crop", "acres", "yield", "price", "otherIncome"]
   var rowsOut = [];
   function fmt(v) {
     if (v == null) return "—";
@@ -5556,6 +5576,7 @@ function syncNow() {
         equipment: mergedData.equipment,
         reports: mergedData.reports,
         seedPresets: mergedData.seedPresets,
+        profitLoss: mergedData.profitLoss,
         tombstones: result.tombstones || {}
       };
       return DriveSync.upload(payload).then(function () {
@@ -5564,6 +5585,7 @@ function syncNow() {
         if (typeof loadEquipmentList === "function") loadEquipmentList();
         if (typeof loadReportsList === "function") loadReportsList();
         if (typeof loadSeedPresetList === "function") loadSeedPresetList();
+        if (typeof window.plRender === "function") window.plRender();   // refresh P&L tab after sync
         if (typeof updateDataStats === "function") updateDataStats();
         var nowIso = new Date().toISOString();
         try { localStorage.setItem(LS_LAST_SYNCED, nowIso); } catch (e) {}
@@ -6230,11 +6252,12 @@ if ("serviceWorker" in navigator) {
 
 /* ============================================================
  * PROFIT & LOSS MODULE  (manual entry, per field/crop)
- * Self-contained; stores under localStorage key 'opio_farmPL'.
- * Exposes plRender() globally for the tab switcher.
+ * Stores as a KEYED OBJECT under LS_PL ('dof_pl_library') so it syncs across
+ * devices via the app's Drive sync engine (merge + tombstones + conflicts),
+ * exactly like fields/equipment. Migrates old 'opio_farmPL' array data once.
+ * Exposes window.plRender() for the tab switcher + post-sync refresh.
  * ============================================================ */
 (function () {
-  const PL_KEY = 'opio_farmPL';
   const CROPS = {
     "Alfalfa Hay":"tons","Grass Hay":"tons","Corn":"bu","Soybeans":"bu",
     "Wheat":"bu","Oats":"bu","Sorghum":"bu","Other":"units"
@@ -6249,11 +6272,19 @@ if ("serviceWorker" in navigator) {
   function blankField(){
     const ex = {};
     [...EXPENSE_LINES.variable, ...EXPENSE_LINES.fixed].forEach(l => ex[l] = 0);
-    return { id: Date.now() + Math.random(), name:"New Field", crop:"Alfalfa Hay",
-      acres:0, yield:0, price:0, otherIncome:0, expenses:ex };
+    return { id: 'pl_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
+      name:"New Field", crop:"Alfalfa Hay",
+      acres:0, yield:0, price:0, otherIncome:0, expenses:ex,
+      _modified: new Date().toISOString() };
   }
 
-  function money(n){ return (n<0?"-$":"$") + Math.abs(Math.round(n)).toLocaleString(); }
+  // Currency to the penny (2 decimals). e.g. -$1,234.56
+  function money(n){
+    n = (+n || 0);
+    return (n<0?"-$":"$") + Math.abs(n).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  // Plain number with up to 2 decimals, no currency (for production display).
+  function num2(n){ return (+n||0).toLocaleString(undefined, {maximumFractionDigits:2}); }
   function esc(s){ return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
   function calc(f){
@@ -6267,10 +6298,51 @@ if ("serviceWorker" in navigator) {
     return { production, income, variable, fixed, expense, net: income - expense };
   }
 
-  function plSave(){ try { localStorage.setItem(PL_KEY, JSON.stringify(plFields)); } catch(e){} }
+  // Persist as a KEYED OBJECT (id -> field) under LS_PL so it syncs like
+  // fields/equipment. Each field carries a _modified stamp for conflict
+  // resolution. plFields stays an array in memory for simple rendering.
+  function plSave(){
+    try {
+      const now = new Date().toISOString();
+      const prev = JSON.parse(localStorage.getItem(LS_PL) || '{}');
+      // Compare a field's content ignoring its _modified stamp.
+      const stripped = f => { const c = Object.assign({}, f); delete c._modified; return JSON.stringify(c); };
+      const obj = {};
+      plFields.forEach(f => {
+        if (!f.id) f.id = 'pl_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+        const before = prev[f.id];
+        // Only bump _modified when this field's content actually changed (or is new),
+        // so editing one field doesn't create false conflicts on the others.
+        if (!before || stripped(before) !== stripped(f)) {
+          f._modified = now;
+        } else if (!f._modified) {
+          f._modified = before._modified || now;
+        }
+        obj[f.id] = f;
+      });
+      localStorage.setItem(LS_PL, JSON.stringify(obj));
+    } catch(e){}
+  }
   function plLoad(){
-    try { const d = localStorage.getItem(PL_KEY); plFields = d ? JSON.parse(d) : []; }
-    catch(e){ plFields = []; }
+    try {
+      // One-time migration from the old array key 'opio_farmPL'.
+      const legacy = localStorage.getItem('opio_farmPL');
+      if (legacy && !localStorage.getItem(LS_PL)) {
+        const arr = JSON.parse(legacy) || [];
+        const obj = {};
+        const now = new Date().toISOString();
+        arr.forEach(f => {
+          const id = f.id ? String(f.id) : ('pl_' + Date.now() + '_' + Math.random().toString(36).slice(2,8));
+          f.id = id; f._modified = f._modified || now; obj[id] = f;
+        });
+        localStorage.setItem(LS_PL, JSON.stringify(obj));
+        try { localStorage.removeItem('opio_farmPL'); } catch(e){}
+      }
+      const d = localStorage.getItem(LS_PL);
+      const obj = d ? JSON.parse(d) : {};
+      // Object -> array for rendering; keep stable order by name then id.
+      plFields = Object.keys(obj).map(k => { obj[k].id = k; return obj[k]; });
+    } catch(e){ plFields = []; }
   }
 
   function expenseRow(idx, label){
@@ -6290,42 +6362,50 @@ if ("serviceWorker" in navigator) {
       const c = calc(f);
       tIncome += c.income; tExpense += c.expense; tAcres += (+f.acres||0);
       const unit = CROPS[f.crop] || "units";
+      const fid = f.id;  // stable per-field id used to target subtotal spans live
       const varRows = EXPENSE_LINES.variable.map(l => expenseRow(idx, l)).join('');
       const fixRows = EXPENSE_LINES.fixed.map(l => expenseRow(idx, l)).join('');
 
       host.insertAdjacentHTML('beforeend',
-      '<div class="card">' +
+      '<div class="card" data-pl-card="' + fid + '">' +
         '<div class="pl-field-head">' +
           '<input class="pl-name" value="' + esc(f.name) + '" data-pl-field="' + idx + '|name">' +
-          '<span class="pl-net ' + (c.net>=0?'profit':'loss') + '">' + money(c.net) + '</span>' +
+          '<span class="pl-net ' + (c.net>=0?'profit':'loss') + '" data-pl-sub="headnet|' + fid + '">' + money(c.net) + '</span>' +
         '</div>' +
         '<div class="pl-section-title">Crop &amp; Production</div>' +
         '<div class="pl-row"><label>Crop</label><select data-pl-field="' + idx + '|crop">' +
           Object.keys(CROPS).map(cn => '<option ' + (cn===f.crop?'selected':'') + '>' + cn + '</option>').join('') +
         '</select></div>' +
-        '<div class="pl-row"><label>Acres</label><input type="number" value="' + f.acres + '" data-pl-field="' + idx + '|acres"></div>' +
-        '<div class="pl-row"><label>Yield (' + unit + '/acre)</label><input type="number" value="' + f.yield + '" data-pl-field="' + idx + '|yield"></div>' +
-        '<div class="pl-row"><label>Price ($/' + unit + ')</label><input type="number" value="' + f.price + '" data-pl-field="' + idx + '|price"></div>' +
-        '<div class="pl-row"><label>Other Income ($)</label><input type="number" value="' + f.otherIncome + '" data-pl-field="' + idx + '|otherIncome"></div>' +
-        '<div class="pl-subtotal"><span>Total Income (' + c.production.toLocaleString() + ' ' + unit + ')</span><span>' + money(c.income) + '</span></div>' +
+        '<div class="pl-row"><label>Acres</label><input type="number" step="0.01" value="' + f.acres + '" data-pl-field="' + idx + '|acres"></div>' +
+        '<div class="pl-row"><label>Yield (' + unit + '/acre)</label><input type="number" step="0.01" value="' + f.yield + '" data-pl-field="' + idx + '|yield"></div>' +
+        '<div class="pl-row"><label>Price ($/' + unit + ')</label><input type="number" step="0.01" value="' + f.price + '" data-pl-field="' + idx + '|price"></div>' +
+        '<div class="pl-row"><label>Other Income ($)</label><input type="number" step="0.01" value="' + f.otherIncome + '" data-pl-field="' + idx + '|otherIncome"></div>' +
+        '<div class="pl-subtotal"><span>Total Income (<span data-pl-sub="prod|' + fid + '">' + num2(c.production) + '</span> ' + unit + ')</span><span data-pl-sub="income|' + fid + '">' + money(c.income) + '</span></div>' +
         '<div class="pl-section-title">Variable Costs</div>' + varRows +
-        '<div class="pl-subtotal"><span>Variable Subtotal</span><span>' + money(c.variable) + '</span></div>' +
+        '<div class="pl-subtotal"><span>Variable Subtotal</span><span data-pl-sub="variable|' + fid + '">' + money(c.variable) + '</span></div>' +
         '<div class="pl-section-title">Fixed Costs</div>' + fixRows +
-        '<div class="pl-subtotal"><span>Fixed Subtotal</span><span>' + money(c.fixed) + '</span></div>' +
+        '<div class="pl-subtotal"><span>Fixed Subtotal</span><span data-pl-sub="fixed|' + fid + '">' + money(c.fixed) + '</span></div>' +
         '<div class="pl-subtotal grand"><span>Net (Profit / Loss)</span>' +
-          '<span class="' + (c.net>=0?'profit':'loss') + '" style="color:' + (c.net>=0?'var(--green)':'var(--red)') + '">' + money(c.net) + '</span></div>' +
+          '<span data-pl-sub="net|' + fid + '" style="color:' + (c.net>=0?'var(--green)':'var(--red)') + '">' + money(c.net) + '</span></div>' +
         '<div class="btn-row"><button class="btn btn-ghost btn-sm" data-pl-del="' + idx + '">Delete Field</button></div>' +
       '</div>');
     });
 
-    const net = tIncome - tExpense;
-    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-    set('plIncome', money(tIncome));
-    set('plExpense', money(tExpense));
-    set('plNet', money(net));
-    set('plAcres', tAcres.toLocaleString());
-    const card = document.getElementById('plNetCard');
-    if (card) card.className = 'pl-kpi ' + (net>=0 ? 'profit' : 'loss');
+    plRenderTotals();
+  }
+
+  // Update ONE field card's subtotals in place (no re-render -> keeps focus).
+  function plUpdateCard(idx){
+    const f = plFields[idx]; if (!f) return;
+    const c = calc(f);
+    const q = (kind) => document.querySelector('[data-pl-sub="' + kind + '|' + f.id + '"]');
+    const setTxt = (el, v) => { if (el) el.textContent = v; };
+    setTxt(q('prod'), num2(c.production));
+    setTxt(q('income'), money(c.income));
+    setTxt(q('variable'), money(c.variable));
+    setTxt(q('fixed'), money(c.fixed));
+    const netEl = q('net'); if (netEl){ netEl.textContent = money(c.net); netEl.style.color = c.net>=0?'var(--green)':'var(--red)'; }
+    const headEl = q('headnet'); if (headEl){ headEl.textContent = money(c.net); headEl.className = 'pl-net ' + (c.net>=0?'profit':'loss'); }
   }
 
   function plExportCSV(){
@@ -6345,7 +6425,15 @@ if ("serviceWorker" in navigator) {
     const clrBtn = document.getElementById('plClearAll');
     if (addBtn) addBtn.addEventListener('click', () => { plFields.push(blankField()); plSave(); plRender(); });
     if (csvBtn) csvBtn.addEventListener('click', plExportCSV);
-    if (clrBtn) clrBtn.addEventListener('click', () => { if (confirm('Clear ALL Profit & Loss fields?')) { plFields = []; plSave(); plRender(); } });
+    if (clrBtn) clrBtn.addEventListener('click', () => {
+      if (confirm('Clear ALL Profit & Loss fields?')) {
+        // Tombstone every field so the clear propagates across devices, then wipe.
+        plFields.forEach(f => { if (f.id && typeof recordTombstone === 'function') recordTombstone(LS_TOMB_PL, f.id); });
+        plFields = [];
+        try { localStorage.setItem(LS_PL, JSON.stringify({})); } catch(e){}
+        plRender();
+      }
+    });
 
     const host = document.getElementById('plFields');
     if (host) {
@@ -6357,24 +6445,41 @@ if ("serviceWorker" in navigator) {
           const idx = +i;
           plFields[idx][key] = (key==='name'||key==='crop') ? t.value : (+t.value||0);
           plSave();
-          // crop change relabels units -> re-render; simple value edits update totals only
-          if (key==='crop') plRender(); else plRenderTotals();
+          // crop change relabels units -> full re-render; otherwise update this card's
+          // subtotals in place (keeps cursor) + roll up the top KPI cards.
+          if (key==='crop') { plRender(); }
+          else { plUpdateCard(idx); plRenderTotals(); }
         } else if (t.dataset.plExp){
           const [i, label] = t.dataset.plExp.split('|');
           plFields[+i].expenses[label] = (+t.value||0);
-          plSave(); plRenderTotals();
+          plSave(); plUpdateCard(+i); plRenderTotals();
         }
+      });
       });
       host.addEventListener('change', (e) => {
         if (e.target.dataset.plField && e.target.dataset.plField.endsWith('|crop')) plRender();
       });
       host.addEventListener('click', (e) => {
         const del = e.target.dataset.plDel;
-        if (del !== undefined){ if (confirm('Delete this field?')){ plFields.splice(+del,1); plSave(); plRender(); } }
+        if (del !== undefined){
+          if (confirm('Delete this field?')){
+            const f = plFields[+del];
+            // Record a tombstone so the deletion propagates across devices.
+            if (f && f.id && typeof recordTombstone === 'function') recordTombstone(LS_TOMB_PL, f.id);
+            // Remove from the keyed store, then re-load + render.
+            try {
+              const obj = JSON.parse(localStorage.getItem(LS_PL) || '{}');
+              if (f && f.id) delete obj[f.id];
+              localStorage.setItem(LS_PL, JSON.stringify(obj));
+            } catch(err){}
+            plLoad(); plRender();
+          }
+        }
       });
     }
   }
 
+  // Lightweight totals-only refresh so typing in an input doesn't steal focus.
   // Lightweight totals-only refresh so typing in an input doesn't steal focus.
   function plRenderTotals(){
     let tIncome=0, tExpense=0, tAcres=0;
@@ -6382,13 +6487,13 @@ if ("serviceWorker" in navigator) {
     const net = tIncome - tExpense;
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     set('plIncome', money(tIncome)); set('plExpense', money(tExpense));
-    set('plNet', money(net)); set('plAcres', tAcres.toLocaleString());
+    set('plNet', money(net)); set('plAcres', num2(tAcres));
     const card = document.getElementById('plNetCard');
     if (card) card.className = 'pl-kpi ' + (net>=0 ? 'profit' : 'loss');
   }
-
-  // Expose render for the tab switcher.
-  window.plRender = plRender;
+  // Exposed for the tab switcher and post-sync refresh: reload from storage
+  // (so merged/synced data shows) then render.
+  window.plRender = function(){ plLoad(); plRender(); };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', wire);
