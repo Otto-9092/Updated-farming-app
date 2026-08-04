@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.08.02 · 11";
+window.APP_VERSION = "2026.08.02 · 12";
 // (startup version log removed for production)
 
 /* ============================================================
@@ -6406,9 +6406,29 @@ if ("serviceWorker" in navigator) {
   }
 
   function plExportCSV(){
-    const rows = [["Field","Crop","Acres","Yield/ac","Price","Production","Total Income","Variable Cost","Fixed Cost","Total Expense","Net Profit/Loss"]];
-    plFields.forEach(f => { const c = calc(f);
-      rows.push([f.name,f.crop,f.acres,f.yield,f.price,c.production,c.income,c.variable,c.fixed,c.expense,c.net]); });
+    const per = (v, ac) => (ac > 0 ? v / ac : 0);   // per-acre helper, divide-by-zero safe
+    const rows = [[
+      "Field","Crop","Acres","Yield/ac","Price","Production",
+      "Total Income","Variable Cost","Fixed Cost","Total Expense","Net Profit/Loss",
+      "Income/Acre","Expense/Acre","Net/Acre"
+    ]];
+    let tAcres=0, tIncome=0, tVariable=0, tFixed=0, tExpense=0, tNet=0;
+    plFields.forEach(f => {
+      const c = calc(f);
+      const ac = (+f.acres||0);
+      tAcres+=ac; tIncome+=c.income; tVariable+=c.variable; tFixed+=c.fixed; tExpense+=c.expense; tNet+=c.net;
+      rows.push([
+        f.name, f.crop, f.acres, f.yield, f.price, c.production,
+        c.income, c.variable, c.fixed, c.expense, c.net,
+        per(c.income, ac).toFixed(2), per(c.expense, ac).toFixed(2), per(c.net, ac).toFixed(2)
+      ]);
+    });
+    // Farm-wide TOTALS row (per-acre columns use total ÷ total acres).
+    rows.push([
+      "TOTALS", "", tAcres, "", "", "",
+      tIncome, tVariable, tFixed, tExpense, tNet,
+      per(tIncome, tAcres).toFixed(2), per(tExpense, tAcres).toFixed(2), per(tNet, tAcres).toFixed(2)
+    ]);
     const csv = rows.map(r => r.map(x => '"' + x + '"').join(",")).join("\n");
     const blob = new Blob([csv], {type:"text/csv"});
     const a = document.createElement("a");
