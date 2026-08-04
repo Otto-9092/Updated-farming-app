@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260802-13" />
+<link rel="stylesheet" href="styles.css?v=20260802-14" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* ===== Card reordering ===== */
@@ -215,6 +215,13 @@
   .pl-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 12px 0 6px; font-weight: 700; border-bottom: 1px dashed var(--border); padding-bottom: 3px; }
   .pl-subtotal { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-top: 1px solid var(--border); margin-top: 6px; font-weight: 600; }
   .pl-subtotal.grand { border-top: 2px solid var(--green); }
+  /* Per-acre / total toggle on variable cost lines */
+  .pl-exp-row { grid-template-columns: 1.4fr 1fr; align-items: start; }
+  .pl-exp-controls { display: flex; gap: 6px; align-items: center; }
+  .pl-exp-controls input { flex: 1; min-width: 0; }
+  .pl-mode-btn { flex: 0 0 auto; cursor: pointer; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); font-weight: 700; font-size: 11px; border-radius: 6px; padding: 6px 8px; white-space: nowrap; min-width: 56px; }
+  .pl-mode-btn.acre { background: var(--accent); color: #1a1a1a; border-color: var(--accent); }
+  .pl-exp-hint { grid-column: 2; font-size: 10px; color: var(--muted); text-align: right; min-height: 12px; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -224,15 +231,14 @@
      onclick="if(window.applyUpdate)window.applyUpdate()">
   🔄 New version ready — tap to update
 </div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.08.02 · 13</span></div>
 
 <!-- ============== HEADER ============== -->
 <header class="topbar">
   <div class="brand">
     <span class="logo">🚜</span>
     <div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.08.02 · 12</span></div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.08.02 · 10</span></div>
+      <div class="title">Diamond O Farms</div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.08.02 · 14</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -261,7 +267,7 @@
       <div class="operate-layout">
       <div class="map-col">
       <div class="map-toggle-bar">
-        <button id="btnToggleMetrics" class="map-toggle-btn" title="Show/Hide metrics">📊 Hide Metrics</button>
+        <button id="btnToggleMetrics" class="map-toggle-btn" title="Show/Hide metrics">���� Hide Metrics</button>
         <button id="btnExpandMap" class="map-toggle-btn" title="Expand map to full screen">⛶ Expand Map</button>
       </div>
       <div id="map"></div>
@@ -836,7 +842,7 @@
           <select id="seedPresetSel" class="mix-unit"><option value="">— None —</option></select>
         </label>
         <div class="btn-row" style="margin:0; align-self:flex-end;">
-          <button id="btnSeedLoad" class="btn">📂 Load</button>
+          <button id="btnSeedLoad" class="btn">�� Load</button>
           <button id="btnSeedRename" class="btn">✏️ Rename</button>
           <button id="btnSeedDelete" class="btn btn-ghost">🗑️</button>
         </div>
@@ -1325,23 +1331,14 @@
         <input id="notePhoto" type="file" accept="image/*" capture="environment" />
       </label>
       <div id="notePreview" class="note-preview"></div>
-<script src="config.js?v=20260802-13"></script>
-<script src="app.js?v=20260802-13"></script>
-<script src="uxenhancements.js?v=20260802-13"></script>
-<script src="asapplied.js?v=20260802-13"></script>
-      <button id="noteSave" class="btn btn-primary">💾 Save Note</button>
     </div>
   </div>
-<script src="config.js?v=20260802-12"></script>
-<script src="app.js?v=20260802-12"></script>
-<script src="uxenhancements.js?v=20260802-12"></script>
-<script src="asapplied.js?v=20260802-12"></script>
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260802-10"></script>
-<script src="app.js?v=20260802-10"></script>
-<script src="uxenhancements.js?v=20260802-10"></script>
-<script src="asapplied.js?v=20260802-10"></script>
+<script src="config.js?v=20260802-14"></script>
+<script src="app.js?v=20260802-14"></script>
+<script src="uxenhancements.js?v=20260802-14"></script>
+<script src="asapplied.js?v=20260802-14"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
