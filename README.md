@@ -1,4 +1,4 @@
-[README (7).md](https://github.com/user-attachments/files/30667144/README.7.md)
+[README (8).md](https://github.com/user-attachments/files/30707992/README.8.md)
 # 🌾 OπO Farming — Data Systems Pro
 
 A mobile-first **Progressive Web App (PWA)** for farm field operations: live GPS
@@ -25,6 +25,7 @@ Built to run on an in-cab tablet (Samsung Galaxy Tab) as part of the larger
 10. [Local Development](#-local-development)
 11. [Troubleshooting](#-troubleshooting)
 12. [Roadmap](#-roadmap)
+13. [Changelog](#-changelog)
 
 ---
 
@@ -224,7 +225,7 @@ release, on each device:
 
 You'll know it worked when the header shows the new **vYYYY.MM.DD · NN**.
 
-### Current version
+`v2026.08.02 · 12` (cache `opio-2026.08.02-12`)
 `v2026.08.02 · 09` (cache `opio-2026.08.02-9`)
 
 ---
@@ -273,14 +274,29 @@ This app is **Phase 1's software layer** of the larger "Combine Brain" build.
 
 - ✅ **RTK GPS** — centimeter guidance feeding the tablet (FRTK achieved).
 - ✅ **Farming PWA** — mapping, reports, season, **P&L**, cross-device sync.
-- ⏭️ **Phase 2:** Rotor tach (Case IH 1480 rotor RPM → ESP32 → app).
-- ⏭️ **Phase 3:** Fuel level.
-- ⏭️ **Phase 4:** Engine-bay temp + buzzer alarm.
-- ⏭️ **Phase 5:** Permanent in-cab HMI dashboard tying it all together.
+- ✅ **Rotor tach** — factory OEM rotor tach restored (no ESP32 needed — using the original sealed, calibrated gauge). *Was Phase 2; done the smart way.*
+- ⏭️ **Phase 2:** Fuel level.
+- ⏭️ **Phase 3:** Engine-bay temp + buzzer alarm.
+- ⏭️ **Phase 4:** Permanent in-cab HMI dashboard tying it all together.
 
 **Golden rules for old iron:** protect the 3.3V ESP32 from the 12V machine, use
 clean buck-regulated power, seal against heat/vibration/dust, keep a solid common
 ground, engine OFF near the rotor, and buy the HMI last.
+
+---
+
+## 📜 Changelog
+
+Versions use the format `vYYYY.MM.DD · NN` (see [Releasing / Versioning](#-releasing--versioning-read-this-before-you-ship)).
+
+| Version | Highlights |
+|---------|-----------|
+| **v2026.08.02 · 12** | P&L CSV export now includes per-acre columns (Income/Acre, Expense/Acre, Net/Acre) on every field row, plus a farm-wide **TOTALS** row. |
+| **v2026.08.02 · 11** | Added **per-acre KPI row** to the P&L tab (Income/Acre, Expenses/Acre, Net Income/Acre) below the existing totals; Net/Acre card colors green/red. Divide-by-zero safe. |
+| **v2026.08.02 · 10** | **Stability fix:** repaired syntax errors introduced during the P&L sync work (stray/duplicated braces + duplicated function declarations) that were crashing all of `app.js`. Added acorn-parser validation to the release process. |
+| **v2026.08.02 · 09** | **Profit & Loss now syncs across devices** — P&L stored as a keyed object (`dof_pl_library`) and wired into the Drive sync engine (merge + conflict dialog + tombstones), exactly like Fields/Equipment. One-time migration from legacy `opio_farmPL` array. Added P&L to backup/import/export summaries. Updated visible version label. |
+
+*Older history predates this changelog. Going forward, add a row here on every release alongside the three version bumps.*
 
 ---
 
