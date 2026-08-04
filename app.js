@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.08.02 · 12";
+window.APP_VERSION = "2026.08.02 · 13";
 // (startup version log removed for production)
 
 /* ============================================================
@@ -2726,7 +2726,7 @@ $("btnSaveEq").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const type = state.equipment.type;
   lib[state.equipment.name] = {
-    _modified: new Date().toISOString(),   // ������������� for sync conflict resolution
+    _modified: new Date().toISOString(),   // ����������������� for sync conflict resolution
     name:  state.equipment.name,
     type:  type,
     width: state.equipment.width,
@@ -4763,7 +4763,7 @@ function migrateLegacyPhotos() {
       } catch (e) {}
       btnMetrics.addEventListener("click", function () {
         const collapsed = layout.classList.toggle("metrics-collapsed");
-        btnMetrics.textContent = collapsed ? "📊 Show Metrics" : "📊 Hide Metrics";
+        btnMetrics.textContent = collapsed ? "📊 Show Metrics" : "�� Hide Metrics";
         try { localStorage.setItem("metricsCollapsed", collapsed ? "1" : "0"); } catch (e) {}
         resizeMap();
       });
@@ -5549,7 +5549,7 @@ function syncNow() {
     return appAlert("Please sign in with Google first.", "Not signed in");
   }
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    setSyncStatus("\uD83D\uDCF6 You're offline — connect to the internet to sync.");
+    setSyncStatus("\uD83D\uDCF6 You're offline ��� connect to the internet to sync.");
     return appAlert("You're offline. Connect to the internet and try Sync Now again. Your data is safe on this device.", "No connection");
   }
   setSyncStatus("Syncing\u2026 downloading from Drive");
@@ -6369,6 +6369,13 @@ if ("serviceWorker" in navigator) {
           '<input class="pl-name" value="' + esc(f.name) + '" data-pl-field="' + idx + '|name">' +
           '<span class="pl-net ' + (c.net>=0?'profit':'loss') + '" data-pl-sub="headnet|' + fid + '">' + money(c.net) + '</span>' +
         '</div>' +
+        (function(){ var ac=(+f.acres||0); var pa=function(v){return ac>0?v/ac:0;};
+          return '<div class="pl-peracre">' +
+            '<div class="pl-pa-item"><span class="pl-pa-label">Income/Ac</span><span class="pl-pa-val" data-pl-sub="incAc|' + fid + '">' + money(pa(c.income)) + '</span></div>' +
+            '<div class="pl-pa-item"><span class="pl-pa-label">Expense/Ac</span><span class="pl-pa-val" data-pl-sub="expAc|' + fid + '">' + money(pa(c.expense)) + '</span></div>' +
+            '<div class="pl-pa-item"><span class="pl-pa-label">Net/Ac</span><span class="pl-pa-val ' + (pa(c.net)>=0?"profit":"loss") + '" data-pl-sub="netAc|' + fid + '">' + money(pa(c.net)) + '</span></div>' +
+          '</div>';
+        })() +
         '<div class="pl-section-title">Crop &amp; Production</div>' +
         '<div class="pl-row"><label>Crop</label><select data-pl-field="' + idx + '|crop">' +
           Object.keys(CROPS).map(cn => '<option ' + (cn===f.crop?'selected':'') + '>' + cn + '</option>').join('') +
@@ -6403,6 +6410,11 @@ if ("serviceWorker" in navigator) {
     setTxt(q('fixed'), money(c.fixed));
     const netEl = q('net'); if (netEl){ netEl.textContent = money(c.net); netEl.style.color = c.net>=0?'var(--green)':'var(--red)'; }
     const headEl = q('headnet'); if (headEl){ headEl.textContent = money(c.net); headEl.className = 'pl-net ' + (c.net>=0?'profit':'loss'); }
+    // Per-acre figures under the field name (divide-by-zero safe).
+    const ac = (+f.acres||0); const pa = (v) => (ac>0 ? v/ac : 0);
+    setTxt(q('incAc'), money(pa(c.income)));
+    setTxt(q('expAc'), money(pa(c.expense)));
+    const netAcEl = q('netAc'); if (netAcEl){ netAcEl.textContent = money(pa(c.net)); netAcEl.className = 'pl-pa-val ' + (pa(c.net)>=0?'profit':'loss'); }
   }
 
   function plExportCSV(){
