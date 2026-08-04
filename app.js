@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.08.02 · 10";
+window.APP_VERSION = "2026.08.02 · 11";
 // (startup version log removed for production)
 
 /* ============================================================
@@ -2726,7 +2726,7 @@ $("btnSaveEq").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const type = state.equipment.type;
   lib[state.equipment.name] = {
-    _modified: new Date().toISOString(),   // ����������� for sync conflict resolution
+    _modified: new Date().toISOString(),   // ������������� for sync conflict resolution
     name:  state.equipment.name,
     type:  type,
     width: state.equipment.width,
@@ -6485,6 +6485,16 @@ if ("serviceWorker" in navigator) {
     set('plNet', money(net)); set('plAcres', num2(tAcres));
     const card = document.getElementById('plNetCard');
     if (card) card.className = 'pl-kpi ' + (net>=0 ? 'profit' : 'loss');
+
+    // Per-acre KPIs (guard divide-by-zero when no acres entered yet).
+    const incAc = tAcres > 0 ? tIncome  / tAcres : 0;
+    const expAc = tAcres > 0 ? tExpense / tAcres : 0;
+    const netAc = tAcres > 0 ? net      / tAcres : 0;
+    set('plIncomeAc',  money(incAc));
+    set('plExpenseAc', money(expAc));
+    set('plNetAc',     money(netAc));
+    const acCard = document.getElementById('plNetAcCard');
+    if (acCard) acCard.className = 'pl-kpi ' + (netAc>=0 ? 'profit' : 'loss');
   }
   // Exposed for the tab switcher and post-sync refresh: reload from storage
   // (so merged/synced data shows) then render.
