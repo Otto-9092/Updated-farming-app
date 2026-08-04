@@ -5445,6 +5445,10 @@ function describeConflict(c) {
     }
     return String(v);
   }
+  // Pick the list of keys to compare for THIS conflict's library type.
+  // (Bugfix: previously referenced an undeclared `list`, which threw
+  //  "Can't find variable: list" on Safari/iPad and aborted the whole sync.)
+  var list = fieldsByLib[c.lib] || [];
   list.forEach(function (k) {
     var lv = fmt(L[k]), cv = fmt(C[k]);
     if (lv !== cv) {
