@@ -1,4 +1,4 @@
-[README (8).md](https://github.com/user-attachments/files/30707992/README.8.md)
+[README (9).md](https://github.com/user-attachments/files/30708844/README.9.md)
 # 🌾 OπO Farming — Data Systems Pro
 
 A mobile-first **Progressive Web App (PWA)** for farm field operations: live GPS
@@ -225,7 +225,7 @@ release, on each device:
 
 You'll know it worked when the header shows the new **vYYYY.MM.DD · NN**.
 
-`v2026.08.02 · 12` (cache `opio-2026.08.02-12`)
+`v2026.08.02 · 13` (cache `opio-2026.08.02-13`)
 `v2026.08.02 · 09` (cache `opio-2026.08.02-9`)
 
 ---
@@ -291,6 +291,7 @@ Versions use the format `vYYYY.MM.DD · NN` (see [Releasing / Versioning](#-rele
 
 | Version | Highlights |
 |---------|-----------|
+| **v2026.08.02 · 13** | Per-acre figures (Income/Acre, Expense/Acre, Net/Acre) now shown **under each field name** on its card — updating live and colored green/red — while the farm-wide per-acre total row remains at the top. |
 | **v2026.08.02 · 12** | P&L CSV export now includes per-acre columns (Income/Acre, Expense/Acre, Net/Acre) on every field row, plus a farm-wide **TOTALS** row. |
 | **v2026.08.02 · 11** | Added **per-acre KPI row** to the P&L tab (Income/Acre, Expenses/Acre, Net Income/Acre) below the existing totals; Net/Acre card colors green/red. Divide-by-zero safe. |
 | **v2026.08.02 · 10** | **Stability fix:** repaired syntax errors introduced during the P&L sync work (stray/duplicated braces + duplicated function declarations) that were crashing all of `app.js`. Added acorn-parser validation to the release process. |
