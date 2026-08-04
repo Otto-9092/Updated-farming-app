@@ -2726,7 +2726,7 @@ $("btnSaveEq").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const type = state.equipment.type;
   lib[state.equipment.name] = {
-    _modified: new Date().toISOString(),   // ����������������� for sync conflict resolution
+    _modified: new Date().toISOString(),   // ������������������� for sync conflict resolution
     name:  state.equipment.name,
     type:  type,
     width: state.equipment.width,
@@ -3513,7 +3513,7 @@ $("btnPdfRep").addEventListener("click", async () => {
     </div>
 
     <h1>🚜 OπO Farming — ${r.name || "Field Report"}</h1>
-    <div>${new Date(r.date).toLocaleString()} &nbsp;·&nbsp; ${r.id}</div>
+    <div>${new Date(r.date).toLocaleString()} &nbsp;��&nbsp; ${r.id}</div>
 
     <h2>Field</h2><table>
       <tr><td>Field</td><td>${r.field.name}</td></tr>
@@ -6268,10 +6268,13 @@ if ("serviceWorker" in navigator) {
 
   function blankField(){
     const ex = {};
+    const modes = {};
     [...EXPENSE_LINES.variable, ...EXPENSE_LINES.fixed].forEach(l => ex[l] = 0);
+    // Variable lines can be entered per-acre or as a total; default = total.
+    EXPENSE_LINES.variable.forEach(l => { modes[l] = 'total'; });
     return { id: 'pl_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
       name:"New Field", crop:"Alfalfa Hay",
-      acres:0, yield:0, price:0, otherIncome:0, expenses:ex,
+      acres:0, yield:0, price:0, otherIncome:0, expenses:ex, expenseModes:modes,
       _modified: new Date().toISOString() };
   }
 
@@ -6284,12 +6287,20 @@ if ("serviceWorker" in navigator) {
   function num2(n){ return (+n||0).toLocaleString(undefined, {maximumFractionDigits:2}); }
   function esc(s){ return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
+  // Resolve one variable-cost line to a TOTAL dollar amount, honoring its mode.
+  // mode 'acre' => entered value is $/acre, multiply by acres; else already a total.
+  function lineTotal(f, label){
+    const val = (+((f.expenses||{})[label]) || 0);
+    const mode = (f.expenseModes && f.expenseModes[label]) || 'total';
+    return mode === 'acre' ? val * (+f.acres||0) : val;
+  }
+
   function calc(f){
     const production = (+f.acres||0) * (+f.yield||0);
     const cropIncome = production * (+f.price||0);
     const income = cropIncome + (+f.otherIncome||0);
     let variable=0, fixed=0;
-    EXPENSE_LINES.variable.forEach(l => variable += (+f.expenses[l]||0));
+    EXPENSE_LINES.variable.forEach(l => variable += lineTotal(f, l));
     EXPENSE_LINES.fixed.forEach(l => fixed += (+f.expenses[l]||0));
     const expense = variable + fixed;
     return { production, income, variable, fixed, expense, net: income - expense };
@@ -6342,11 +6353,26 @@ if ("serviceWorker" in navigator) {
     } catch(e){ plFields = []; }
   }
 
-  function expenseRow(idx, label){
-    const v = plFields[idx].expenses[label] || 0;
+  function expenseRow(idx, label, perAcreCapable){
+    const f = plFields[idx];
+    const v = f.expenses[label] || 0;
     const safe = label.replace(/'/g,"");
-    return '<div class="pl-row"><label>' + label + '</label>' +
-      '<input type="number" value="' + v + '" data-pl-exp="' + idx + '|' + safe + '"></div>';
+    if (!perAcreCapable){
+      // Fixed line: simple total-only input.
+      return '<div class="pl-row"><label>' + label + '</label>' +
+        '<input type="number" value="' + v + '" data-pl-exp="' + idx + '|' + safe + '"></div>';
+    }
+    // Variable line: value input + per-acre/total toggle + resolved-total hint.
+    const mode = (f.expenseModes && f.expenseModes[label]) || 'total';
+    const isAcre = mode === 'acre';
+    const hintTxt = isAcre ? ('= ' + money(lineTotal(f, label)) + ' total') : '';
+    return '<div class="pl-row pl-exp-row"><label>' + label + '</label>' +
+      '<div class="pl-exp-controls">' +
+        '<input type="number" value="' + v + '" data-pl-exp="' + idx + '|' + safe + '">' +
+        '<button type="button" class="pl-mode-btn' + (isAcre?' acre':'') + '" data-pl-mode="' + idx + '|' + safe + '" title="Toggle per-acre / total">' + (isAcre?'$/ac':'Total $') + '</button>' +
+      '</div>' +
+      '<span class="pl-exp-hint" data-pl-hint="' + safe + '|' + f.id + '">' + hintTxt + '</span>' +
+    '</div>';
   }
 
   function plRender(){
@@ -6360,8 +6386,8 @@ if ("serviceWorker" in navigator) {
       tIncome += c.income; tExpense += c.expense; tAcres += (+f.acres||0);
       const unit = CROPS[f.crop] || "units";
       const fid = f.id;  // stable per-field id used to target subtotal spans live
-      const varRows = EXPENSE_LINES.variable.map(l => expenseRow(idx, l)).join('');
-      const fixRows = EXPENSE_LINES.fixed.map(l => expenseRow(idx, l)).join('');
+      const varRows = EXPENSE_LINES.variable.map(l => expenseRow(idx, l, true)).join('');
+      const fixRows = EXPENSE_LINES.fixed.map(l => expenseRow(idx, l, false)).join('');
 
       host.insertAdjacentHTML('beforeend',
       '<div class="card" data-pl-card="' + fid + '">' +
@@ -6480,14 +6506,34 @@ if ("serviceWorker" in navigator) {
           else { plUpdateCard(idx); plRenderTotals(); }
         } else if (t.dataset.plExp){
           const [i, label] = t.dataset.plExp.split('|');
-          plFields[+i].expenses[label] = (+t.value||0);
-          plSave(); plUpdateCard(+i); plRenderTotals();
+          const idx = +i; const f = plFields[idx];
+          f.expenses[label] = (+t.value||0);
+          f._modified = new Date().toISOString();
+          plSave(); plUpdateCard(idx); plRenderTotals();
+          // If this variable line is in per-acre mode, refresh its resolved-total hint.
+          const hintEl = host.querySelector('[data-pl-hint="' + label + '|' + f.id + '"]');
+          if (hintEl){
+            const md = (f.expenseModes && f.expenseModes[label]) || 'total';
+            hintEl.textContent = md === 'acre' ? ('= ' + money(lineTotal(f, label)) + ' total') : '';
+          }
         }
       });
       host.addEventListener('change', (e) => {
         if (e.target.dataset.plField && e.target.dataset.plField.endsWith('|crop')) plRender();
       });
       host.addEventListener('click', (e) => {
+        // Per-acre / total mode toggle on a variable-cost line.
+        const modeAttr = e.target.dataset.plMode;
+        if (modeAttr !== undefined){
+          const [i, label] = modeAttr.split('|');
+          const idx = +i; const f = plFields[idx]; if (!f) return;
+          if (!f.expenseModes) f.expenseModes = {};
+          const cur = f.expenseModes[label] || 'total';
+          f.expenseModes[label] = (cur === 'acre') ? 'total' : 'acre';
+          f._modified = new Date().toISOString();
+          plSave(); plRender();  // re-render: button label/styling + hint + subtotals
+          return;
+        }
         const del = e.target.dataset.plDel;
         if (del !== undefined){
           if (confirm('Delete this field?')){
