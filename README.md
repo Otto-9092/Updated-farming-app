@@ -1,4 +1,4 @@
-[README (10).md](https://github.com/user-attachments/files/30716198/README.10.md)
+[README (11).md](https://github.com/user-attachments/files/30716363/README.11.md)
 # 🌾 OπO Farming — Data Systems Pro
 
 A mobile-first **Progressive Web App (PWA)** for farm field operations: live GPS
@@ -225,7 +225,7 @@ release, on each device:
 
 You'll know it worked when the header shows the new **vYYYY.MM.DD · NN**.
 
-`v2026.08.02 · 14` (cache `opio-2026.08.02-14`)
+`v2026.08.02 · 15` (cache `opio-2026.08.02-15`)
 `v2026.08.02 · 09` (cache `opio-2026.08.02-9`)
 
 ---
@@ -291,6 +291,7 @@ Versions use the format `vYYYY.MM.DD · NN` (see [Releasing / Versioning](#-rele
 
 | Version | Highlights |
 |---------|-----------|
+| **v2026.08.02 · 15** | **Sync bugfix.** `describeConflict()` referenced an undeclared variable `list`, throwing `ReferenceError: Can't find variable: list` on Safari/iPad and aborting the entire sync ("Sync failed"). Now correctly derives the compare-keys from `fieldsByLib[c.lib]` (defaults to `[]` for types like seed presets). |
 | **v2026.08.02 · 14** | Variable cost lines can now be entered **per-acre or as a total**, with a `Total $` ⇄ `$/ac` toggle on each line (per-acre mode shows a live "= $X total" hint). Resolved amounts flow into subtotals, per-acre KPIs, and CSV export; syncs via `expenseModes` and is backward-compatible with older saved fields. **Also repaired `index.html`**, which had accumulated duplicate/triplicate `<script>` tags (app.js loading at -14/-12/-10 at once), 4 stray duplicate subtitle lines, a missing `<body>` tag, and a missing title from earlier line-numbered edits (builds 10–13). Header + script blocks rebuilt against the clean structure. |
 | **v2026.08.02 · 13** | Per-acre figures (Income/Acre, Expense/Acre, Net/Acre) now shown **under each field name** on its card — updating live and colored green/red — while the farm-wide per-acre total row remains at the top. |
 | **v2026.08.02 · 12** | P&L CSV export now includes per-acre columns (Income/Acre, Expense/Acre, Net/Acre) on every field row, plus a farm-wide **TOTALS** row. |
