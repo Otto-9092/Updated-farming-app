@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260802-12" />
+<link rel="stylesheet" href="styles.css?v=20260802-13" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* ===== Card reordering ===== */
@@ -195,6 +195,13 @@
   .pl-kpi.loss .pl-kpi-val { color: var(--red); }
   .pl-summary-peracre { grid-template-columns: repeat(3, 1fr); }
   @media (max-width: 560px) { .pl-summary { grid-template-columns: repeat(2, 1fr); } .pl-summary-peracre { grid-template-columns: repeat(3, 1fr); } }
+  /* Per-acre strip under each field name */
+  .pl-peracre { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0 10px; }
+  .pl-pa-item { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 4px; text-align: center; }
+  .pl-pa-label { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+  .pl-pa-val { display: block; font-size: 14px; font-weight: 700; margin-top: 2px; color: var(--text); }
+  .pl-pa-val.profit { color: var(--green); }
+  .pl-pa-val.loss { color: var(--red); }
 
   .pl-field-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
   .pl-field-head input.pl-name { font-weight: 700; font-size: 15px; flex: 1; min-width: 120px; }
@@ -217,7 +224,7 @@
      onclick="if(window.applyUpdate)window.applyUpdate()">
   🔄 New version ready — tap to update
 </div>
-
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.08.02 · 13</span></div>
 
 <!-- ============== HEADER ============== -->
 <header class="topbar">
@@ -1318,10 +1325,10 @@
         <input id="notePhoto" type="file" accept="image/*" capture="environment" />
       </label>
       <div id="notePreview" class="note-preview"></div>
-      <div class="hint" id="noteGpsHint">📍 Location will be tagged automatically.</div>
-    </div>
-    <div class="dlg-footer">
-      <button id="noteCancel" class="btn btn-ghost">Cancel</button>
+<script src="config.js?v=20260802-13"></script>
+<script src="app.js?v=20260802-13"></script>
+<script src="uxenhancements.js?v=20260802-13"></script>
+<script src="asapplied.js?v=20260802-13"></script>
       <button id="noteSave" class="btn btn-primary">💾 Save Note</button>
     </div>
   </div>
