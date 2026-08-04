@@ -2726,7 +2726,7 @@ $("btnSaveEq").addEventListener("click", () => {
   const lib = JSON.parse(localStorage.getItem(LS_EQ) || "{}");
   const type = state.equipment.type;
   lib[state.equipment.name] = {
-    _modified: new Date().toISOString(),   // ������������������� for sync conflict resolution
+    _modified: new Date().toISOString(),   // ��������������������� for sync conflict resolution
     name:  state.equipment.name,
     type:  type,
     width: state.equipment.width,
@@ -4685,8 +4685,21 @@ window.addEventListener("DOMContentLoaded", () => {
   loadEquipmentList();
   loadReportsList();
   loadFieldsList();
+  // ---- Version label: single-sourced from config.js (window.APP_BUILD) ----
+  // Stamp the header from the canonical build so the visible label can never
+  // drift from the shipped code. If index.html's hard-coded label disagrees
+  // with config.js, warn loudly — that means a half-deploy (mismatched files).
   var _vEl = document.getElementById("appVersion");
-  if (_vEl && window.APP_VERSION) _vEl.textContent = "v" + window.APP_VERSION;
+  var _label = window.APP_VERSION_LABEL || (window.APP_BUILD ? ("v" + window.APP_BUILD) : null);
+  if (_vEl && _label) {
+    var _htmlLabel = (_vEl.textContent || "").trim();
+    if (_htmlLabel && _htmlLabel !== _label) {
+      console.warn("[version] MISMATCH — index.html shows '" + _htmlLabel +
+        "' but config.js APP_BUILD is '" + _label +
+        "'. A half-deploy likely happened; hard-refresh and confirm all files shipped.");
+    }
+    _vEl.textContent = _label;   // config.js wins — always shows the real build
+  }
   applyEquipmentUI();
   renderSectionButtons();
   if (typeof refreshSyncUI === "function") refreshSyncUI();   // �������� Stage 1: sync UI
@@ -4763,7 +4776,7 @@ function migrateLegacyPhotos() {
       } catch (e) {}
       btnMetrics.addEventListener("click", function () {
         const collapsed = layout.classList.toggle("metrics-collapsed");
-        btnMetrics.textContent = collapsed ? "📊 Show Metrics" : "�� Hide Metrics";
+        btnMetrics.textContent = collapsed ? "�� Show Metrics" : "�� Hide Metrics";
         try { localStorage.setItem("metricsCollapsed", collapsed ? "1" : "0"); } catch (e) {}
         resizeMap();
       });
