@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260802-10" />
+<link rel="stylesheet" href="styles.css?v=20260802-11" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* ===== Card reordering ===== */
@@ -193,7 +193,8 @@
   .pl-kpi-val { font-size: 18px; font-weight: 700; margin-top: 4px; color: var(--text); }
   .pl-kpi.profit .pl-kpi-val { color: var(--green); }
   .pl-kpi.loss .pl-kpi-val { color: var(--red); }
-  @media (max-width: 560px) { .pl-summary { grid-template-columns: repeat(2, 1fr); } }
+  .pl-summary-peracre { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 560px) { .pl-summary { grid-template-columns: repeat(2, 1fr); } .pl-summary-peracre { grid-template-columns: repeat(3, 1fr); } }
 
   .pl-field-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
   .pl-field-head input.pl-name { font-weight: 700; font-size: 15px; flex: 1; min-width: 120px; }
@@ -223,7 +224,7 @@
   <div class="brand">
     <span class="logo">🚜</span>
     <div>
-      <div class="title">Diamond O Farms</div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.08.02 · 11</span></div>
       <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.08.02 · 10</span></div>
     </div>
   </div>
@@ -550,7 +551,7 @@
   <div class="card">
     <div class="card-title">🧰 Tools</div>
     <div class="hint">
-      Farm utilities �� calculators and lookups. The Mix Calculator and
+      Farm utilities ���� calculators and lookups. The Mix Calculator and
       Cost &amp; Profit tools moved here from “Field &amp; Equipment”.
     </div>
   </div>
@@ -1020,6 +1021,11 @@
       <div class="pl-kpi" id="plNetCard"><div class="pl-kpi-label">Net Farm Income</div><div class="pl-kpi-val" id="plNet">$0</div></div>
       <div class="pl-kpi"><div class="pl-kpi-label">Total Acres</div><div class="pl-kpi-val" id="plAcres">0</div></div>
     </div>
+    <div class="pl-summary pl-summary-peracre" style="margin-top:8px;">
+      <div class="pl-kpi"><div class="pl-kpi-label">Income / Acre</div><div class="pl-kpi-val" id="plIncomeAc">$0.00</div></div>
+      <div class="pl-kpi"><div class="pl-kpi-label">Expenses / Acre</div><div class="pl-kpi-val" id="plExpenseAc">$0.00</div></div>
+      <div class="pl-kpi" id="plNetAcCard"><div class="pl-kpi-label">Net Income / Acre</div><div class="pl-kpi-val" id="plNetAc">$0.00</div></div>
+    </div>
     <div class="btn-row btn-row-compact" style="margin-top:10px;">
       <button class="btn" id="plAddField">+ Add Field / Crop</button>
       <button class="btn btn-ghost" id="plExportCSV">📄 Export CSV</button>
@@ -1192,7 +1198,7 @@
     </div>
     <div class="dlg-footer">
       <button id="titleDlgCancel" class="btn btn-ghost">Cancel</button>
-      <button id="titleDlgSave" class="btn btn-primary">💾 Save</button>
+      <button id="titleDlgSave" class="btn btn-primary">���� Save</button>
     </div>
   </div>
 </div>
@@ -1319,10 +1325,10 @@
       <button id="noteSave" class="btn btn-primary">💾 Save Note</button>
     </div>
   </div>
-</div>
-
-<!-- ============== CONFIG ============== -->
-<!-- Put your Google Maps API key + OAuth Client ID in config.js -->
+<script src="config.js?v=20260802-11"></script>
+<script src="app.js?v=20260802-11"></script>
+<script src="uxenhancements.js?v=20260802-11"></script>
+<script src="asapplied.js?v=20260802-11"></script>
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="config.js?v=20260802-10"></script>
