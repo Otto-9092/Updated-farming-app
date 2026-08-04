@@ -1,4 +1,4 @@
-[README (11).md](https://github.com/user-attachments/files/30716363/README.11.md)
+[README (12).md](https://github.com/user-attachments/files/30717281/README.12.md)
 # 🌾 OπO Farming — Data Systems Pro
 
 A mobile-first **Progressive Web App (PWA)** for farm field operations: live GPS
@@ -194,27 +194,38 @@ Soybeans (bu), Wheat (bu), Oats (bu), Sorghum (bu), Other (units).
 ## 🚀 Releasing / Versioning (READ THIS BEFORE YOU SHIP)
 
 Because this is a **cached PWA**, shipping code changes is only half the job —
-you must **bust the cache** or devices keep running the old files. There are
-**THREE things to bump** on every release, and they must all use the same build
-number.
+you must **bust the cache** or devices keep running the old files.
 
-### The 3 bumps
+### Single source of truth
 
-1. **Cache version — `sw.js`**
-   - `const CACHE_VERSION = "opio-YYYY.MM.DD-N";`
-   - Every `?v=YYYYMMDD-N` in the `CORE_ASSETS` list.
+The canonical build number lives in **`config.js`**:
 
-2. **Asset query strings — `index.html`**
-   - `styles.css?v=YYYYMMDD-N`
-   - `config.js?v=…`, `app.js?v=…`, `uxenhancements.js?v=…`, `asapplied.js?v=…`
+```js
+window.APP_BUILD = "2026.08.02-15";            // machine form: YYYY.MM.DD-N
+window.APP_VERSION_LABEL = "v2026.08.02 · 15";  // human label shown in header
+```
 
-3. **User-visible version label**
-   - `app.js`: `window.APP_VERSION = "YYYY.MM.DD · NN";`  ← the authoritative one
-   - `index.html`: the `#appVersion` fallback span (keep it matching)
+- **app.js stamps the header `#appVersion` label from `APP_VERSION_LABEL` at load**, so the
+  visible version can never drift from the shipped code.
+- **app.js also compares** `APP_VERSION_LABEL` against index.html's hard-coded
+  `#appVersion` text and prints `⚠ [version] MISMATCH …` to the console if they
+  differ — i.e. a **half-deploy** (some files updated, others stale) announces
+  itself instead of failing silently.
 
-> ⚠️ **Keep `N` / `NN` consistent** across all three so the cache version, asset
-> URLs, and the label all tell the same story. The `?v=` strings in `sw.js` must
-> match those in `index.html` or precaching will fetch the wrong copies.
+### What to bump on every release
+
+1. **`config.js`** — `APP_BUILD` **and** `APP_VERSION_LABEL` (the source of truth).
+2. **`sw.js`** — `CACHE_VERSION = "opio-YYYY.MM.DD-N";` and every `?v=YYYYMMDD-N`
+   in `CORE_ASSETS`.
+3. **`index.html`** — the `?v=YYYYMMDD-N` query string on every `<script>`/`<link>`
+   (`styles.css`, `config.js`, `app.js`, `uxenhancements.js`, `asapplied.js`) and
+   the hard-coded `#appVersion` fallback span.
+
+> The `?v=` strings are **static text in files** — they can't be rewritten at
+> runtime, so they still need a manual bump (or a build step). But the *visible
+> label* is now driven by `config.js`, and the **mismatch warning** catches any
+> file you forget. If the console is clean and the header shows the new build,
+> the deploy is consistent.
 
 ### Deploying to a device
 After deploying the new files, the old service worker can cling on. Once per
@@ -223,9 +234,12 @@ release, on each device:
 - Browser → clear site data / reset, then reload; **or**
 - If installed to the home screen: uninstall + re-add.
 
-You'll know it worked when the header shows the new **vYYYY.MM.DD · NN**.
+You'll know it worked when the header shows the new **vYYYY.MM.DD · NN** and the
+console shows **no** `[version] MISMATCH` warning.
 
 `v2026.08.02 · 15` (cache `opio-2026.08.02-15`)
+
+---
 `v2026.08.02 · 09` (cache `opio-2026.08.02-9`)
 
 ---
@@ -291,7 +305,7 @@ Versions use the format `vYYYY.MM.DD · NN` (see [Releasing / Versioning](#-rele
 
 | Version | Highlights |
 |---------|-----------|
-| **v2026.08.02 · 15** | **Sync bugfix.** `describeConflict()` referenced an undeclared variable `list`, throwing `ReferenceError: Can't find variable: list` on Safari/iPad and aborting the entire sync ("Sync failed"). Now correctly derives the compare-keys from `fieldsByLib[c.lib]` (defaults to `[]` for types like seed presets). |
+| **v2026.08.02 · 15** | **Sync bugfix + versioning hardening.** (1) `describeConflict()` referenced an undeclared variable `list`, throwing `ReferenceError: Can't find variable: list` on Safari/iPad and aborting the entire sync ("Sync failed"). Now derives compare-keys from `fieldsByLib[c.lib]` (defaults to `[]`). (2) Version is now **single-sourced in `config.js`** (`APP_BUILD` / `APP_VERSION_LABEL`); app.js stamps the header label from it at load and logs a `[version] MISMATCH` console warning if index.html's hard-coded label disagrees, so a half-deploy can't silently show the wrong build. (3) Removed a stale `asapplied.js?v=20260630-6` entry from the service-worker precache list. |
 | **v2026.08.02 · 14** | Variable cost lines can now be entered **per-acre or as a total**, with a `Total $` ⇄ `$/ac` toggle on each line (per-acre mode shows a live "= $X total" hint). Resolved amounts flow into subtotals, per-acre KPIs, and CSV export; syncs via `expenseModes` and is backward-compatible with older saved fields. **Also repaired `index.html`**, which had accumulated duplicate/triplicate `<script>` tags (app.js loading at -14/-12/-10 at once), 4 stray duplicate subtitle lines, a missing `<body>` tag, and a missing title from earlier line-numbered edits (builds 10–13). Header + script blocks rebuilt against the clean structure. |
 | **v2026.08.02 · 13** | Per-acre figures (Income/Acre, Expense/Acre, Net/Acre) now shown **under each field name** on its card — updating live and colored green/red — while the farm-wide per-acre total row remains at the top. |
 | **v2026.08.02 · 12** | P&L CSV export now includes per-acre columns (Income/Acre, Expense/Acre, Net/Acre) on every field row, plus a farm-wide **TOTALS** row. |
