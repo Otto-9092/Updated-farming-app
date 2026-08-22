@@ -2,7 +2,7 @@
 // APP VERSION — bump this string whenever you ship an update.
 // Also update the ?v= query in index.html so devices fetch fresh files.
 // ============================================================
-window.APP_VERSION = "2026.08.02 · 13";
+window.APP_VERSION = window.APP_BUILD || "unknown";
 // (startup version log removed for production)
 
 /* ============================================================
