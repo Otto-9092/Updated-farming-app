@@ -1,4 +1,4 @@
-[README (12).md](https://github.com/user-attachments/files/30717281/README.12.md)
+
 # 🌾 OπO Farming — Data Systems Pro
 
 A mobile-first **Progressive Web App (PWA)** for farm field operations: live GPS
@@ -7,8 +7,19 @@ reporting, and per-field **Profit & Loss** tracking — all with **Google Drive
 cross-device sync** and full **offline** support.
 
 Built to run on an in-cab tablet (Samsung Galaxy Tab) as part of the larger
-**"Combine Brain"** retrofit project (RTK GPS guidance + machine telemetry on a
-1979 Case IH 1480).
+**"Combine Brain"** retrofit project — RTK GPS guidance, machine telemetry,
+and DIY optical yield monitoring on a 1979 Case IH 1480.
+
+---
+
+## 🔗 Related project
+
+**[opio-yield-monitor](https://github.com/Otto-9092/opio-yield-monitor)** — DIY
+optical yield monitor for the 1480's clean grain elevator (ESP32 + IR sensor
+pair + RTK-GNSS, ~$100 in parts). When Phase 3 of that project lands, a
+**Harvest** tab in this app will consume the ESP32's live yield data over Wi-Fi
+and render real-time yield maps alongside the existing coverage / reports /
+P&L features.
 
 ---
 
@@ -157,6 +168,7 @@ The sync **payload** includes: `fields`, `equipment`, `reports`, `seedPresets`,
 | Reports | `tab-reports` | — | Operation records |
 | Season | `tab-season` | `renderSeason()` | Season totals + charts + export |
 | **Profit & Loss** | `tab-pl` | `window.plRender()` | Per-field income/expense tracking |
+| *(planned) Harvest* | `tab-harvest` | *TBD* | Live yield map via `opio-yield-monitor` ESP32 (Wi-Fi) |
 
 ---
 
@@ -201,12 +213,13 @@ you must **bust the cache** or devices keep running the old files.
 The canonical build number lives in **`config.js`**:
 
 ```js
-window.APP_BUILD = "2026.08.02-15";            // machine form: YYYY.MM.DD-N
-window.APP_VERSION_LABEL = "v2026.08.02 · 15";  // human label shown in header
+window.APP_BUILD = "2026.08.02-16";            // machine form: YYYY.MM.DD-N
+window.APP_VERSION_LABEL = "v2026.08.02 · 16";  // human label shown in header
 ```
 
 - **app.js stamps the header `#appVersion` label from `APP_VERSION_LABEL` at load**, so the
   visible version can never drift from the shipped code.
+- **`app.js`'s own `window.APP_VERSION` now derives from `APP_BUILD`** (`window.APP_BUILD || "unknown"`), so it can't drift out of sync — you no longer touch `app.js` for a version bump.
 - **app.js also compares** `APP_VERSION_LABEL` against index.html's hard-coded
   `#appVersion` text and prints `⚠ [version] MISMATCH …` to the console if they
   differ — i.e. a **half-deploy** (some files updated, others stale) announces
@@ -221,9 +234,10 @@ window.APP_VERSION_LABEL = "v2026.08.02 · 15";  // human label shown in header
    (`styles.css`, `config.js`, `app.js`, `uxenhancements.js`, `asapplied.js`) and
    the hard-coded `#appVersion` fallback span.
 
+> You **no longer touch `app.js`** for a version bump — `APP_VERSION` is derived.
 > The `?v=` strings are **static text in files** — they can't be rewritten at
 > runtime, so they still need a manual bump (or a build step). But the *visible
-> label* is now driven by `config.js`, and the **mismatch warning** catches any
+> label* is driven by `config.js`, and the **mismatch warning** catches any
 > file you forget. If the console is clean and the header shows the new build,
 > the deploy is consistent.
 
@@ -237,10 +251,7 @@ release, on each device:
 You'll know it worked when the header shows the new **vYYYY.MM.DD · NN** and the
 console shows **no** `[version] MISMATCH` warning.
 
-`v2026.08.02 · 15` (cache `opio-2026.08.02-15`)
-
----
-`v2026.08.02 · 09` (cache `opio-2026.08.02-9`)
+`v2026.08.02 · 16` (cache `opio-2026.08.02-16`)
 
 ---
 
@@ -259,7 +270,12 @@ python3 -m http.server 8080
 Then open `http://localhost:8080`.
 
 **Config:** put your Google Maps API key + OAuth Client ID in `config.js`.
-Do **not** commit real keys.
+Do **not** commit real keys. Both credentials are restricted at the Google
+Cloud Console to the production origin (`https://otto-9092.github.io/*` for
+the Maps key; `https://otto-9092.github.io` for the OAuth client). If you
+run locally, add `http://localhost:*/*` and `http://localhost:8080` (or your
+port) as extra allowed origins in the Google Cloud Console — otherwise Maps
+tiles and Google sign-in will fail with an origin mismatch.
 
 **Editing tips:**
 - The P&L module is self-contained at the end of `app.js` — safe to edit in isolation.
@@ -274,7 +290,10 @@ Do **not** commit real keys.
 |---------|-------------|-----|
 | New feature/tab doesn't appear | Old cache still served | Do all **3 version bumps**, then fully reload / reinstall the PWA |
 | "Add Field" / buttons do nothing | Running an old cached `app.js` | Same as above — cache bust |
-| Version label shows an old date | `window.APP_VERSION` in `app.js` not bumped | Update it (and the `#appVersion` fallback) |
+| Version label shows an old date | `APP_BUILD` / `APP_VERSION_LABEL` in `config.js` not bumped | Update them (and the `?v=` strings + `#appVersion` fallback) |
+| `[version] MISMATCH` warning in console | Half-deploy — `index.html` still has an old hard-coded label | Update the fallback `#appVersion` span in `index.html` to match `config.js` |
+| Maps tiles fail to load in production | Maps API key origin restriction doesn't match the deploy URL | Google Cloud Console → API key → HTTP referrers → add correct pattern |
+| Google sign-in fails with `origin_mismatch` | OAuth Client authorized JavaScript origins missing this URL | Google Cloud Console → OAuth Client → add origin (no trailing slash, no path) |
 | P&L not syncing | Not signed in, or didn't tap Sync Now | Sign in to Google, then **Sync Now** on both devices |
 | Same field differs across devices | Edited on both between syncs | Resolve via the **conflict dialog** (Mine vs Cloud) |
 | Deleted item reappears after sync | Tombstone not recorded | Ensure deletes call `recordTombstone(LS_TOMB_*, id)` |
@@ -284,14 +303,26 @@ Do **not** commit real keys.
 
 ## 🗺️ Roadmap
 
-This app is **Phase 1's software layer** of the larger "Combine Brain" build.
+This app is the **software layer** of the larger "Combine Brain" build for the
+1979 Case IH 1480.
 
+### Done
 - ✅ **RTK GPS** — centimeter guidance feeding the tablet (FRTK achieved).
-- ✅ **Farming PWA** — mapping, reports, season, **P&L**, cross-device sync.
+- ✅ **Farming PWA** — mapping, reports, season, sync.
+- ✅ **Profit & Loss** — per-field/crop tracking, syncs across devices (v09).
 - ✅ **Rotor tach** — factory OEM rotor tach restored (no ESP32 needed — using the original sealed, calibrated gauge). *Was Phase 2; done the smart way.*
-- ⏭️ **Phase 2:** Fuel level.
-- ⏭️ **Phase 3:** Engine-bay temp + buzzer alarm.
-- ⏭️ **Phase 4:** Permanent in-cab HMI dashboard tying it all together.
+- ✅ **Security hardening** — Maps API key + OAuth Client ID restricted to production origin (v16).
+
+### In progress
+- 🔨 **Yield monitor** — DIY optical (IR + TSOP4838) yield monitor on the clean
+  grain elevator, streaming to a future **Harvest** tab over Wi-Fi. Lives in
+  the separate [opio-yield-monitor](https://github.com/Otto-9092/opio-yield-monitor)
+  repo. Phase 1 (bench firmware) ready; hardware ordered; combine recon queued.
+
+### Next
+- ⏭️ **Fuel level** monitoring.
+- ⏭️ **Engine-bay temp + buzzer alarm.**
+- ⏭️ **Permanent in-cab HMI dashboard** tying it all together.
 
 **Golden rules for old iron:** protect the 3.3V ESP32 from the 12V machine, use
 clean buck-regulated power, seal against heat/vibration/dust, keep a solid common
@@ -305,6 +336,7 @@ Versions use the format `vYYYY.MM.DD · NN` (see [Releasing / Versioning](#-rele
 
 | Version | Highlights |
 |---------|-----------|
+| **v2026.08.02 · 16** | **Security + version-drift cleanup.** (1) Restricted the Google Maps API key to `https://otto-9092.github.io/*` HTTP referrers and the OAuth Client ID's authorized JavaScript origins to `https://otto-9092.github.io`, closing the exposure from the credentials being committed to a public repo. (2) `window.APP_VERSION` in `app.js` was hardcoded to `"2026.08.02 · 13"` while `config.js` had advanced to `-15` — dead code (already superseded by `APP_VERSION_LABEL`), but misleading during debugging. Now derives as `window.APP_BUILD \|\| "unknown"` so `app.js` no longer needs a manual bump per release. (3) README refreshed: added `opio-yield-monitor` sister-project section, updated Roadmap, updated Troubleshooting with origin-restriction failure modes, removed a stale `-09` line from the Releasing section. |
 | **v2026.08.02 · 15** | **Sync bugfix + versioning hardening.** (1) `describeConflict()` referenced an undeclared variable `list`, throwing `ReferenceError: Can't find variable: list` on Safari/iPad and aborting the entire sync ("Sync failed"). Now derives compare-keys from `fieldsByLib[c.lib]` (defaults to `[]`). (2) Version is now **single-sourced in `config.js`** (`APP_BUILD` / `APP_VERSION_LABEL`); app.js stamps the header label from it at load and logs a `[version] MISMATCH` console warning if index.html's hard-coded label disagrees, so a half-deploy can't silently show the wrong build. (3) Removed a stale `asapplied.js?v=20260630-6` entry from the service-worker precache list. |
 | **v2026.08.02 · 14** | Variable cost lines can now be entered **per-acre or as a total**, with a `Total $` ⇄ `$/ac` toggle on each line (per-acre mode shows a live "= $X total" hint). Resolved amounts flow into subtotals, per-acre KPIs, and CSV export; syncs via `expenseModes` and is backward-compatible with older saved fields. **Also repaired `index.html`**, which had accumulated duplicate/triplicate `<script>` tags (app.js loading at -14/-12/-10 at once), 4 stray duplicate subtitle lines, a missing `<body>` tag, and a missing title from earlier line-numbered edits (builds 10–13). Header + script blocks rebuilt against the clean structure. |
 | **v2026.08.02 · 13** | Per-acre figures (Income/Acre, Expense/Acre, Net/Acre) now shown **under each field name** on its card — updating live and colored green/red — while the farm-wide per-acre total row remains at the top. |
