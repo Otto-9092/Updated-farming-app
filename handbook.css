@@ -1,0 +1,295 @@
+/* ============================================================
+   OπO Farming — Handbook Tab Styles
+   Uses existing CSS variables from styles.css so day/night mode
+   and theme colors match the rest of the app.
+   ============================================================ */
+
+/* Container: fills the tab panel */
+#tab-handbook {
+  overflow-y: auto;
+}
+
+.handbook-container {
+  padding: 12px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ---------- Table of Contents view ---------- */
+
+.handbook-toc h2 {
+  margin: 0 0 6px 0;
+  font-size: 1.3rem;
+  color: var(--ink, #1a1a1a);
+}
+
+.handbook-toc h3 {
+  margin: 18px 0 8px 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted, #666);
+}
+
+.handbook-hint {
+  color: var(--muted, #666);
+  font-size: 0.9rem;
+  margin: 4px 0 8px 0;
+}
+
+.handbook-toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border, #d5cfbb);
+  background: var(--card, #fff8e8);
+}
+
+.handbook-toc-list li {
+  border-bottom: 1px solid var(--border, #d5cfbb);
+}
+
+.handbook-toc-list li:last-child { border-bottom: none; }
+
+.handbook-toc-list a {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px 14px;
+  text-decoration: none;
+  color: var(--ink, #1a1a1a);
+  font-size: 1rem;
+  min-height: 44px;
+}
+
+.handbook-toc-list a:hover,
+.handbook-toc-list a:focus {
+  background: var(--hover, rgba(0,0,0,0.05));
+}
+
+.handbook-toc-list .handbook-num {
+  color: var(--muted, #666);
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  font-weight: 600;
+}
+
+.handbook-toc-list .handbook-title {
+  flex: 1;
+}
+
+.handbook-source {
+  margin-top: 20px;
+  font-size: 0.85rem;
+  color: var(--muted, #666);
+  text-align: center;
+}
+
+.handbook-source a {
+  color: var(--muted, #666);
+}
+
+/* ---------- Content view ---------- */
+
+.handbook-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border, #d5cfbb);
+  position: sticky;
+  top: 0;
+  background: var(--bg, #e8e0cd);
+  z-index: 2;
+}
+
+.handbook-back {
+  padding: 8px 12px;
+  min-height: 40px;
+  border: 1px solid var(--border, #d5cfbb);
+  background: var(--card, #fff8e8);
+  color: var(--ink, #1a1a1a);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.handbook-back:hover,
+.handbook-back:focus {
+  background: var(--hover, rgba(0,0,0,0.05));
+}
+
+.handbook-current {
+  color: var(--muted, #666);
+  font-size: 0.95rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handbook-loading {
+  color: var(--muted, #666);
+  text-align: center;
+  padding: 24px;
+}
+
+.handbook-error {
+  padding: 16px;
+  border: 1px solid var(--danger, #b23a3a);
+  border-radius: 8px;
+  background: var(--card, #fff8e8);
+}
+
+.handbook-error h3 {
+  margin-top: 0;
+  color: var(--danger, #b23a3a);
+}
+
+/* ---------- Rendered markdown article ---------- */
+
+.handbook-article {
+  color: var(--ink, #1a1a1a);
+  line-height: 1.55;
+  font-size: 1rem;
+}
+
+.handbook-article h1 {
+  font-size: 1.6rem;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--border, #d5cfbb);
+}
+
+.handbook-article h2 {
+  font-size: 1.3rem;
+  margin: 24px 0 10px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border, #d5cfbb);
+}
+
+.handbook-article h3 {
+  font-size: 1.1rem;
+  margin: 20px 0 8px 0;
+}
+
+.handbook-article h4, .handbook-article h5, .handbook-article h6 {
+  font-size: 1rem;
+  margin: 16px 0 6px 0;
+}
+
+.handbook-article p {
+  margin: 8px 0;
+}
+
+.handbook-article ul, .handbook-article ol {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+.handbook-article li {
+  margin: 4px 0;
+}
+
+.handbook-article a {
+  color: var(--link, #2f6b3a);
+  text-decoration: underline;
+}
+
+.handbook-article a:hover {
+  color: var(--link-hover, #1e4a26);
+}
+
+.handbook-article strong {
+  font-weight: 700;
+}
+
+.handbook-article em {
+  font-style: italic;
+}
+
+.handbook-article code {
+  background: var(--code-bg, rgba(0,0,0,0.06));
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.handbook-article pre {
+  background: var(--code-bg, rgba(0,0,0,0.06));
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.handbook-article pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.9em;
+}
+
+.handbook-article blockquote {
+  border-left: 3px solid var(--border, #d5cfbb);
+  padding: 4px 12px;
+  margin: 12px 0;
+  color: var(--muted, #666);
+}
+
+.handbook-article hr {
+  border: none;
+  border-top: 1px solid var(--border, #d5cfbb);
+  margin: 20px 0;
+}
+
+/* Tables */
+.handbook-article table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 0.92rem;
+}
+
+.handbook-article th,
+.handbook-article td {
+  border: 1px solid var(--border, #d5cfbb);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.handbook-article th {
+  background: var(--card, #fff8e8);
+  font-weight: 600;
+}
+
+.handbook-article tr:nth-child(even) td {
+  background: rgba(0,0,0,0.02);
+}
+
+/* Task lists / checkboxes rendered by GFM */
+.handbook-article input[type="checkbox"] {
+  margin-right: 6px;
+  transform: scale(1.1);
+}
+
+/* ---------- Mobile tweaks ---------- */
+@media (max-width: 640px) {
+  .handbook-container { padding: 8px; }
+  .handbook-article { font-size: 0.98rem; }
+  .handbook-article h1 { font-size: 1.4rem; }
+  .handbook-article h2 { font-size: 1.15rem; }
+  .handbook-article h3 { font-size: 1.05rem; }
+  .handbook-article table { font-size: 0.85rem; }
+  .handbook-toolbar { position: static; }
+}
+
+/* ---------- Print (for printing a section as a cab reference) ---------- */
+@media print {
+  .handbook-toc, .handbook-toolbar { display: none !important; }
+  .handbook-article { font-size: 11pt; }
+}
