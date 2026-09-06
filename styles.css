@@ -1,295 +1,1036 @@
-/* ============================================================
-   OπO Farming — Handbook Tab Styles
-   Uses existing CSS variables from styles.css so day/night mode
-   and theme colors match the rest of the app.
-   ============================================================ */
-
-/* Container: fills the tab panel */
-#tab-handbook {
-  overflow-y: auto;
+:root {
+  --bg: #f5f0e1;        /* cream page background */
+  --panel: #fffdf7;     /* off-white cards/header */
+  --panel-2: #ece5d3;   /* light tan inputs/buttons */
+  --text: #2a2620;      /* dark brown-black text */
+  --muted: #6b6557;     /* warm grey for labels/hints */
+  --accent: #e89400;    /* amber accent (pops on cream) */
+  --green: #2e9e57;     /* deeper green for contrast on light */
+  --red: #d63b29;       /* deeper red for contrast on light */
+  --blue: #2f7fc4;
+  --border: #d6cdb8;    /* soft tan borders */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
-.handbook-container {
-  padding: 12px;
-  max-width: 900px;
-  margin: 0 auto;
+/* ===== NIGHT MODE: restores the original dark theme ===== */
+body.night-mode {
+  --bg: #0f1115;
+  --panel: #161a22;
+  --panel-2: #1d2230;
+  --text: #e8ecf1;
+  --muted: #9aa3b2;
+  --accent: #ffb703;
+  --green: #2ecc71;
+  --red: #e74c3c;
+  --blue: #3498db;
+  --border: #262c3a;
+}
+/* In night mode, give metric tiles a touch of translucency back */
+body.night-mode .metric {
+  background: rgba(15,17,21,0.85);
 }
 
-/* ---------- Table of Contents view ---------- */
+/* Day/Night toggle button in the header */
+.theme-toggle {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 600;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.theme-toggle:active { transform: scale(0.96); }
 
-.handbook-toc h2 {
-  margin: 0 0 6px 0;
-  font-size: 1.3rem;
-  color: var(--ink, #1a1a1a);
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+  /* Prevent iOS rubber-band scrolling on the body */
+  overscroll-behavior-x: none;
+  -webkit-text-size-adjust: 100%;
 }
 
-.handbook-toc h3 {
-  margin: 18px 0 8px 0;
-  font-size: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted, #666);
+/* Touch-device-only rules: keep the in-cab iPad/iPhone feel,
+   but don't apply to desktop browsers (which need normal scroll). */
+@media (hover: none) and (pointer: coarse) {
+  html, body {
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
 }
 
-.handbook-hint {
-  color: var(--muted, #666);
-  font-size: 0.9rem;
-  margin: 4px 0 8px 0;
+/* Desktop: make sure wheel scrolling always works on the page. */
+@media (hover: hover) and (pointer: fine) {
+  html, body {
+    height: auto;
+    overflow-y: auto;
+    touch-action: auto;
+  }
 }
 
-.handbook-toc-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border, #d5cfbb);
-  background: var(--card, #fff8e8);
+/* Re-allow selection inside report bodies and text inputs */
+input, textarea, .report-body, pre { -webkit-user-select: text; user-select: text; }
+
+/* ===== Header ===== */
+.topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: calc(10px + var(--safe-top)) calc(14px + var(--safe-right)) 10px calc(14px + var(--safe-left));
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.logo { font-size: 28px; }
+.title { font-weight: 700; font-size: 16px; line-height: 1; }
+.subtitle { font-size: 11px; color: var(--muted); }
+
+.status-pills { display: flex; gap: 6px; }
+.pill {
+  padding: 4px 8px; border-radius: 999px; font-size: 11px;
+  background: var(--panel-2); border: 1px solid var(--border);
+}
+.pill-good { background: #143d24; border-color: #1f6d3a; color: #b6f0c8; }
+.pill-bad  { background: #3d1414; border-color: #6d1f1f; color: #f0b6b6; }
+
+/* ===== Tabs ===== */
+.tabs {
+  display: flex; background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: calc(52px + var(--safe-top));
+  z-index: 9;
+}
+.tab {
+  flex: 1; padding: 14px 6px; background: transparent;
+  border: none; color: var(--muted); font-size: 13px; font-weight: 600;
+  cursor: pointer; border-bottom: 2px solid transparent;
+  min-height: 44px; /* iOS touch target */
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ===== Tab panels ===== */
+.tab-panel {
+  display: none;
+  padding: 12px calc(12px + var(--safe-right)) calc(80px + var(--safe-bottom)) calc(12px + var(--safe-left));
+}
+.tab-panel.active { display: block; }
+
+/* ===== Map ===== */
+.map-wrap { position: relative; }
+#map {
+  width: 100%; height: 55vh;
+  border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--border);
 }
 
-.handbook-toc-list li {
-  border-bottom: 1px solid var(--border, #d5cfbb);
-}
-
-.handbook-toc-list li:last-child { border-bottom: none; }
-
-.handbook-toc-list a {
+/* ===== Metrics overlay ===== */
+/* ===== Operate layout: map + metrics side by side (desktop/tablet) ===== */
+.operate-layout {
   display: flex;
-  align-items: baseline;
+  gap: 12px;
+  align-items: stretch;
+}
+.operate-layout .map-col {
+  flex: 1 1 auto;   /* map column takes remaining width */
+  min-width: 0;     /* allow it to shrink properly inside flex */
+  position: relative;
+}
+.operate-layout #map {
+  width: 100%;
+}
+
+/* Toggle button bar (sits above the map) */
+.map-toggle-bar {
+  display: flex;
   gap: 8px;
-  padding: 12px 14px;
-  text-decoration: none;
-  color: var(--ink, #1a1a1a);
-  font-size: 1rem;
+  margin-bottom: 8px;
+}
+.map-toggle-btn {
+  padding: 8px 12px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 40px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.map-toggle-btn:active { transform: scale(0.97); }
+
+/* When metrics are collapsed, hide the panel entirely */
+.operate-layout.metrics-collapsed .metrics { display: none; }
+
+/* ===== CSS-based fullscreen (works on iOS where the native API does not) ===== */
+.map-col.map-expanded {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 2000;
+  margin: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+.map-col.map-expanded #map {
+  flex: 1 1 auto;
+  height: auto !important;   /* override the vh heights while expanded */
+  border-radius: 0;
+}
+.map-col.map-expanded .map-toggle-bar {
+  margin: 8px;
+}
+
+/* ===== Metrics — now a side panel beside the map (was an overlay) ===== */
+.metrics {
+  flex: 0 0 180px;  /* fixed-width side column (single column now) */
+  display: grid;
+  grid-template-columns: 1fr;          /* single column */
+  grid-auto-rows: min-content;
+  gap: 8px;
+  align-content: start;
+  max-height: 55vh;                    /* matches map height; scrolls if taller */
+  overflow-y: auto;                    /* scroll when tiles exceed the height */
+  -webkit-overflow-scrolling: touch;
+}
+.metric {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 8px;
+}
+.m-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.m-val   { font-size: 16px; font-weight: 700; }
+.m-val small { font-size: 10px; color: var(--muted); font-weight: 500; }
+.hidden { display: none !important; }
+
+/* ===== Cards ===== */
+.card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px; margin-top: 12px;
+}
+.card-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin-bottom: 10px;
+}
+.hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+label { display: block; font-size: 12px; color: var(--muted); margin-top: 8px; }
+input, select {
+  width: 100%; margin-top: 4px; padding: 12px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  font-size: 16px; /* 16px+ prevents iOS auto-zoom on focus */
+  -webkit-appearance: none;
+  appearance: none;
   min-height: 44px;
 }
 
-.handbook-toc-list a:hover,
-.handbook-toc-list a:focus {
-  background: var(--hover, rgba(0,0,0,0.05));
+/* ===== Buttons ===== */
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.btn {
+  flex: 1; min-width: 110px; min-height: 44px; /* iOS touch target */
+  padding: 12px 10px; border: 1px solid var(--border);
+  background: var(--panel-2); color: var(--text);
+  border-radius: 10px; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #1a1a1a; border-color: var(--accent); }
+.btn-danger  { background: var(--red); border-color: var(--red); color: var(--text); }
+.btn-ghost   { background: transparent; }
+.btn.active-toggle {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent);
 }
 
-.handbook-toc-list .handbook-num {
-  color: var(--muted, #666);
-  font-variant-numeric: tabular-nums;
-  min-width: 28px;
-  font-weight: 600;
+/* ===== Section control ===== */
+.sections { display: flex; gap: 6px; }
+.sec-btn {
+  flex: 1; padding: 18px 6px; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  color: var(--muted); font-weight: 700; font-size: 14px; cursor: pointer;
+  min-height: 56px; /* big in-cab targets */
+  -webkit-appearance: none;
+  appearance: none;
+}
+.sec-btn:active { transform: scale(0.97); }
+.sec-btn.active {
+  background: var(--green); color: #0a1a10;
+  border-color: var(--green);
 }
 
-.handbook-toc-list .handbook-title {
+/* ===== Report body ===== */
+.report-body {
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px; margin-top: 10px;
+  white-space: pre-wrap; font-size: 12px; color: var(--text);
+  max-height: 50vh; overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ===== Speed legend ===== */
+.speed-legend {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  margin-top: 10px; font-size: 11px; color: var(--muted);
+}
+.speed-legend > div { display: flex; align-items: center; gap: 6px; }
+.dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  display: inline-block; border: 1px solid #000;
+}
+.dot-slow { background: #f1c40f; }
+.dot-ok   { background: #2ecc71; }
+.dot-fast { background: #e74c3c; }
+
+/* ===== iPad (tablet) — bigger map, 2-col layout possible ===== */
+@media (min-width: 768px) {
+  #map { height: 65vh; }
+  .metrics { flex-basis: 200px; grid-template-columns: 1fr; max-height: 65vh; }
+  .m-val { font-size: 18px; }
+}
+
+/* ===== iPad landscape — wide layout ===== */
+@media (min-width: 1024px) and (orientation: landscape) {
+  #map { height: 78vh; }
+  .metrics { max-height: 78vh; }   /* scroll within the taller map height */
+}
+
+/* ===== iPhone (small) — 3-col metrics ===== */
+@media (max-width: 480px) {
+  /* On phones: stack metrics UNDER the map so the map stays large */
+  .operate-layout { flex-direction: column; }
+  .metrics {
+    flex-basis: auto;
+    width: 100%;
+    grid-template-columns: repeat(3, 1fr);
+    max-height: none;
+    overflow-y: visible;
+  }
+  .m-val { font-size: 14px; }
+}
+
+/* When launched as PWA from home screen */
+@media (display-mode: standalone) {
+  body { padding-top: 0; }
+}
+/* ============================================================
+   REPORTS TAB — search, filter, sort, rename
+   ============================================================ */
+
+.report-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.report-search {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 16px;            /* 16px prevents iOS zoom on focus */
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+.report-search::placeholder {
+  color: var(--muted);
+}
+
+.report-search:focus {
+  outline: none;
+  border-color: #ffb703;
+  box-shadow: 0 0 0 2px rgba(255, 183, 3, 0.25);
+}
+
+.report-filter-row {
+  display: flex;
+  gap: 8px;
+}
+
+.report-filter {
   flex: 1;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
 }
 
-.handbook-source {
-  margin-top: 20px;
-  font-size: 0.85rem;
-  color: var(--muted, #666);
-  text-align: center;
+.report-count {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  margin-top: 2px;
 }
 
-.handbook-source a {
-  color: var(--muted, #666);
+.report-list {
+  width: 100%;
+  padding: 6px;
+  font-size: 14px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-sizing: border-box;
 }
 
-/* ---------- Content view ---------- */
+.report-list option {
+  padding: 6px 4px;
+}
 
-.handbook-toolbar {
+.report-list option:checked {
+  background: #ffb703;
+  color: #1a1a1a;
+}
+/* ============================================================
+   EQUIPMENT MODAL — pop-up parameter editor
+   ============================================================ */
+
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border, #d5cfbb);
-  position: sticky;
-  top: 0;
-  background: var(--bg, #e8e0cd);
-  z-index: 2;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  animation: fadeIn 0.18s ease-out;
 }
 
-.handbook-back {
-  padding: 8px 12px;
-  min-height: 40px;
-  border: 1px solid var(--border, #d5cfbb);
-  background: var(--card, #fff8e8);
-  color: var(--ink, #1a1a1a);
-  border-radius: 6px;
+.modal-overlay.hidden {
+  display: none;
+}
+
+.modal-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.22s ease-out;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+  font-size: 17px;
+  font-weight: bold;
+  color: #ffb703;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 22px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
   cursor: pointer;
-  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-close:hover, .modal-close:active {
+  background: var(--border);
+  color: var(--text);
 }
 
-.handbook-back:hover,
-.handbook-back:focus {
-  background: var(--hover, rgba(0,0,0,0.05));
-}
-
-.handbook-current {
-  color: var(--muted, #666);
-  font-size: 0.95rem;
+.modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.modal-body label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.modal-body input,
+.modal-body select,
+.modal-body textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px;
+  font-size: 16px;            /* prevents iOS zoom */
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.modal-body input:focus,
+.modal-body select:focus,
+.modal-body textarea:focus {
+  outline: none;
+  border-color: #ffb703;
+  box-shadow: 0 0 0 2px rgba(255, 183, 3, 0.25);
+}
+
+.modal-body textarea {
+  resize: vertical;
+}
+
+.modal-body .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: -4px;
+  margin-bottom: 12px;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.modal-footer .btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 15px;
+}
+
+/* Sub-menu visibility — only one shows at a time inside the modal */
+.eq-submenu.hidden {
+  display: none;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+
+/* ============================================================
+   FIX: keep the day/night toggle visible on iPad & all sizes.
+   The three header pills (GPS / IDLE / Night) previously could
+   not wrap, so the last one (the toggle) was pushed off-screen
+   and clipped by overflow-x:hidden. Allowing wrap + nowrap text
+   guarantees the button is always shown.
+   ============================================================ */
+.status-pills {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.theme-toggle {
   white-space: nowrap;
 }
 
-.handbook-loading {
-  color: var(--muted, #666);
-  text-align: center;
-  padding: 24px;
-}
 
-.handbook-error {
-  padding: 16px;
-  border: 1px solid var(--danger, #b23a3a);
+/* ============================================================
+   THEMED DIALOGS (field check / weather / report title)
+   Reuses .modal-overlay/.modal-card so day & night themes apply.
+   ============================================================ */
+.dlg-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 16px;
+  animation: fadeIn 0.18s ease-out;
+}
+.dlg-overlay.hidden { display: none; }
+.dlg-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%; max-width: 440px;
+  max-height: 88vh; display: flex; flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+.dlg-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+}
+.dlg-title { font-size: 17px; font-weight: bold; color: var(--accent); }
+.dlg-body { padding: 16px 18px; overflow-y: auto; }
+.dlg-body label { display:block; margin-bottom: 12px; font-size: 14px; color: var(--muted); }
+.dlg-body input, .dlg-body select, .dlg-body textarea {
+  display: block; width: 100%; margin-top: 4px;
+  padding: 12px; font-size: 16px; /* 16px stops iOS zoom */
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; font-family: inherit;
+}
+.dlg-body input:focus, .dlg-body select:focus, .dlg-body textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(232,148,0,0.25);
+}
+.dlg-footer {
+  display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--border);
+}
+.dlg-footer .btn { flex: 1; padding: 12px; font-size: 15px; }
+
+/* Summary block used by the field-check dialog */
+.dlg-summary {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--card, #fff8e8);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.dlg-summary .row { display: flex; gap: 8px; font-size: 14px; padding: 3px 0; }
+.dlg-summary .row .lab { color: var(--muted); width: 92px; flex: none; }
+.dlg-summary .row .val { color: var(--text); font-weight: 600; }
+.dlg-warn {
+  background: var(--panel-2);
+  border: 1px solid var(--red);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 12px;
+  color: var(--text); font-size: 14px; line-height: 1.4;
 }
 
-.handbook-error h3 {
+
+/* Generic dialog message text */
+.dlg-message {
+  font-size: 15px; line-height: 1.5; color: var(--text);
+  white-space: pre-wrap;   /* respect line breaks passed in the message */
+}
+
+
+/* ============================================================
+   TOOLS TAB — Mix Calculator, Cost & Profit, Unit Converter,
+   Acreage Calculator, GPS Lookup
+   Added 2026.06.06. Uses existing theme variables so day & night
+   modes both apply automatically. Append-only: nothing above
+   this block was changed or removed.
+   ============================================================ */
+
+/* Rows of inputs/selects that should sit side-by-side and wrap */
+.mix-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+.mix-row > label {
+  flex: 1 1 120px;   /* grow/shrink, but never narrower than ~120px */
+  min-width: 0;      /* allow proper shrinking inside flex */
+  margin-top: 8px;
+}
+
+/* Compact unit dropdowns (oz/ac, gal, etc.) */
+.mix-unit {
+  min-height: 44px;  /* keep iOS touch target */
+}
+
+/* Results panel shown after a calculation */
+.mix-results {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+.mix-results:empty {
+  margin-top: 0;     /* no gap when there's no result yet */
+}
+
+/* A single result line inside .mix-results */
+.mix-line {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.mix-line b {
+  color: var(--accent);   /* amber in day mode, gold in night mode */
+}
+
+/* Hint lines that follow a result (units, accuracy, conversions) */
+.mix-results .hint {
   margin-top: 0;
-  color: var(--danger, #b23a3a);
 }
 
-/* ---------- Rendered markdown article ---------- */
+/* On phones, stack the input rows so fields stay easy to tap */
+@media (max-width: 480px) {
+  .mix-row > label {
+    flex: 1 1 100%;
+  }
+  }
 
-.handbook-article {
-  color: var(--ink, #1a1a1a);
-  line-height: 1.55;
-  font-size: 1rem;
+/* ============================================================
+   UX ENHANCEMENTS (additive) — toast, voice mic, GPS frame,
+   primary-action emphasis, larger live metrics, More toggle.
+   Paired with ux-enhancements.js.
+   ============================================================ */
+
+/* ---- 2. Toast / snackbar ---- */
+#toastHost {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + var(--safe-bottom));
+  transform: translateX(-50%);
+  z-index: 4000;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; gap: 14px;
+  background: #222018; color: #fff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 15px; font-weight: 600;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+  opacity: 0; transform: translateY(20px);
+  transition: opacity .2s ease, transform .2s ease;
+  pointer-events: auto;
+  border: 1px solid rgba(255,255,255,0.10);
+}
+.toast-in  { opacity: 1; transform: translateY(0); }
+.toast-out { opacity: 0; transform: translateY(20px); }
+.toast-ok   { background: #1d6b34; }
+.toast-warn { background: #8a3b1e; }
+.toast-msg  { line-height: 1.25; }
+.toast-undo {
+  flex: 0 0 auto;
+  background: rgba(255,255,255,0.16);
+  color: #fff; border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px; font-weight: 800; letter-spacing: .04em;
+  min-height: 40px;
+  cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+}
+.toast-undo:active { background: rgba(255,255,255,0.30); }
+
+/* ---- 3. Voice dictation mic in the note dialog ---- */
+.note-input-wrap { position: relative; }
+.note-input-wrap textarea { width: 100%; padding-right: 52px; }
+.note-mic {
+  position: absolute; top: 8px; right: 8px;
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2); color: var(--text);
+  font-size: 18px; line-height: 1;
+  cursor: pointer; touch-action: manipulation;
+  -webkit-appearance: none; appearance: none;
+}
+.note-mic:active { transform: scale(0.94); }
+.note-mic.listening {
+  background: var(--red); border-color: var(--red); color: #fff;
+  animation: micPulse 1.1s ease-in-out infinite;
+}
+@keyframes micPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(214,59,41,0.55); }
+  50%     { box-shadow: 0 0 0 8px rgba(214,59,41,0); }
 }
 
-.handbook-article h1 {
-  font-size: 1.6rem;
-  margin: 0 0 12px 0;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--border, #d5cfbb);
+/* ---- 5. Peripheral GPS-quality border ---- */
+#gpsFrame {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 3500;
+  border: 0 solid transparent;
+  transition: border-color .3s ease;
+}
+#gpsFrame.gps-good { border-width: 3px; border-color: rgba(46,158,87,0.0); }
+#gpsFrame.gps-warn { border-width: 4px; border-color: rgba(232,148,0,0.75); }
+#gpsFrame.gps-bad  { border-width: 5px; border-color: rgba(214,59,41,0.85); animation: gpsBadPulse 1.4s ease-in-out infinite; }
+@keyframes gpsBadPulse {
+  0%,100% { border-color: rgba(214,59,41,0.85); }
+  50%     { border-color: rgba(214,59,41,0.35); }
 }
 
-.handbook-article h2 {
-  font-size: 1.3rem;
-  margin: 24px 0 10px 0;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--border, #d5cfbb);
+/* ---- 6a. Primary-action emphasis (Start/Stop bigger & bolder) ---- */
+#btnStart, #btnStop {
+  min-height: 56px;
+  font-size: 18px;
+  font-weight: 800;
 }
 
-.handbook-article h3 {
-  font-size: 1.1rem;
-  margin: 20px 0 8px 0;
+/* ---- 6b. Larger live metric values for at-a-glance reading ---- */
+.metrics .m-val { font-size: 20px; }
+.metrics .m-label { font-size: 11px; }
+@media (min-width: 768px) {
+  .metrics .m-val { font-size: 22px; }
 }
 
-.handbook-article h4, .handbook-article h5, .handbook-article h6 {
-  font-size: 1rem;
-  margin: 16px 0 6px 0;
+/* ---- 7. More-controls toggle state ---- */
+#btnToggleMore { font-weight: 700; }
+#operateMore.hidden { display: none; }
+
+/* ---- 9. Settings toggles ---- */
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 10px 2px;
+  min-height: 44px;
+  cursor: pointer;
+  font-size: 15px;
+}
+.setting-row + .hint { margin-top: -4px; }
+.setting-toggle {
+  flex: 0 0 auto;
+  width: 22px; height: 22px;
+  accent-color: var(--green);
+  cursor: pointer;
 }
 
-.handbook-article p {
-  margin: 8px 0;
+/* ===== Auto-resume banner (crash / refresh recovery) ===== */
+#resumeBanner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(var(--safe-top) + 10px);
+  z-index: 4000;
+  width: min(94vw, 460px);
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.28);
+  padding: 14px 16px;
+  animation: resumeDrop 0.28s ease-out;
+}
+@keyframes resumeDrop {
+  from { opacity: 0; transform: translate(-50%, -16px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+#resumeBanner .resume-msg { font-size: 15px; line-height: 1.4; margin-bottom: 12px; }
+#resumeBanner .resume-actions { display: flex; gap: 10px; }
+#resumeBanner .resume-actions .btn { flex: 1 1 auto; min-height: 44px; font-weight: 600; }
+
+/* ===== Hold-to-Stop visual feedback ===== */
+#btnStop {
+  background-size: cover;
+  background-position: center;
+  transition: background-image 0.05s linear;
+  touch-action: none;            /* let press-and-hold work without scrolling */
 }
 
-.handbook-article ul, .handbook-article ol {
-  padding-left: 24px;
-  margin: 8px 0;
+/* ===== Session summary card (shown on Stop) ===== */
+.ss-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4500;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-top) + 12px) 14px calc(var(--safe-bottom) + 12px);
+  animation: ssFade 0.2s ease-out;
 }
-
-.handbook-article li {
-  margin: 4px 0;
+@keyframes ssFade { from { opacity: 0; } to { opacity: 1; } }
+.ss-card {
+  width: min(96vw, 480px);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  padding: 18px 18px 16px;
+  animation: ssPop 0.24s cubic-bezier(0.18, 0.89, 0.32, 1.18);
 }
-
-.handbook-article a {
-  color: var(--link, #2f6b3a);
-  text-decoration: underline;
+@keyframes ssPop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.ss-head { text-align: center; margin-bottom: 14px; }
+.ss-title { font-size: 20px; font-weight: 700; color: var(--green); }
+.ss-sub { font-size: 14px; color: var(--muted); margin-top: 3px; }
+.ss-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
 }
-
-.handbook-article a:hover {
-  color: var(--link-hover, #1e4a26);
+.ss-stat {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
 }
+.ss-label { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.ss-value { font-size: 18px; font-weight: 700; }
+.ss-actions { display: flex; gap: 10px; }
+.ss-actions .btn { flex: 1 1 auto; min-height: 48px; font-weight: 600; }
 
-.handbook-article strong {
-  font-weight: 700;
-}
-
-.handbook-article em {
-  font-style: italic;
-}
-
-.handbook-article code {
-  background: var(--code-bg, rgba(0,0,0,0.06));
-  padding: 2px 5px;
-  border-radius: 3px;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  font-size: 0.9em;
-}
-
-.handbook-article pre {
-  background: var(--code-bg, rgba(0,0,0,0.06));
-  padding: 12px;
-  border-radius: 6px;
-  overflow-x: auto;
-  margin: 12px 0;
-}
-
-.handbook-article pre code {
-  background: none;
-  padding: 0;
-  font-size: 0.9em;
-}
-
-.handbook-article blockquote {
-  border-left: 3px solid var(--border, #d5cfbb);
-  padding: 4px 12px;
-  margin: 12px 0;
-  color: var(--muted, #666);
-}
-
-.handbook-article hr {
-  border: none;
-  border-top: 1px solid var(--border, #d5cfbb);
-  margin: 20px 0;
-}
-
-/* Tables */
-.handbook-article table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 12px 0;
-  font-size: 0.92rem;
-}
-
-.handbook-article th,
-.handbook-article td {
-  border: 1px solid var(--border, #d5cfbb);
-  padding: 6px 10px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.handbook-article th {
-  background: var(--card, #fff8e8);
+/* ===== Connectivity / sync status pill (header) ===== */
+.conn-pill {
+  cursor: pointer;
+  border: 1px solid var(--border);
   font-weight: 600;
+  white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.conn-pill:active { transform: scale(0.96); }
+.conn-pill.conn-ok      { background: rgba(46,158,87,0.16);  color: var(--green); border-color: rgba(46,158,87,0.45); }
+.conn-pill.conn-warn    { background: rgba(232,148,0,0.16);  color: var(--accent); border-color: rgba(232,148,0,0.45); }
+.conn-pill.conn-idle    { background: var(--panel-2);        color: var(--muted); }
+.conn-pill.conn-offline { background: rgba(214,59,41,0.16);  color: var(--red);   border-color: rgba(214,59,41,0.5);
+  animation: connPulse 2s ease-in-out infinite; }
+@keyframes connPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.62; } }
+
+/* ===== First-run onboarding tour ===== */
+#tourOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+  background: rgba(0,0,0,0.62);
+  animation: ssFade 0.2s ease-out;
+}
+#tourOverlay .tour-cutout {
+  position: absolute;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.62), 0 0 0 3px var(--green);
+  background: transparent;
+  pointer-events: none;
+  transition: top 0.2s, left 0.2s, width 0.2s, height 0.2s;
+}
+#tourOverlay .tour-pop {
+  position: absolute;
+  width: min(88vw, 320px);
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 10px 36px rgba(0,0,0,0.4);
+  padding: 16px;
+  transition: top 0.2s, left 0.2s;
+}
+#tourOverlay .tour-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+#tourOverlay .tour-body  { font-size: 14px; line-height: 1.45; color: var(--muted); margin-bottom: 14px; }
+#tourOverlay .tour-actions { display: flex; align-items: center; gap: 8px; }
+#tourOverlay .tour-spacer { flex: 1 1 auto; }
+#tourOverlay .tour-actions .btn { min-height: 40px; }
+
+/* ===== Pinned quick-actions bar (during a session) ===== */
+.quick-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--safe-bottom) + 10px);
+  z-index: 3500;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.28);
+  max-width: calc(100vw - 20px);
+}
+.quick-bar.hidden { display: none; }
+.quick-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 10px;
+  min-height: 52px;
+  min-width: 76px;
+  padding: 0 14px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.quick-btn:active { transform: scale(0.95); background: var(--green); color: #fff; }
+.quick-btn:disabled { opacity: 0.4; }
+
+/* ===== Pull-to-refresh indicator ===== */
+#ptrIndicator {
+  position: fixed;
+  top: calc(var(--safe-top) + 4px);
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  z-index: 5500;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+}
+#ptrIndicator .ptr-spin { font-size: 22px; line-height: 1; color: var(--muted); display: inline-block; }
+#ptrIndicator.ptr-ready .ptr-spin { color: var(--green); }
+#ptrIndicator.ptr-spinning .ptr-spin { animation: ptrSpin 0.7s linear infinite; color: var(--green); }
+@keyframes ptrSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ============================================================
+   TABLET POLISH (Samsung Tab S9 FE & similar, >=768px wide)
+   Additive & scoped: only affects large screens. Phone layout
+   (<=767px) is completely untouched. Makes better use of the
+   extra space — wider content, bigger glanceable numbers,
+   two-column forms. No core logic changes.
+   ============================================================ */
+@media (min-width: 768px) {
+  /* 1. Give the card-style screens (Setup, Tools, Reports, Season)
+        a comfortable centered max-width instead of stretching edge
+        to edge or floating narrow in empty space. Operate keeps its
+        full-width map layout. */
+  #tab-setup, #tab-tools, #tab-reports, #tab-season {
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* 2. Bigger, more glanceable live metric numbers on the big screen. */
+  .metrics .m-val, .m-val { font-size: 24px; }
+  .metrics .m-label, .m-label { font-size: 12px; }
+  .metric { padding: 10px 12px; }
+
+  /* 4. Keep individual setting rows from stretching awkwardly wide on the
+        big card. A comfortable readable width keeps the label and its
+        toggle visually associated instead of pushed to opposite edges. */
+  .setting-row {
+    max-width: 560px;
+  }
 }
 
-.handbook-article tr:nth-child(even) td {
-  background: rgba(0,0,0,0.02);
-}
-
-/* Task lists / checkboxes rendered by GFM */
-.handbook-article input[type="checkbox"] {
-  margin-right: 6px;
-  transform: scale(1.1);
-}
-
-/* ---------- Mobile tweaks ---------- */
-@media (max-width: 640px) {
-  .handbook-container { padding: 8px; }
-  .handbook-article { font-size: 0.98rem; }
-  .handbook-article h1 { font-size: 1.4rem; }
-  .handbook-article h2 { font-size: 1.15rem; }
-  .handbook-article h3 { font-size: 1.05rem; }
-  .handbook-article table { font-size: 0.85rem; }
-  .handbook-toolbar { position: static; }
-}
-
-/* ---------- Print (for printing a section as a cab reference) ---------- */
-@media print {
-  .handbook-toc, .handbook-toolbar { display: none !important; }
-  .handbook-article { font-size: 11pt; }
+/* 3. Landscape refinement for the Tab S9 FE (~1080px wide in landscape):
+      taller map + even larger metric numbers when cab-mounted sideways. */
+@media (min-width: 1000px) and (orientation: landscape) {
+  #map { height: 80vh; }
+  .metrics { max-height: 80vh; flex-basis: 240px; }
+  .metrics .m-val, .m-val { font-size: 28px; }
+  .metrics .m-label, .m-label { font-size: 13px; }
 }
