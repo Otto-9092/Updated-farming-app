@@ -2,25 +2,33 @@
    OπO Farming — Service Worker (PWA offline support)
    Caches the app shell so the app loads & runs with no signal.
    Google Maps tiles/scripts are NEVER cached (they need network).
+   Handbook sections from raw.githubusercontent.com ARE cached
+   after first fetch so the Field Guide works offline.
    Bump CACHE_VERSION whenever you ship new files.
    ============================================================ */
-const CACHE_VERSION = "opio-2026.08.02-17";
+const CACHE_VERSION = "opio-2026.09.05-18";
 const CACHE_NAME = "opio-cache-" + CACHE_VERSION;
+const HANDBOOK_CACHE_NAME = "opio-handbook-" + CACHE_VERSION;
 
+// Core files that make up the app shell. The ?v= query strings match the
+// versions referenced in index.html so the right copies are precached.
 const CORE_ASSETS = [
   "./",
-  "./styles.css?v=20260802-17",
-  "./config.js?v=20260802-17",
-  "./app.js?v=20260802-17",
-  "./uxenhancements.js?v=20260802-17",
-  "./asapplied.js?v=20260802-17",
-  "./handbook.js?v=20260802-17",
+  "./styles.css?v=20260905-18",
+  "./config.js?v=20260905-18",
+  "./app.js?v=20260905-18",
+  "./uxenhancements.js?v=20260905-18",
+  "./asapplied.js?v=20260905-18",
+  "./handbook.js?v=20260905-18",
   "./manifest.json",
   "./icon-16.png",
   "./icon-32.png",
   "./icon-192.png",
   "./icon-512.png"
 ];
+
+// Handbook base URL — used to identify handbook fetches and cache them.
+const HANDBOOK_BASE = "https://raw.githubusercontent.com/Otto-9092/opio-field-guide/main/sections/";
 
 // Install: pre-cache the app shell.
 self.addEventListener("install", (event) => {
@@ -36,10 +44,14 @@ self.addEventListener("install", (event) => {
 });
 
 // Activate: delete old caches, take control immediately.
+// Keep any current handbook caches; only expired versions are pruned.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => {
+        // Delete anything that doesn't match either current cache name
+        return k !== CACHE_NAME && k !== HANDBOOK_CACHE_NAME;
+      }).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
@@ -54,7 +66,14 @@ function isNetworkOnly(url) {
   );
 }
 
+// Is this a handbook section request?
+function isHandbookRequest(url) {
+  return url.href.startsWith(HANDBOOK_BASE);
+}
+
 // Fetch strategy:
+//  - Handbook sections (raw.githubusercontent.com): network-first, cache-fallback
+//    so latest content shows when online, cached content shows when offline.
 //  - Maps & cross-origin Google: network-only (never cache).
 //  - Navigation (HTML): network-first, fall back to cached index.html offline.
 //  - Same-origin assets: cache-first, then network (and cache the result).
@@ -64,6 +83,25 @@ self.addEventListener("fetch", (event) => {
 
   let url;
   try { url = new URL(req.url); } catch (e) { return; }
+
+  // Handbook sections — network first, cache fallback, keep the cache updated
+  if (isHandbookRequest(url)) {
+    event.respondWith(
+      fetch(req).then((res) => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(HANDBOOK_CACHE_NAME).then((c) => c.put(req, copy));
+        }
+        return res;
+      }).catch(() =>
+        caches.match(req).then((hit) => hit || new Response(
+          "# Section unavailable offline\n\nThis section hasn't been viewed while online yet.",
+          { headers: { "Content-Type": "text/markdown" } }
+        ))
+      )
+    );
+    return;
+  }
 
   // Never intercept Google Maps / other 3rd-party — let the browser handle it.
   if (isNetworkOnly(url)) return;
