@@ -2604,6 +2604,10 @@ function applyEqParamsToState(type, values) {
     state.planter.population = parseFloat(values.plPopulation) || 0;
     state.planter.variety    = values.plVariety || "";
     state.planter.downforce  = parseFloat(values.plDownforce)  || 0;
+    // ← NEW: capture the seed-inventory lot ID from the picker (if any)
+    state.planter._seedLotId = (window.SeedTag && typeof window.SeedTag.captureSelectedLot === "function")
+      ? window.SeedTag.captureSelectedLot()
+      : null;
   } else if (type === "tillage") {
     state.tillage = state.tillage || {};
     state.tillage.depth    = parseFloat(values.tlDepth) || 0;
@@ -3271,12 +3275,16 @@ $("btnSave").addEventListener("click", async () => {
     })(),
     notes: (state.notes || []).slice(),       // ← NEW: field notes (GPS-tagged)
   };
-  const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
+const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   all[id] = rep;
   localStorage.setItem(LS_REPS, JSON.stringify(all));
   loadReportsList();
   appAlert("Report saved: " + defaultName, "Saved");
-  if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
+  if (typeof updateDataStats === "function") updateDataStats();
+  // ← NEW: auto-decrement seed inventory if a lot was picked in Planter Setup
+  if (window.SeedTag && typeof window.SeedTag.decrementAfterReport === "function") {
+    window.SeedTag.decrementAfterReport(rep);
+  }
 });
 
 // Get all reports as an array, applying search + filter + sort
