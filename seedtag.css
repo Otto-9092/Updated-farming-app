@@ -1,0 +1,259 @@
+/* ============================================================
+   OπO Farming — Seed Tag / Seed Inventory styles
+   Uses CSS variables from styles.css so day/night mode and
+   theme colors line up with the rest of the app.
+   ============================================================ */
+
+/* ---------- Inventory list ---------- */
+.seed-inv-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seed-inv-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  padding: 10px;
+  border: 1px solid var(--border, #d5cfbb);
+  background: var(--panel-2, #ece5d3);
+  border-radius: 8px;
+}
+
+.seed-inv-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.seed-inv-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 1rem;
+  color: var(--text, #2a2620);
+}
+
+.seed-inv-crop {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--panel, #fffdf7);
+  border: 1px solid var(--border, #d5cfbb);
+  color: var(--muted, #6b6557);
+}
+
+.seed-inv-sub {
+  font-size: 0.85rem;
+  color: var(--muted, #6b6557);
+  margin: 2px 0 6px 0;
+  word-break: break-word;
+}
+
+.seed-inv-bar-wrap {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(128, 128, 128, 0.18);
+  overflow: hidden;
+  margin: 6px 0 4px 0;
+}
+.seed-inv-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.seed-inv-count {
+  font-size: 0.85rem;
+  color: var(--text, #2a2620);
+}
+
+.seed-inv-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+}
+
+.seed-inv-actions .btn {
+  padding: 6px 10px;
+  min-width: 44px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* ---------- Planter picker (dropdown that lives above the manual text input) ---------- */
+.seed-picker-wrap {
+  margin: 4px 0 4px 0;
+}
+
+.seed-picker {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #d5cfbb);
+  background: var(--panel, #fffdf7);
+  color: var(--text, #2a2620);
+  font-size: 0.95rem;
+}
+
+.seed-picker-hint {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: var(--muted, #6b6557);
+}
+
+/* ---------- Shared dialog frame ---------- */
+.seed-dlg {
+  border: none;
+  padding: 0;
+  border-radius: 12px;
+  max-width: 560px;
+  width: calc(100vw - 32px);
+  background: var(--panel, #fffdf7);
+  color: var(--text, #2a2620);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+
+.seed-dlg::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.seed-dlg-body {
+  padding: 16px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.seed-dlg-body h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.1rem;
+  color: var(--text, #2a2620);
+}
+
+.seed-dlg-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* ---------- Review dialog form grid ---------- */
+.seed-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.seed-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted, #6b6557);
+}
+
+.seed-form-grid input,
+.seed-form-grid select {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #d5cfbb);
+  background: var(--panel-2, #ece5d3);
+  color: var(--text, #2a2620);
+  font-size: 0.95rem;
+}
+
+/* Full-width fields */
+.seed-form-grid label:nth-child(6),   /* Treatment */
+.seed-form-grid label:nth-child(8) {  /* Notes */
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 480px) {
+  .seed-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .seed-form-grid label:nth-child(6),
+  .seed-form-grid label:nth-child(8) {
+    grid-column: auto;
+  }
+}
+
+/* ---------- Review photo preview ---------- */
+.seed-review-photo {
+  margin: 8px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.06);
+  max-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.seed-review-photo img,
+.seed-viewer-img {
+  max-width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  display: block;
+}
+
+.seed-viewer-caption {
+  margin-bottom: 6px;
+}
+
+/* ---------- OCR raw text details ---------- */
+.seed-raw {
+  margin-top: 8px;
+  border-top: 1px solid var(--border, #d5cfbb);
+  padding-top: 8px;
+}
+
+.seed-raw summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--muted, #6b6557);
+}
+
+.seed-raw pre {
+  margin: 6px 0 0 0;
+  padding: 8px;
+  background: var(--panel-2, #ece5d3);
+  border: 1px solid var(--border, #d5cfbb);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- Progress dialog ---------- */
+.seed-progress-wrap {
+  margin-top: 10px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(128, 128, 128, 0.18);
+  overflow: hidden;
+}
+
+.seed-progress-bar {
+  width: 0%;
+  height: 100%;
+  background: var(--accent, #e89400);
+  transition: width 0.2s ease;
+}
+
+/* ---------- Night mode fine-tuning ---------- */
+body.night-mode .seed-inv-row {
+  background: var(--panel-2, #1d2230);
+}
+body.night-mode .seed-inv-crop {
+  background: var(--panel, #161a22);
+}
+body.night-mode .seed-review-photo {
+  background: rgba(255, 255, 255, 0.04);
+}
