@@ -1,3 +1,4 @@
+[README (14).md](https://github.com/user-attachments/files/31973221/README.14.md)
 
 # 🌾 OπO Farming — Data Systems Pro
 
@@ -89,7 +90,7 @@ P&L features.
 └───────────────┬──────────────────────────────┘
                 │ loads
      ┌──────────┼───────────┬──────────────┐
-     ▼          ▼           ▼              ▼
+     ▼          ▼           ���              ▼
   config.js  app.js   uxenhancements.js  asapplied.js
                 │
      ┌──────────┼─────────────────────────────┐
@@ -251,7 +252,7 @@ release, on each device:
 You'll know it worked when the header shows the new **vYYYY.MM.DD · NN** and the
 console shows **no** `[version] MISMATCH` warning.
 
-`v2026.08.02 · 16` (cache `opio-2026.08.02-16`)
+`v2026.09.05 · 18` (cache `opio-2026.09.05-18`)
 
 ---
 
@@ -336,7 +337,8 @@ Versions use the format `vYYYY.MM.DD · NN` (see [Releasing / Versioning](#-rele
 
 | Version | Highlights |
 |---------|-----------|
-| **v2026.08.02 · 16** | **Security + version-drift cleanup.** (1) Restricted the Google Maps API key to `https://otto-9092.github.io/*` HTTP referrers and the OAuth Client ID's authorized JavaScript origins to `https://otto-9092.github.io`, closing the exposure from the credentials being committed to a public repo. (2) `window.APP_VERSION` in `app.js` was hardcoded to `"2026.08.02 · 13"` while `config.js` had advanced to `-15` — dead code (already superseded by `APP_VERSION_LABEL`), but misleading during debugging. Now derives as `window.APP_BUILD \|\| "unknown"` so `app.js` no longer needs a manual bump per release. (3) README refreshed: added `opio-yield-monitor` sister-project section, updated Roadmap, updated Troubleshooting with origin-restriction failure modes, removed a stale `-09` line from the Releasing section. |
+| **v2026.09.05 · 18** | **Field Guide tab added.** New `handbook.js` module renders the `opio-field-guide` GitHub repo as a browsable in-app handbook. 20 sections grouped by field workflow (Foundation, Tillage, Planting, In-Season, Harvest, Post-Harvest), lazy-loaded on click, cached in sessionStorage during the session, and cached by the service worker under `HANDBOOK_CACHE_NAME` so once viewed while online, sections work offline. Uses `marked` from jsDelivr for markdown rendering (lazy-loaded on first section open). Internal `[Section X](NN-slug.md)` cross-references are intercepted and turned into in-app section navigation. New tab appears in the nav strip after Profit & Loss. Full markdown styling in the inline `<style>` block matches the Diamond O cream/amber theme. |
+| **v2026.08.02 · 17** | (Previous release, no changelog entry captured.) |
 | **v2026.08.02 · 15** | **Sync bugfix + versioning hardening.** (1) `describeConflict()` referenced an undeclared variable `list`, throwing `ReferenceError: Can't find variable: list` on Safari/iPad and aborting the entire sync ("Sync failed"). Now derives compare-keys from `fieldsByLib[c.lib]` (defaults to `[]`). (2) Version is now **single-sourced in `config.js`** (`APP_BUILD` / `APP_VERSION_LABEL`); app.js stamps the header label from it at load and logs a `[version] MISMATCH` console warning if index.html's hard-coded label disagrees, so a half-deploy can't silently show the wrong build. (3) Removed a stale `asapplied.js?v=20260630-6` entry from the service-worker precache list. |
 | **v2026.08.02 · 14** | Variable cost lines can now be entered **per-acre or as a total**, with a `Total $` ⇄ `$/ac` toggle on each line (per-acre mode shows a live "= $X total" hint). Resolved amounts flow into subtotals, per-acre KPIs, and CSV export; syncs via `expenseModes` and is backward-compatible with older saved fields. **Also repaired `index.html`**, which had accumulated duplicate/triplicate `<script>` tags (app.js loading at -14/-12/-10 at once), 4 stray duplicate subtitle lines, a missing `<body>` tag, and a missing title from earlier line-numbered edits (builds 10–13). Header + script blocks rebuilt against the clean structure. |
 | **v2026.08.02 · 13** | Per-acre figures (Income/Acre, Expense/Acre, Net/Acre) now shown **under each field name** on its card — updating live and colored green/red — while the farm-wide per-acre total row remains at the top. |
