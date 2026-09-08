@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260802-17" />
+<link rel="stylesheet" href="styles.css?v=20260905-18" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* ===== Card reordering ===== */
@@ -222,6 +222,115 @@
   .pl-mode-btn { flex: 0 0 auto; cursor: pointer; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); font-weight: 700; font-size: 11px; border-radius: 6px; padding: 6px 8px; white-space: nowrap; min-width: 56px; }
   .pl-mode-btn.acre { background: var(--accent); color: #1a1a1a; border-color: var(--accent); }
   .pl-exp-hint { grid-column: 2; font-size: 10px; color: var(--muted); text-align: right; min-height: 12px; margin-top: 2px; }
+
+  /* ===== FIELD GUIDE / HANDBOOK ===== */
+  .hb-toc { padding: 4px 0 40px; }
+  .hb-intro { padding: 4px 4px 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .hb-intro h2 { margin: 0 0 8px; color: var(--accent); }
+  .hb-intro p { margin: 4px 0; color: var(--muted); font-size: 14px; }
+  .hb-source { font-size: 12px; }
+  .hb-source a { color: var(--accent); text-decoration: none; }
+  .hb-source a:hover { text-decoration: underline; }
+
+  .hb-group { margin-bottom: 24px; }
+  .hb-group-title {
+    margin: 0 0 10px; padding: 4px 8px;
+    font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--muted); border-left: 3px solid var(--accent);
+  }
+
+  .hb-cards {
+    display: grid; gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+  .hb-card {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; min-height: 56px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; text-align: left;
+    color: var(--text); font-family: inherit;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .hb-card:hover, .hb-card:active { background: var(--panel-2); border-color: var(--accent); }
+  .hb-card-id {
+    flex: 0 0 auto; font-size: 18px; font-weight: 700; color: var(--accent);
+    min-width: 28px; text-align: center;
+  }
+  .hb-card-title { flex: 1; font-size: 14px; font-weight: 600; line-height: 1.3; }
+
+  /* Reader view */
+  .hb-reader { padding: 4px 0 40px; }
+  .hb-reader-header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding-bottom: 12px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: calc(52px + 46px + var(--safe-top));
+    background: var(--bg); z-index: 5;
+  }
+  .hb-back-btn { flex: 0 0 auto; font-size: 13px; }
+  .hb-current-title { flex: 1; margin: 0; font-size: 16px; color: var(--text); }
+
+  .hb-content { padding: 0 4px; max-width: 900px; }
+  .hb-content h1 { font-size: 24px; margin: 0 0 16px; color: var(--text); }
+  .hb-content h2 { font-size: 20px; margin: 28px 0 12px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .hb-content h3 { font-size: 17px; margin: 20px 0 10px; color: var(--text); }
+  .hb-content h4 { font-size: 15px; margin: 16px 0 8px; color: var(--muted); }
+  .hb-content p { margin: 0 0 12px; line-height: 1.55; }
+  .hb-content ul, .hb-content ol { margin: 0 0 12px; padding-left: 24px; }
+  .hb-content li { margin: 4px 0; line-height: 1.5; }
+  .hb-content li input[type="checkbox"] { margin-right: 6px; }
+  .hb-content code {
+    background: var(--panel-2); padding: 2px 6px; border-radius: 4px;
+    font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--text);
+  }
+  .hb-content pre {
+    background: var(--panel-2); padding: 12px; border-radius: 6px;
+    overflow-x: auto; margin: 0 0 12px; border: 1px solid var(--border);
+  }
+  .hb-content pre code { background: transparent; padding: 0; }
+  .hb-content blockquote {
+    border-left: 3px solid var(--accent); padding: 4px 12px; margin: 0 0 12px;
+    background: var(--panel-2); color: var(--muted);
+  }
+  .hb-content table {
+    border-collapse: collapse; width: 100%; margin: 0 0 16px;
+    font-size: 13px; display: block; overflow-x: auto;
+  }
+  .hb-content thead { background: var(--panel-2); }
+  .hb-content th, .hb-content td {
+    border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+    vertical-align: top;
+  }
+  .hb-content th { font-weight: 700; }
+  .hb-content a { color: var(--accent); text-decoration: none; }
+  .hb-content a:hover { text-decoration: underline; }
+  .hb-content hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+  .hb-content strong { color: var(--text); }
+
+  .hb-loading { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 15px; }
+  .hb-error {
+    padding: 20px; background: var(--panel); border: 1px solid var(--red); border-radius: 8px;
+    color: var(--text); margin: 20px 0;
+  }
+  .hb-error h3 { margin: 0 0 12px; color: var(--red); }
+  .hb-error code { font-size: 12px; word-break: break-all; }
+
+  .hb-nav-buttons {
+    display: flex; justify-content: space-between; gap: 12px;
+    margin-top: 32px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .hb-nav-btn { flex: 1; max-width: 45%; font-size: 12px; text-align: center; }
+
+  /* Mobile refinements */
+  @media (max-width: 640px) {
+    .hb-cards { grid-template-columns: 1fr; }
+    .hb-current-title { font-size: 14px; }
+    .hb-content h1 { font-size: 20px; }
+    .hb-content h2 { font-size: 17px; }
+    .hb-content h3 { font-size: 15px; }
+  }
 </style>
 </head>
 <body>
@@ -256,6 +365,7 @@
   <button class="tab" data-tab="reports">Reports</button>
   <button class="tab" data-tab="season">Season</button>
   <button class="tab" data-tab="pl">Profit &amp; Loss</button>
+  <button class="tab" data-tab="handbook">Field Guide</button>
 </nav>
 
 <!-- ============== MAIN ============== -->
@@ -268,7 +378,7 @@
       <div class="map-col">
       <div class="map-toggle-bar">
         <button id="btnToggleMetrics" class="map-toggle-btn" title="Show/Hide metrics">���� Hide Metrics</button>
-        <button id="btnExpandMap" class="map-toggle-btn" title="Expand map to full screen">⛶ Expand Map</button>
+        <button id="btnExpandMap" class="map-toggle-btn" title="Expand map to full screen">��� Expand Map</button>
       </div>
       <div id="map"></div>
       </div><!-- /.map-col -->
@@ -1047,6 +1157,28 @@
   </div>
 
   <div id="plFields"></div>
+  <div id="plFields"></div>
+</section>
+
+<!-- ===== FIELD GUIDE / HANDBOOK TAB ===== -->
+<section id="tab-handbook" class="tab-panel">
+  <!-- TABLE OF CONTENTS (default view) -->
+  <div id="hbTOC" class="hb-toc">
+    <!-- Populated by handbook.js on first tab open -->
+  </div>
+
+  <!-- READER VIEW (shown when a section is selected) -->
+  <div id="hbReader" class="hb-reader" style="display:none;">
+    <div class="hb-reader-header">
+      <button id="hbBackToTOC" class="btn btn-ghost hb-back-btn">← All sections</button>
+      <h2 id="hbCurrentTitle" class="hb-current-title"></h2>
+    </div>
+    <div id="hbContent" class="hb-content markdown-body"></div>
+    <div class="hb-nav-buttons">
+      <button id="hbPrev" class="btn btn-ghost hb-nav-btn">← Previous</button>
+      <button id="hbNext" class="btn btn-ghost hb-nav-btn">Next →</button>
+    </div>
+  </div>
 </section>
 
 </main>
@@ -1335,11 +1467,11 @@
   </div>
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260802-17"></script>
-<script src="app.js?v=20260802-17"></script>
-<script src="uxenhancements.js?v=20260802-17"></script>
-<script src="asapplied.js?v=20260802-17"></script>
-<script src="handbook.js?v=20260802-17"></script>
+<script src="config.js?v=20260905-18"></script>
+<script src="app.js?v=20260905-18"></script>
+<script src="uxenhancements.js?v=20260905-18"></script>
+<script src="asapplied.js?v=20260905-18"></script>
+<script src="handbook.js?v=20260905-18"></script>
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
   (function () {
