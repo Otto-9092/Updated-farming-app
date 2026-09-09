@@ -758,18 +758,62 @@
   }
 
   // ----------------------------------------------------------
-  // DIALOG HELPERS — use app.js's openDlg/closeDlg if present,
-  // otherwise fall back to native <dialog>.showModal().
+  // DIALOG HELPERS — use native <dialog>.showModal() first, then
+  // fall back to a CSS-overlay shim if the browser doesn't support
+  // <dialog>. NOTE: we DO NOT call app.js's openDlg/closeDlg here
+  // because those work on a different overlay pattern (hidden-class
+  // toggles on a <div>) and are shaped for string IDs, not <dialog>
+  // elements. Trying to use them here just silently no-ops.
   // ----------------------------------------------------------
   function openAnyDialog(dlg) {
-    if (typeof window.openDlg === "function") { try { window.openDlg(dlg); return; } catch (e) {} }
-    if (dlg.showModal) { try { dlg.showModal(); return; } catch (e) {} }
+    if (!dlg) return;
+    // First choice: native <dialog>.showModal() — modern Chrome / Safari / Firefox / WebView
+    if (typeof dlg.showModal === "function") {
+      try {
+        if (!dlg.open) dlg.showModal();
+        return;
+      } catch (e) {
+        // showModal() throws if dlg isn't in the DOM yet, or on old iOS — fall through
+        console.warn("[SeedTag] showModal failed, falling back to overlay:", e);
+      }
+    }
+    // Fallback: CSS overlay. Force-visible via inline styles so we don't depend on the
+    // browser's default <dialog> stylesheet (which some old WebViews get wrong).
     dlg.setAttribute("open", "");
+    dlg.style.display        = "block";
+    dlg.style.position       = "fixed";
+    dlg.style.top            = "50%";
+    dlg.style.left           = "50%";
+    dlg.style.transform      = "translate(-50%, -50%)";
+    dlg.style.zIndex         = "10000";
+    dlg.style.margin         = "0";
+    dlg.style.maxHeight      = "90vh";
+    dlg.style.overflow       = "auto";
+    // Add a backdrop <div> since ::backdrop only works with the native dialog
+    var backdrop = document.getElementById("seedDlgBackdrop");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.id = "seedDlgBackdrop";
+      backdrop.style.cssText =
+        "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;";
+      document.body.appendChild(backdrop);
+    } else {
+      backdrop.style.display = "block";
+    }
+    dlg.dataset.shimmed = "1";
   }
   function closeAnyDialog(dlg) {
-    if (typeof window.closeDlg === "function") { try { window.closeDlg(dlg); return; } catch (e) {} }
-    if (dlg.close) { try { dlg.close(); return; } catch (e) {} }
+    if (!dlg) return;
+    // Native path
+    if (typeof dlg.close === "function" && dlg.open && dlg.dataset.shimmed !== "1") {
+      try { dlg.close(); return; } catch (e) {}
+    }
+    // Shim path
     dlg.removeAttribute("open");
+    dlg.style.display = "none";
+    delete dlg.dataset.shimmed;
+    var backdrop = document.getElementById("seedDlgBackdrop");
+    if (backdrop) backdrop.style.display = "none";
   }
 
   // ----------------------------------------------------------
