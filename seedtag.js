@@ -30,6 +30,132 @@
 
   var CROP_OPTIONS = ["Corn", "Soybean", "Wheat", "Sorghum", "Sunflower", "Alfalfa", "Other"];
 
+  // ==========================================================
+  // DEBUG OVERLAY — on-screen event log for iPhone / iPad
+  // ----------------------------------------------------------
+  // Turn ON:  add ?seeddebug=1 to the URL, OR run in Safari address bar:
+  //           javascript:localStorage.setItem('seedDebug','1');location.reload();
+  // Turn OFF: tap the ❌ on the overlay, or run:
+  //           javascript:localStorage.removeItem('seedDebug');location.reload();
+  // ==========================================================
+  var _debugOn = false;
+  try {
+    _debugOn = /[?&]seeddebug=1/.test(location.search) ||
+               localStorage.getItem("seedDebug") === "1";
+  } catch (e) {}
+  var _debugLog = [];
+  var _debugHost = null;
+  var _debugBody = null;
+
+  function dbg(tag, data) {
+    var stamp = new Date().toISOString().slice(11, 23);
+    var line = "[" + stamp + "] " + tag;
+    if (data !== undefined) {
+      try {
+        line += " — " + (typeof data === "string" ? data : JSON.stringify(data));
+      } catch (e) { line += " — (unstringifiable: " + e.message + ")"; }
+    }
+    _debugLog.push(line);
+    if (_debugLog.length > 200) _debugLog.shift();
+    try { console.log("[SeedTag]", tag, data); } catch (e) {}
+    renderDebugPanel();
+  }
+
+  function renderDebugPanel() {
+    if (!_debugOn) return;
+    if (!_debugHost) return;   // panel not built yet
+    if (!_debugBody) return;
+    _debugBody.textContent = _debugLog.slice(-40).join("\n");
+    _debugBody.scrollTop = _debugBody.scrollHeight;
+  }
+
+  function buildDebugPanel() {
+    if (!_debugOn) return;
+    if (_debugHost) return;
+    _debugHost = document.createElement("div");
+    _debugHost.id = "seedDebugPanel";
+    _debugHost.style.cssText = [
+      "position:fixed",
+      "left:8px",
+      "right:8px",
+      "bottom:8px",
+      "max-height:45vh",
+      "z-index:99999",
+      "background:rgba(20,20,20,0.92)",
+      "color:#7fff7f",
+      "font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace",
+      "border:1px solid #4c4",
+      "border-radius:8px",
+      "padding:6px 8px",
+      "display:flex",
+      "flex-direction:column",
+      "gap:4px",
+      "box-shadow:0 4px 16px rgba(0,0,0,0.5)"
+    ].join(";");
+    var header = document.createElement("div");
+    header.style.cssText = "display:flex;gap:6px;align-items:center;color:#eee;font-weight:bold;";
+    var title = document.createElement("span");
+    title.textContent = "🔍 SeedTag Debug";
+    title.style.flex = "1";
+    var btnCopy = document.createElement("button");
+    btnCopy.textContent = "📋 Copy";
+    btnCopy.style.cssText = "font:11px sans-serif;padding:2px 6px;border-radius:4px;background:#333;color:#fff;border:1px solid #666;";
+    btnCopy.addEventListener("click", function () {
+      var txt = _debugLog.join("\n");
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(function () {
+          btnCopy.textContent = "✓ Copied";
+          setTimeout(function () { btnCopy.textContent = "📋 Copy"; }, 1200);
+        }, function () { btnCopy.textContent = "❌ "; });
+      } else {
+        // Fallback: show in a prompt so user can long-press to copy
+        window.prompt("Copy the log below:", txt);
+      }
+    });
+    var btnClear = document.createElement("button");
+    btnClear.textContent = "🧹 Clear";
+    btnClear.style.cssText = btnCopy.style.cssText;
+    btnClear.addEventListener("click", function () { _debugLog.length = 0; renderDebugPanel(); });
+    var btnClose = document.createElement("button");
+    btnClose.textContent = "❌";
+    btnClose.style.cssText = btnCopy.style.cssText;
+    btnClose.addEventListener("click", function () {
+      try { localStorage.removeItem("seedDebug"); } catch (e) {}
+      _debugHost.remove();
+      _debugHost = null;
+      _debugOn = false;
+    });
+    header.appendChild(title);
+    header.appendChild(btnCopy);
+    header.appendChild(btnClear);
+    header.appendChild(btnClose);
+    _debugHost.appendChild(header);
+    _debugBody = document.createElement("pre");
+    _debugBody.style.cssText = "margin:0;overflow:auto;flex:1;white-space:pre-wrap;word-break:break-word;color:#7fff7f;";
+    _debugHost.appendChild(_debugBody);
+    (document.body || document.documentElement).appendChild(_debugHost);
+    renderDebugPanel();
+  }
+
+  // Catch every uncaught error and unhandled promise rejection
+  if (_debugOn) {
+    window.addEventListener("error", function (e) {
+      dbg("🚨 window.error", {
+        message: e.message,
+        filename: e.filename,
+        line: e.lineno,
+        col: e.colno,
+        stack: e.error && e.error.stack ? String(e.error.stack).slice(0, 400) : null
+      });
+    });
+    window.addEventListener("unhandledrejection", function (e) {
+      var r = e.reason;
+      dbg("🚨 unhandledrejection", {
+        message: r && r.message ? r.message : String(r),
+        stack: r && r.stack ? String(r.stack).slice(0, 400) : null
+      });
+    });
+  }
   // ----------------------------------------------------------
   // TINY DOM HELPERS (avoid clashing with app.js's $)
   // ----------------------------------------------------------
@@ -450,7 +576,15 @@
 
     byId("btnScanSeedTag").addEventListener("click", function () { byId("seedTagCamera").click(); });
     byId("seedTagCamera").addEventListener("change", onCameraFile);
-    byId("btnAddSeedLotManual").addEventListener("click", function () { openReviewDialog(null, null, null, null); });
+    byId("btnAddSeedLotManual").addEventListener("click", function () {
+      dbg("👆 tap: Add Lot Manually");
+      try {
+        openReviewDialog(null, null, null, null);
+        dbg("✓ openReviewDialog returned normally");
+      } catch (err) {
+        dbg("🚨 openReviewDialog threw", { message: err && err.message, stack: err && err.stack && String(err.stack).slice(0, 400) });
+      }
+    });
     byId("btnExportSeedInvCSV").addEventListener("click", exportInventoryCSV);
 
     renderList();
@@ -635,6 +769,7 @@
   //   existing: an existing inventory entry to edit (or null)
   // ----------------------------------------------------------
   function openReviewDialog(photo, parsed, ocrMeta, existing) {
+    dbg("openReviewDialog:start", { hasPhoto: !!photo, isEdit: !!existing });
     var isEdit = !!existing;
     var seed = existing || {};
     var p = parsed || {};
@@ -645,8 +780,12 @@
 
     var dlg = byId("seedReviewDlg");
     if (!dlg) {
+      dbg("openReviewDialog:creating <dialog> element");
       dlg = h("dialog", { id: "seedReviewDlg", class: "seed-dlg" });
       document.body.appendChild(dlg);
+      dbg("openReviewDialog:dialog appended", { inDom: !!document.getElementById("seedReviewDlg"), showModalType: typeof dlg.showModal });
+    } else {
+      dbg("openReviewDialog:reusing existing dialog", { open: dlg.open });
     }
     var confVal = ocrMeta && typeof ocrMeta.confidence === "number" ? Math.round(ocrMeta.confidence) : null;
     dlg.innerHTML =
@@ -672,7 +811,9 @@
         '</div>' +
       '</div>';
 
+    dbg("openReviewDialog:calling openAnyDialog");
     openAnyDialog(dlg);
+    dbg("openReviewDialog:openAnyDialog returned", { hasOpenAttr: dlg.hasAttribute("open"), dlgOpen: dlg.open, computedDisplay: getComputedStyle(dlg).display, computedVisibility: getComputedStyle(dlg).visibility });
 
     byId("srCancel").addEventListener("click", function () { closeAnyDialog(dlg); });
     byId("srSave").addEventListener("click", function () {
@@ -766,16 +907,21 @@
   // elements. Trying to use them here just silently no-ops.
   // ----------------------------------------------------------
   function openAnyDialog(dlg) {
-    if (!dlg) return;
+    if (!dlg) { dbg("openAnyDialog:null dlg"); return; }
     // First choice: native <dialog>.showModal() — modern Chrome / Safari / Firefox / WebView
     if (typeof dlg.showModal === "function") {
+      dbg("openAnyDialog:trying showModal", { alreadyOpen: dlg.open });
       try {
         if (!dlg.open) dlg.showModal();
+        dbg("openAnyDialog:showModal succeeded", { open: dlg.open });
         return;
       } catch (e) {
         // showModal() throws if dlg isn't in the DOM yet, or on old iOS — fall through
+        dbg("openAnyDialog:showModal threw — falling back", { message: e && e.message });
         console.warn("[SeedTag] showModal failed, falling back to overlay:", e);
       }
+    } else {
+      dbg("openAnyDialog:no showModal available — using shim");
     }
     // Fallback: CSS overlay. Force-visible via inline styles so we don't depend on the
     // browser's default <dialog> stylesheet (which some old WebViews get wrong).
@@ -801,6 +947,7 @@
       backdrop.style.display = "block";
     }
     dlg.dataset.shimmed = "1";
+    dbg("openAnyDialog:shim applied", { hasOpen: dlg.hasAttribute("open"), display: dlg.style.display });
   }
   function closeAnyDialog(dlg) {
     if (!dlg) return;
@@ -1019,7 +1166,14 @@
   // them in sync as the user navigates.
   // ----------------------------------------------------------
   ready(function () {
-    ensureCard();
+    buildDebugPanel();   // no-op unless debug is turned on
+    dbg("init:ready", { debugOn: _debugOn, ua: navigator.userAgent.slice(0, 80) });
+    try {
+      ensureCard();
+      dbg("init:ensureCard done", { cardPresent: !!document.getElementById("seedInvCard"), btnPresent: !!document.getElementById("btnAddSeedLotManual") });
+    } catch (err) {
+      dbg("🚨 ensureCard threw", { message: err && err.message });
+    }
     // The planter fields live inside a modal that may not yet be in the DOM at load,
     // so try now, then retry on any tab click and on any modal open.
     ensurePlanterPicker();
