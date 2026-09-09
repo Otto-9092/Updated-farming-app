@@ -8,7 +8,7 @@
    first successful load so seed-tag scanning works offline.
    Bump CACHE_VERSION whenever you ship new files.
    ============================================================ */
-const CACHE_VERSION = "opio-2026.09.08-19";
+const CACHE_VERSION = "opio-2026.09.08-20";
 const CACHE_NAME = "opio-cache-" + CACHE_VERSION;
 const HANDBOOK_CACHE_NAME = "opio-handbook-" + CACHE_VERSION;
 const TESS_CACHE_NAME = "opio-tesseract-" + CACHE_VERSION;
@@ -17,14 +17,14 @@ const TESS_CACHE_NAME = "opio-tesseract-" + CACHE_VERSION;
 // versions referenced in index.html so the right copies are precached.
 const CORE_ASSETS = [
   "./",
-  "./styles.css?v=20260908-19",
-  "./seedtag.css?v=20260908-19",
-  "./config.js?v=20260908-19",
-  "./app.js?v=20260908-19",
-  "./uxenhancements.js?v=20260908-19",
-  "./asapplied.js?v=20260908-19",
-  "./seedtag.js?v=20260908-19",
-  "./handbook.js?v=20260908-19",
+  "./styles.css?v=20260908-20",
+  "./seedtag.css?v=20260908-20",
+  "./config.js?v=20260908-20",
+  "./app.js?v=20260908-20",
+  "./uxenhancements.js?v=20260908-20",
+  "./asapplied.js?v=20260908-20",
+  "./seedtag.js?v=20260908-20",
+  "./handbook.js?v=20260908-20",
   "./manifest.json",
   "./icon-16.png",
   "./icon-32.png",
