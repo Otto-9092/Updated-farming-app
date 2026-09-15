@@ -347,8 +347,8 @@
   <div class="brand">
     <span class="logo">🚜</span>
     <div>
-      <div class="title">Diamond O Farms</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.08.02 · 16</span></div>
+      <div class="title">OπO Farming</div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.09.08 · 20</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -378,8 +378,8 @@
       <div class="operate-layout">
       <div class="map-col">
       <div class="map-toggle-bar">
-        <button id="btnToggleMetrics" class="map-toggle-btn" title="Show/Hide metrics">���� Hide Metrics</button>
-        <button id="btnExpandMap" class="map-toggle-btn" title="Expand map to full screen">��� Expand Map</button>
+        <button id="btnToggleMetrics" class="map-toggle-btn" title="Show/Hide metrics">👁️ Hide Metrics</button>
+        <button id="btnExpandMap" class="map-toggle-btn" title="Expand map to full screen">⛶ Expand Map</button>
       </div>
       <div id="map"></div>
       </div><!-- /.map-col -->
@@ -408,7 +408,7 @@
 </div>
       </div><!-- /.operate-layout -->
     </div><!-- /.map-wrap -->
-      
+
     <!-- Section Control (sprayer only) -->
     <div class="card" id="sectionControlCard">
       <div class="card-title">Section Control</div>
@@ -432,7 +432,7 @@
     <div class="card hidden" id="tankLoadsCard">
       <div class="card-title" id="tankLoadsTitle">Tank &amp; Loads</div>
       <div class="btn-row">
-        <button id="btnRefill" class="btn btn-primary hidden">���� Refill Tank</button>
+        <button id="btnRefill" class="btn btn-primary hidden">🚰 Refill Tank</button>
         <button id="btnUnload" class="btn btn-primary hidden">📤 Unload Grain</button>
         <button id="btnBale" class="btn btn-primary hidden">🌾 + Bale</button>
       </div>
@@ -667,7 +667,7 @@
       </div>
     </div>
 
-    
+
   </section>
 
 <!-- ===== TOOLS TAB ===== -->
@@ -675,7 +675,7 @@
   <div class="card">
     <div class="card-title">🧰 Tools</div>
     <div class="hint">
-      Farm utilities ���� calculators and lookups. The Mix Calculator and
+      Farm utilities — calculators and lookups. The Mix Calculator and
       Cost &amp; Profit tools moved here from “Field &amp; Equipment”.
     </div>
   </div>
@@ -809,7 +809,7 @@
 
     <div class="btn-row">
       <button id="btnGpsDist" class="btn btn-primary">Measure A → B</button>
-      <button id="btnGpsMaps" class="btn">���️ Open A in Maps</button>
+      <button id="btnGpsMaps" class="btn">🗺️ Open A in Maps</button>
       <button id="btnGpsReset" class="btn btn-ghost">Clear</button>
     </div>
 
@@ -953,7 +953,7 @@
           <select id="seedPresetSel" class="mix-unit"><option value="">— None —</option></select>
         </label>
         <div class="btn-row" style="margin:0; align-self:flex-end;">
-          <button id="btnSeedLoad" class="btn">�� Load</button>
+          <button id="btnSeedLoad" class="btn">📂 Load</button>
           <button id="btnSeedRename" class="btn">✏️ Rename</button>
           <button id="btnSeedDelete" class="btn btn-ghost">🗑️</button>
         </div>
@@ -1158,7 +1158,6 @@
   </div>
 
   <div id="plFields"></div>
-  <div id="plFields"></div>
 </section>
 
 <!-- ===== FIELD GUIDE / HANDBOOK TAB ===== -->
@@ -1252,7 +1251,6 @@
         <label>Product Name <input id="sdProductName" type="text" placeholder="e.g. 28-0-0" /></label>
       </div>
 
-      <!-- ❓ OTHER -->
       <!-- 🌿 SWATHER -->
       <div id="subSwather" class="eq-submenu hidden">
         <label>Cutting Width (ft) <input id="swWidth" type="number" value="16" step="0.5" min="0" /></label>
@@ -1344,7 +1342,7 @@
     </div>
     <div class="dlg-footer">
       <button id="titleDlgCancel" class="btn btn-ghost">Cancel</button>
-      <button id="titleDlgSave" class="btn btn-primary">���� Save</button>
+      <button id="titleDlgSave" class="btn btn-primary">💾 Save</button>
     </div>
   </div>
 </div>
@@ -1465,7 +1463,13 @@
       </label>
       <div id="notePreview" class="note-preview"></div>
     </div>
+    <div class="dlg-footer">
+      <button id="noteDlgCancel" class="btn btn-ghost">Cancel</button>
+      <button id="noteDlgSave" class="btn btn-primary">💾 Save Note</button>
+    </div>
   </div>
+</div>
+
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="config.js?v=20260908-20"></script>
@@ -1474,6 +1478,9 @@
 <script src="asapplied.js?v=20260908-20"></script>
 <script src="seedtag.js?v=20260908-20"></script>
 <script src="handbook.js?v=20260908-20"></script>
+
+<!-- Google Maps loader (uses key from config.js) -->
+<script>
   (function () {
     var s = document.createElement('script');
     s.src = "https://maps.googleapis.com/maps/api/js?key=" + window.GOOGLE_MAPS_API_KEY +
