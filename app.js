@@ -2942,7 +2942,7 @@ if ($("btnOrient")) $("btnOrient").addEventListener("click", () => {
   state.headingUp = !state.headingUp;
   const btn = $("btnOrient");
   if (state.headingUp) {
-    btn.textContent = "🧭 Heading-Up";
+    btn.textContent = "��� Heading-Up";
     btn.classList.add("active-toggle");
   } else {
     btn.textContent = "🧭 North-Up";
@@ -5443,7 +5443,7 @@ function buildMerge(cloud) {
   var r = mergeLibrary(localReps,   cReps,   "savedAt",   ltReps,   ctReps);
   var s = mergeLibrary(localSeed,   cSeed,   "_modified", ltSeed,   ctSeed);
   var p = mergeLibrary(localPL,     cPL,     "_modified", ltPL,     ctPL);
-  var si = mergeLibrary(localSeedInv, cSeedInv, "_updated", ltSeedInv, ctSeedInv);
+  var si = mergeLibrary(localSeedInv, cSeedInv, "_modified", ltSeedInv, ctSeedInv);
 
   var conflicts = []
     .concat(f.conflicts.map(function (c) { c.lib = "fields";    c.label = "Field";   return c; }))
