@@ -89,6 +89,7 @@ const LS_REPS   = "dof_reports";
 const LS_FIELDS = "dof_fields_library";
 const LS_SEED   = "dof_seed_presets";
 const LS_PL     = "dof_pl_library";   // Profit & Loss fields (keyed object, syncs like the others)
+const LS_SEED_INV = "dof_seed_inventory";   // Seed tag inventory (keyed by lot id, syncs across devices — photos stay local)
 
 // ===== DOM helper =====
 const $ = (id) => document.getElementById(id);
@@ -4027,6 +4028,7 @@ const LS_TOMB_EQ     = "dof_tomb_equipment";
 const LS_TOMB_REPS   = "dof_tomb_reports";
 const LS_TOMB_SEED   = "dof_tomb_seed";
 const LS_TOMB_PL     = "dof_tomb_pl";
+const LS_TOMB_SEED_INV = "dof_tomb_seed_inventory";   // deletions of seed inventory lots (sync-safe)
 const TOMB_MAX_AGE_DAYS = 90;   // expire old tombstones so they don't pile up
 
 function recordTombstone(lsKey, itemKey) {
@@ -4054,8 +4056,13 @@ function updateDataStats() {
   const equip  = Object.keys(JSON.parse(localStorage.getItem(LS_EQ)     || "{}")).length;
   const reps   = Object.keys(JSON.parse(localStorage.getItem(LS_REPS)   || "{}")).length;
   const seeds  = Object.keys(JSON.parse(localStorage.getItem(LS_SEED)   || "{}")).length;
+  const seedInv = Object.keys(JSON.parse(localStorage.getItem(LS_SEED_INV) || "{}")).length;
   el.innerHTML = `Currently stored on this device:<br>
     <b>${fields}</b> field${fields !== 1 ? "s" : ""} ·
+    <b>${equip}</b> machine${equip !== 1 ? "s" : ""} ·
+    <b>${reps}</b> report${reps !== 1 ? "s" : ""} ·
+    <b>${seeds}</b> seed preset${seeds !== 1 ? "s" : ""} ·
+    <b>${seedInv}</b> seed lot${seedInv !== 1 ? "s" : ""}`;
     <b>${equip}</b> machine${equip !== 1 ? "s" : ""} ·
     <b>${reps}</b> report${reps !== 1 ? "s" : ""} ·
     <b>${seeds}</b> seed preset${seeds !== 1 ? "s" : ""}`;
@@ -4073,6 +4080,24 @@ function buildBackup(includePhotos) {
     reports:   JSON.parse(localStorage.getItem(LS_REPS)   || "{}"),
     seedPresets: JSON.parse(localStorage.getItem(LS_SEED) || "{}"),
     profitLoss:  JSON.parse(localStorage.getItem(LS_PL)   || "{}"),
+    // Seed inventory: metadata + OCR text sync across devices; tag photos stay
+    // local on the scanning device (same policy as field notes) to keep sync
+    // payloads small. Strip the photo-related fields defensively.
+    seedInventory: (function () {
+      var raw = JSON.parse(localStorage.getItem(LS_SEED_INV) || "{}");
+      var out = {};
+      Object.keys(raw).forEach(function (k) {
+        var e = raw[k] || {};
+        var copy = {};
+        Object.keys(e).forEach(function (f) {
+          // never sync inline photo dataURLs or the IndexedDB photoId (device-local)
+          if (f === "photo" || f === "photoDataUrl" || f === "tagPhotoId") return;
+          copy[f] = e[f];
+        });
+        out[k] = copy;
+      });
+      return out;
+    })(),
   };
   if (!includePhotos) return base;
   return photoExportAll().then(function (photos) {
@@ -4096,6 +4121,7 @@ $("btnExportAll")?.addEventListener("click", async () => {
     reports:   Object.keys(backup.reports).length,
     seedPresets: Object.keys(backup.seedPresets || {}).length,
     profitLoss: Object.keys(backup.profitLoss || {}).length,
+    seedInventory: Object.keys(backup.seedInventory || {}).length,
   };
   appAlert(`✅ Exported successfully!\n\n` +
         `${totals.fields} fields\n` +
@@ -4103,6 +4129,7 @@ $("btnExportAll")?.addEventListener("click", async () => {
         `${totals.reports} reports\n` +
         `${totals.seedPresets} seed preset${totals.seedPresets !== 1 ? "s" : ""}\n` +
         `${totals.profitLoss} P&L field${totals.profitLoss !== 1 ? "s" : ""}\n` +
+        `${totals.seedInventory} seed lot${totals.seedInventory !== 1 ? "s" : ""}\n` +
         `${photoCount} photo${photoCount !== 1 ? "s" : ""}\n\n` +
         `File: ${filename}`, "Backup exported");
 });
@@ -4175,6 +4202,7 @@ async function handleImport(data) {
     reports:   Object.keys(data.reports   || {}).length,
     seedPresets: Object.keys(data.seedPresets || {}).length,
     profitLoss: Object.keys(data.profitLoss || {}).length,
+    seedInventory: Object.keys(data.seedInventory || {}).length,
   };
   const current = {
     fields:    Object.keys(JSON.parse(localStorage.getItem(LS_FIELDS) || "{}")).length,
@@ -4182,6 +4210,7 @@ async function handleImport(data) {
     reports:   Object.keys(JSON.parse(localStorage.getItem(LS_REPS)   || "{}")).length,
     seedPresets: Object.keys(JSON.parse(localStorage.getItem(LS_SEED) || "{}")).length,
     profitLoss: Object.keys(JSON.parse(localStorage.getItem(LS_PL) || "{}")).length,
+    seedInventory: Object.keys(JSON.parse(localStorage.getItem(LS_SEED_INV) || "{}")).length,
   };
 
   const summary =
@@ -4190,13 +4219,15 @@ async function handleImport(data) {
     `  • ${incoming.equipment} machines\n` +
     `  • ${incoming.reports} reports\n` +
     `  • ${incoming.seedPresets} seed presets\n` +
-    `  • ${incoming.profitLoss} P&L fields\n\n` +
+    `  • ${incoming.profitLoss} P&L fields\n` +
+    `  • ${incoming.seedInventory} seed lots\n\n` +
     `Currently on this device:\n` +
     `  • ${current.fields} fields\n` +
     `  • ${current.equipment} machines\n` +
     `  • ${current.reports} reports\n` +
     `  • ${current.seedPresets} seed presets\n` +
-    `  • ${current.profitLoss} P&L fields\n\n` +
+    `  • ${current.profitLoss} P&L fields\n` +
+    `  • ${current.seedInventory} seed lots\n\n` +
     `MERGE adds the backup's data and keeps yours.\n` +
     `REPLACE deletes everything here first, then loads the backup.`;
   // OK = Merge (safe default), Cancel = go to Replace path
@@ -4235,7 +4266,7 @@ function performImport(data, mode) {
     localStorage.setItem(LS_EQ,     JSON.stringify(data.equipment || {}));
     localStorage.setItem(LS_SEED,   JSON.stringify(data.seedPresets || {}));
     localStorage.setItem(LS_PL,     JSON.stringify(data.profitLoss  || {}));
-    localStorage.setItem(LS_SEED,   JSON.stringify(data.seedPresets || {}));
+    localStorage.setItem(LS_SEED_INV, JSON.stringify(data.seedInventory || {}));
   } else {
     // merge: incoming keys win on conflict
     const mergeLib = (lsKey, incoming) => {
@@ -4248,6 +4279,7 @@ function performImport(data, mode) {
     mergeLib(LS_REPS,   data.reports);
     mergeLib(LS_SEED,   data.seedPresets);
     mergeLib(LS_PL,     data.profitLoss);
+    mergeLib(LS_SEED_INV, data.seedInventory);
   }
 
   // 3. Reload all UI
@@ -4257,7 +4289,8 @@ function performImport(data, mode) {
   if (typeof loadSeedPresetList === "function") loadSeedPresetList();
   if (typeof window.plRender === "function") window.plRender();
   updateDataStats();
-
+  if (typeof loadSeedPresetList === "function") loadSeedPresetList();
+  if (window.SeedTag && typeof window.SeedTag.refresh === "function") window.SeedTag.refresh();
   appAlert(`✅ Import complete (${mode === "replace" ? "REPLACED" : "MERGED"})!\n\n` +
         `Your previous data is saved as a rollback in case you need it.\n` +
         `To restore, open the browser console and run:\n\n` +
@@ -4275,11 +4308,13 @@ window.restoreRollback = async function () {
     localStorage.setItem(LS_EQ,     JSON.stringify(data.equipment || {}));
     localStorage.setItem(LS_REPS,   JSON.stringify(data.reports   || {}));
     localStorage.setItem(LS_SEED,   JSON.stringify(data.seedPresets || {}));
+    if (data.seedInventory) localStorage.setItem(LS_SEED_INV, JSON.stringify(data.seedInventory || {}));
     loadFieldsList();
     loadEquipmentList();
     loadReportsList();
     if (typeof loadSeedPresetList === "function") loadSeedPresetList();
-    updateDataStats();
+    if (typeof loadSeedPresetList === "function") loadSeedPresetList();
+    if (window.SeedTag && typeof window.SeedTag.refresh === "function") window.SeedTag.refresh();
     appAlert("✅ Rollback restored.", "Restored");
   } catch (e) {
     appAlert("Rollback file is corrupted: " + e.message, "Error");
@@ -5379,12 +5414,14 @@ function buildMerge(cloud) {
   var localReps   = JSON.parse(localStorage.getItem(LS_REPS)   || "{}");
   var localSeed   = JSON.parse(localStorage.getItem(LS_SEED)   || "{}");
   var localPL     = JSON.parse(localStorage.getItem(LS_PL)     || "{}");
+  var localSeedInv = JSON.parse(localStorage.getItem(LS_SEED_INV) || "{}");
 
   var cFields = (cloud && cloud.fields)    || {};
   var cEq     = (cloud && cloud.equipment) || {};
   var cReps   = (cloud && cloud.reports)   || {};
   var cSeed   = (cloud && cloud.seedPresets) || {};
   var cPL     = (cloud && cloud.profitLoss) || {};
+  var cSeedInv = (cloud && cloud.seedInventory) || {};
 
   // Local + cloud tombstones (pruned of anything too old)
   var ltFields = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_FIELDS) || "{}"));
@@ -5392,29 +5429,33 @@ function buildMerge(cloud) {
   var ltReps   = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_REPS)   || "{}"));
   var ltSeed   = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_SEED)   || "{}"));
   var ltPL     = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_PL)     || "{}"));
+  var ltSeedInv = pruneTombstones(JSON.parse(localStorage.getItem(LS_TOMB_SEED_INV) || "{}"));
   var ctTomb   = (cloud && cloud.tombstones) || {};
   var ctFields = pruneTombstones(ctTomb.fields || {});
   var ctEq     = pruneTombstones(ctTomb.equipment || {});
   var ctReps   = pruneTombstones(ctTomb.reports || {});
   var ctSeed   = pruneTombstones(ctTomb.seedPresets || {});
   var ctPL     = pruneTombstones(ctTomb.profitLoss || {});
+  var ctSeedInv = pruneTombstones(ctTomb.seedInventory || {});
 
   var f = mergeLibrary(localFields, cFields, "_modified", ltFields, ctFields);
   var e = mergeLibrary(localEq,     cEq,     "_modified", ltEq,     ctEq);
   var r = mergeLibrary(localReps,   cReps,   "savedAt",   ltReps,   ctReps);
   var s = mergeLibrary(localSeed,   cSeed,   "_modified", ltSeed,   ctSeed);
   var p = mergeLibrary(localPL,     cPL,     "_modified", ltPL,     ctPL);
+  var si = mergeLibrary(localSeedInv, cSeedInv, "_updated", ltSeedInv, ctSeedInv);
 
   var conflicts = []
     .concat(f.conflicts.map(function (c) { c.lib = "fields";    c.label = "Field";   return c; }))
     .concat(e.conflicts.map(function (c) { c.lib = "equipment"; c.label = "Machine"; return c; }))
     .concat(r.conflicts.map(function (c) { c.lib = "reports";   c.label = "Report";  return c; }))
     .concat(s.conflicts.map(function (c) { c.lib = "seedPresets"; c.label = "Seed preset"; return c; }))
-    .concat(p.conflicts.map(function (c) { c.lib = "profitLoss"; c.label = "P&L field"; return c; }));
+    .concat(p.conflicts.map(function (c) { c.lib = "profitLoss"; c.label = "P&L field"; return c; }))
+    .concat(si.conflicts.map(function (c) { c.lib = "seedInventory"; c.label = "Seed lot"; return c; }));
 
   return {
-    merged: { fields: f.merged, equipment: e.merged, reports: r.merged, seedPresets: s.merged, profitLoss: p.merged },
-    tombstones: { fields: f.tombstones, equipment: e.tombstones, reports: r.tombstones, seedPresets: s.tombstones, profitLoss: p.tombstones },
+    merged: { fields: f.merged, equipment: e.merged, reports: r.merged, seedPresets: s.merged, profitLoss: p.merged, seedInventory: si.merged },
+    tombstones: { fields: f.tombstones, equipment: e.tombstones, reports: r.tombstones, seedPresets: s.tombstones, profitLoss: p.tombstones, seedInventory: si.tombstones },
     conflicts: conflicts
   };
 }
@@ -5436,6 +5477,7 @@ function saveMergedLocal(merged) {
   localStorage.setItem(LS_REPS,   JSON.stringify(merged.reports || {}));
   localStorage.setItem(LS_SEED,   JSON.stringify(merged.seedPresets || {}));
   localStorage.setItem(LS_PL,     JSON.stringify(merged.profitLoss || {}));
+  localStorage.setItem(LS_SEED_INV, JSON.stringify(merged.seedInventory || {}));
 }
 
 // Persist merged tombstones locally so future syncs keep propagating deletes.
@@ -5446,6 +5488,7 @@ function saveMergedTombstones(tomb) {
   localStorage.setItem(LS_TOMB_REPS,   JSON.stringify(tomb.reports || {}));
   localStorage.setItem(LS_TOMB_SEED,   JSON.stringify(tomb.seedPresets || {}));
   localStorage.setItem(LS_TOMB_PL,     JSON.stringify(tomb.profitLoss || {}));
+  localStorage.setItem(LS_TOMB_SEED_INV, JSON.stringify(tomb.seedInventory || {}));
 }
 // Produce a small human-readable summary of how two versions differ.
 function describeConflict(c) {
@@ -5455,7 +5498,8 @@ function describeConflict(c) {
     fields:    ["crop", "variety", "boundary", "cost"],
     equipment: ["type", "width"],
     reports:   ["name", "acres", "bushels", "gallons", "date"],
-    profitLoss: ["name", "crop", "acres", "yield", "price", "otherIncome"]
+    profitLoss: ["name", "crop", "acres", "yield", "price", "otherIncome"],
+    seedInventory: ["crop", "variety", "lotNumber", "seedsPerBag", "bagWeightLbs", "treatment", "bagsOnHand", "acresRemaining", "notes"]
   };
   var rowsOut = [];
   function fmt(v) {
@@ -5599,6 +5643,7 @@ function syncNow() {
         reports: mergedData.reports,
         seedPresets: mergedData.seedPresets,
         profitLoss: mergedData.profitLoss,
+        seedInventory: mergedData.seedInventory,
         tombstones: result.tombstones || {}
       };
       return DriveSync.upload(payload).then(function () {
@@ -5608,6 +5653,7 @@ function syncNow() {
         if (typeof loadReportsList === "function") loadReportsList();
         if (typeof loadSeedPresetList === "function") loadSeedPresetList();
         if (typeof window.plRender === "function") window.plRender();   // refresh P&L tab after sync
+        if (window.SeedTag && typeof window.SeedTag.refresh === "function") window.SeedTag.refresh();   // refresh Seed Inventory card + planter picker after sync
         if (typeof updateDataStats === "function") updateDataStats();
         var nowIso = new Date().toISOString();
         try { localStorage.setItem(LS_LAST_SYNCED, nowIso); } catch (e) {}
