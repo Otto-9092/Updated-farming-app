@@ -214,7 +214,7 @@
   function tombstone(id) {
     try {
       var t = JSON.parse(localStorage.getItem(LS_TOMB_INV) || "{}");
-      t[id] = nowMs();
+      t[id] = new Date().toISOString();   // ISO string so app.js's pruneTombstones + merge engine can parse it
       localStorage.setItem(LS_TOMB_INV, JSON.stringify(t));
     } catch (e) {}
   }
@@ -853,6 +853,7 @@
         scannedLon: existing ? existing.scannedLon : (ocrMeta && ocrMeta.fix ? ocrMeta.fix.lon : null),
         notes: notes,
         _updated: nowMs(),
+        _modified: new Date().toISOString(),   // ISO stamp for Drive sync conflict resolution
         _deleted: false
       };
 
@@ -1103,6 +1104,7 @@
       e.bagsOnHand = +newCount.toFixed(1);
       e.acresRemaining = newAcresRem != null ? +newAcresRem.toFixed(2) : null;
       e._updated = nowMs();
+      e._modified = new Date().toISOString();   // sync-friendly stamp so decrements propagate
       lib[lotId] = e;
       saveInv(lib);
       renderList();
