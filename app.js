@@ -4063,9 +4063,6 @@ function updateDataStats() {
     <b>${reps}</b> report${reps !== 1 ? "s" : ""} ·
     <b>${seeds}</b> seed preset${seeds !== 1 ? "s" : ""} ·
     <b>${seedInv}</b> seed lot${seedInv !== 1 ? "s" : ""}`;
-    <b>${equip}</b> machine${equip !== 1 ? "s" : ""} ·
-    <b>${reps}</b> report${reps !== 1 ? "s" : ""} ·
-    <b>${seeds}</b> seed preset${seeds !== 1 ? "s" : ""}`;
 }
 
 // Build the full backup object. includePhotos=true embeds IndexedDB photos
