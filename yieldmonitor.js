@@ -12,14 +12,16 @@
 // Depends only on globals app.js already defines:
 //   $, $id, openDlg, closeDlg, appAlert, appConfirm, state
 //
-// Storage (localStorage, syncs like every other library in this app):
-//   dof_ym_runs        — calibration run records, keyed by id
-//   dof_ym_lockedK     — locked calibration factors per crop
-//   dof_tomb_ym_runs   — tombstones for Drive sync of deleted runs
-//
 // Web Serial:
-//   • Android Chrome supports Web Serial API natively — no laptop needed.
-//   • iOS Safari does NOT support Web Serial — the tab still works for
+//   • REQUIRES A DESKTOP BROWSER (Chrome or Edge on Windows, macOS,
+//     Linux, or ChromeOS). Web Serial is NOT implemented in Chrome for
+//     Android — this was confirmed on-device 30/09/2026 on a Galaxy Tab
+//     S9 FE (SM-X518U, Chrome 154, Android 16). navigator.serial simply
+//     does not exist on mobile Chromium. The Wi-Fi/WebSocket transport
+//     (planned for v1.3+ firmware) is the mobile path — see the roadmap.
+//   • iOS Safari also does not support Web Serial.
+//   • On unsupported browsers the tab still works for browsing
+//     calibration history and manually entering pass data.
 //     browsing calibration history but the "Connect" button will explain
 //     that live capture requires a Chromium browser.
 //   • Connection is persisted via getPorts() so re-plugging the ESP32
@@ -209,11 +211,18 @@
   async function connectSensor(promptUser) {
     if (!webSerialSupported()) {
       appAlert(
-        "Web Serial isn't available in this browser.\n\n" +
-        "Yield Monitor live capture requires Chrome or Edge on Android, macOS, Windows, or Linux. " +
-        "iPad/iPhone Safari does not support USB serial devices.\n\n" +
-        "You can still browse calibration history and manually enter passes.",
-        "Browser not supported"
+  async function connectSensor(promptUser) {
+    if (!webSerialSupported()) {
+      appAlert(
+        "Web Serial live capture requires a DESKTOP browser " +
+        "(Chrome or Edge on Windows, macOS, Linux, or ChromeOS).\n\n" +
+        "Chrome for Android does NOT support Web Serial — plugging an " +
+        "ESP32 into the tablet via USB will not work, no matter the cable " +
+        "or OTG adapter. iPad/iPhone Safari is also unsupported.\n\n" +
+        "Mobile support is coming via Wi-Fi (planned firmware v1.3). " +
+        "Until then, run live capture from a laptop, or use this tab on " +
+        "the tablet to browse history and enter pass data manually.",
+        "Live capture needs a desktop browser"
       );
       return;
     }
@@ -387,12 +396,19 @@
     '        <button id="ymConnectBtn" class="btn btn-primary">Connect Sensor</button>' +
     '      </div>' +
     '      <div class="ym-help">' +
-    '        <b>How to connect:</b> plug the ESP32 into the tablet via USB-C, tap ' +
-    '        <b>Connect Sensor</b>, and pick the ESP32 (usually shown as ' +
-    '        "CP210x" or "USB Serial") from the browser prompt.<br/><br/>' +
-    '        <b>Not seeing the ESP32?</b> Make sure Arduino IDE is fully closed on ' +
-    '        any other device connected to this ESP32 — only one program can hold the ' +
-    '        port at a time.' +
+    '        <b>How to connect (desktop only):</b> on a Windows, Mac, ' +
+    '        Linux, or ChromeOS laptop running Chrome or Edge, plug the ' +
+    '        ESP32 in via USB, tap <b>Connect Sensor</b>, and pick the ' +
+    '        ESP32 (usually shown as "CP210x" or "USB Serial") from the ' +
+    '        browser prompt.<br/><br/>' +
+    '        <b>On a tablet or phone?</b> Chrome for Android and Safari ' +
+    '        on iOS do not support Web Serial — no cable or OTG adapter ' +
+    '        will change that. Mobile live capture is coming via Wi-Fi ' +
+    '        (firmware v1.3+). For now, use a laptop for live capture, ' +
+    '        or browse history and enter passes manually here.<br/><br/>' +
+    '        <b>Not seeing the ESP32 on a laptop?</b> Make sure Arduino ' +
+    '        IDE is fully closed and no other program is holding the ' +
+    '        serial port — only one can hold it at a time.' +
     '      </div>' +
     '    </div>' +
 
