@@ -17,14 +17,15 @@
 <meta name="HandheldFriendly" content="true" />
 
 <link rel="manifest" href="manifest.json" />
-<!-- Icons -->
-<link rel="apple-touch-icon" href="icon-192.png" />
-<link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
-<link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
-<link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
+<!-- Icons (cache-busted so iOS/Android fetch fresh copies when logo changes) -->
+<link rel="apple-touch-icon" href="icon-180.png?v=20261004-23" />
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png?v=20261004-23" />
+<link rel="apple-touch-icon" sizes="192x192" href="icon-192.png?v=20261004-23" />
+<link rel="icon" type="image/png" sizes="32x32" href="icon-32.png?v=20261004-23" />
+<link rel="icon" type="image/png" sizes="16x16" href="icon-16.png?v=20261004-23" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20260928-22" />
-<link rel="stylesheet" href="seedtag.css?v=20260928-22" />
+<link rel="stylesheet" href="styles.css?v=20261004-23" />
+<link rel="stylesheet" href="seedtag.css?v=20261004-23" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* ===== Card reordering ===== */
@@ -348,7 +349,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">OπO Farming</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.09.08 · 20</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.10.04 · 23</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -1472,13 +1473,13 @@
 
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20260928-22"></script>
-<script src="app.js?v=20260928-22"></script>
-<script src="uxenhancements.js?v=20260928-22"></script>
-<script src="asapplied.js?v=20260928-22"></script>
-<script src="seedtag.js?v=20260928-22"></script>
-<script src="handbook.js?v=20260928-22"></script>
-<script src="yieldmonitor.js?v=20260928-22"></script>
+<script src="config.js?v=20261004-23"></script>
+<script src="app.js?v=20261004-23"></script>
+<script src="uxenhancements.js?v=20261004-23"></script>
+<script src="asapplied.js?v=20261004-23"></script>
+<script src="seedtag.js?v=20261004-23"></script>
+<script src="handbook.js?v=20261004-23"></script>
+<script src="yieldmonitor.js?v=20261004-23"></script>
 
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
