@@ -211,9 +211,6 @@
   async function connectSensor(promptUser) {
     if (!webSerialSupported()) {
       appAlert(
-  async function connectSensor(promptUser) {
-    if (!webSerialSupported()) {
-      appAlert(
         "Web Serial live capture requires a DESKTOP browser " +
         "(Chrome or Edge on Windows, macOS, Linux, or ChromeOS).\n\n" +
         "Chrome for Android does NOT support Web Serial — plugging an " +
