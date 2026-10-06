@@ -42,6 +42,7 @@
       case "sprayer":  return "GPA";
       case "combine":  return "bu/ac";
       case "spreader": return "lbs/ac";
+      case "planter":  return "lbs/ac";
       default:         return "rate";
     }
   }
@@ -49,6 +50,7 @@
     var t = state.equipment.type;
     if (t === "sprayer")  return +((state.sprayer && state.sprayer.gpa) || 0);
     if (t === "spreader") return +((state.spreader && state.spreader.rate) || 0);
+    if (t === "planter")  return +((state.planter && state.planter.seedingRateLbsAc) || 0);
     if (t === "combine") {
       return state.field.crop === "Soybeans" ? 55
            : state.field.crop === "Wheat"    ? 70 : 180;
