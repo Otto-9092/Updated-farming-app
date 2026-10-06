@@ -45,7 +45,8 @@ const state = {
   baleLog: [],              // baler: timestamped bale events
   notes: [],                // field notes (text + optional photo, GPS-tagged)
   _stagedPhoto: null,       // compressed dataURL staged in the Add Note dialog
-  planter:  { rowSpacing: 30, rows: 16, population: 34000, variety: "", downforce: 150 },
+  planter:  { rowSpacing: 30, rows: 16, population: 34000, variety: "", downforce: 150, seedingRateLbsAc: 120 },
+  lbsPlanted: 0,            // live total lbs of seed metered out this session (planter)
   tillage:  { depth: 6, passType: "primary", notes: "" },
   spreader: { productType: "dry_fert", rate: 200, bin: 8000, productName: "" },
   other:    { notes: "" },
@@ -1613,6 +1614,7 @@ async function startSession() {
   state.running = true;
   state.sessionStart = Date.now();
   state.acres = 0; state.bushels = 0; state.gallons = 0;
+  state.lbsPlanted = 0;        // reset planter seed total for the new session
   // Reset tank + load tracking for the new session
   state.tankGallonsAtRefill = 0;
   state.loads = 0;
@@ -1916,6 +1918,9 @@ function drawCoveragePolygon(path, p1, p2, swathWidthM) {
       const baseYield = state.field.crop === "Soybeans" ? 55
                      : state.field.crop === "Wheat"    ? 70 : 180;
       state.bushels += acresDelta * baseYield;
+    } else if (state.equipment.type === "planter") {
+      const rate = +(state.planter && state.planter.seedingRateLbsAc) || 0;
+      state.lbsPlanted += acresDelta * rate;
     }
   }
 }
@@ -1965,6 +1970,21 @@ function updateMetrics(mph) {
   $("mBu").textContent  = Math.round(state.bushels);
   $("mGal").textContent = state.gallons.toFixed(1);
 
+  // Planter: live lbs of seed metered out + target total for the field (if boundary set)
+  if (state.equipment.type === "planter") {
+    const lbsEl    = $("mLbs");
+    const lbsTgtEl = $("mLbsTarget");
+    const rate     = +(state.planter && state.planter.seedingRateLbsAc) || 0;
+    if (lbsEl) lbsEl.textContent = Math.round(state.lbsPlanted || 0).toLocaleString();
+    if (lbsTgtEl) {
+      if (state.boundary.acres > 0 && rate > 0) {
+        lbsTgtEl.textContent = Math.round(state.boundary.acres * rate).toLocaleString();
+      } else {
+        lbsTgtEl.textContent = "\u2014";
+      }
+    }
+  }
+
   // keep tank-remaining / countdown / loads tiles live
   updateTankAndLoads();
 
@@ -1997,6 +2017,13 @@ function applyEquipmentUI() {
   // but hidden when no equipment is selected (clean home screen).
   const isNone = state.equipment.type === "none";
   $("mBuBox").classList.toggle("hidden",   isSprayer || isNone);
+
+  // Planter-only metrics: lbs planted (live) + target lbs for the field.
+  const isPlanter = state.equipment.type === "planter";
+  const lbsBox  = $("mLbsBox");
+  const lbsTgtBox = $("mLbsTargetBox");
+  if (lbsBox)    lbsBox.classList.toggle("hidden", !isPlanter);
+  if (lbsTgtBox) lbsTgtBox.classList.toggle("hidden", !isPlanter);
 
   // Live harvest tiles (latest yield/moisture) — combines only.
   const isCombine = state.equipment.type === "combine";
@@ -2469,7 +2496,7 @@ const EQ_TYPES = {
     label: "Planter",
     emoji: "🚜",
     subId: "subPlanter",
-    fields: ["plRowSpacing", "plRows", "plPopulation", "plVariety", "plDownforce"],
+    fields: ["plRowSpacing", "plRows", "plPopulation", "plVariety", "plDownforce", "plSeedingRate"],
   },
   tillage: {
     label: "Tillage",
@@ -2549,13 +2576,21 @@ function saveEqModal() {
   // Pull values from the visible sub-menu into state
   const values = readEqParams(type).values;
   applyEqParamsToState(type, values);
-  // Convenience: seed the main "Working Width" from a swather/baler width
-  // when it hasn't been set yet, so acreage tracking works out of the box.
-  if (type === "swather" || type === "baler") {
+  // Convenience: seed the main "Working Width" from a sub-form width
+  // when it hasn't been set yet, so acreage/painting works out of the box.
+  // Covers swather, baler, AND planter (rows x spacing / 12).
+  if (type === "swather" || type === "baler" || type === "planter") {
     var wEl = $("eqWidth");
-    var subW = parseFloat(type === "swather" ? values.swWidth : values.blWidth) || 0;
+    var subW = 0;
+    if (type === "swather")      subW = parseFloat(values.swWidth) || 0;
+    else if (type === "baler")   subW = parseFloat(values.blWidth) || 0;
+    else if (type === "planter") {
+      var _rows = parseFloat(values.plRows)       || 0;
+      var _sp   = parseFloat(values.plRowSpacing) || 0;
+      subW = (_rows && _sp) ? (_rows * _sp / 12) : 0;
+    }
     if (wEl && subW > 0 && (!parseFloat(wEl.value) || parseFloat(wEl.value) <= 0)) {
-      wEl.value = subW;
+      wEl.value = (typeof subW.toFixed === "function") ? subW.toFixed(1) : subW;
       state.equipment.width = Math.max(1, subW);
     }
   }
@@ -2605,6 +2640,7 @@ function applyEqParamsToState(type, values) {
     state.planter.population = parseFloat(values.plPopulation) || 0;
     state.planter.variety    = values.plVariety || "";
     state.planter.downforce  = parseFloat(values.plDownforce)  || 0;
+    state.planter.seedingRateLbsAc = parseFloat(values.plSeedingRate) || 120;
     // ← NEW: capture the seed-inventory lot ID from the picker (if any)
     state.planter._seedLotId = (window.SeedTag && typeof window.SeedTag.captureSelectedLot === "function")
       ? window.SeedTag.captureSelectedLot()
@@ -2660,7 +2696,8 @@ function updateEqSummary() {
   } else if (type === "planter") {
     const p = state.planter || {};
     const suggestedWidth = (p.rows && p.rowSpacing) ? (p.rows * p.rowSpacing / 12).toFixed(1) : "?";
-    text = `Planter: ${p.rows || "?"} rows × ${p.rowSpacing || "?"}" (${suggestedWidth} ft) — ${p.population || "?"} seeds/ac${p.variety ? ` — ${p.variety}` : ""}`;
+    const rateTxt = (p.seedingRateLbsAc > 0) ? ` — ${p.seedingRateLbsAc} lbs/ac` : "";
+    text = `Planter: ${p.rows || "?"} rows × ${p.rowSpacing || "?"}" (${suggestedWidth} ft) — ${p.population || "?"} seeds/ac${rateTxt}${p.variety ? ` — ${p.variety}` : ""}`;
   } else if (type === "tillage") {
     const t = state.tillage || {};
     text = `Tillage: ${t.depth || "?"}" deep, ${t.passType || "primary"} pass${t.notes ? ` — ${t.notes}` : ""}`;
@@ -2928,12 +2965,14 @@ if ($("btnResetPaint")) $("btnResetPaint").addEventListener("click", async () =>
   state.acres = 0;
   state.bushels = 0;
   state.gallons = 0;
+  state.lbsPlanted = 0;
   state.efficiencyHits = 0;
   state.efficiencyAttempts = 0;
   $("mAcres").textContent = "0.00";
   $("mBu").textContent = "0";
   $("mGal").textContent = "0.0";
   $("mEff").textContent = "0";
+  if ($("mLbs")) $("mLbs").textContent = "0";
   if ($("mAcresLeft")) $("mAcresLeft").textContent = state.boundary.acres > 0 ? state.boundary.acres.toFixed(2) : "—";
   if ($("mETA")) $("mETA").textContent = "—";
 });
@@ -3257,6 +3296,10 @@ $("btnSave").addEventListener("click", async () => {
     boundaryAcres: +state.boundary.acres.toFixed(2),
     coverage: state.boundary.acres > 0
       ? +((state.acres / state.boundary.acres) * 100).toFixed(1) : null,
+    lbsPlanted: (state.equipment.type === "planter") ? Math.round(state.lbsPlanted || 0) : null,
+    lbsPlantedTarget: (state.equipment.type === "planter" && state.boundary.acres > 0 && state.planter && state.planter.seedingRateLbsAc)
+      ? Math.round(state.boundary.acres * state.planter.seedingRateLbsAc) : null,
+    seedingRateLbsAc: (state.equipment.type === "planter" && state.planter) ? (+state.planter.seedingRateLbsAc || null) : null,
     avgSpeed: state.speedCount > 0 ? +(state.speedSum / state.speedCount).toFixed(1) : 0,
     maxSpeed: +state.speedMax.toFixed(1),
     weather: { ...(state.weather || {}) },   // ← NEW: spray-record weather
