@@ -1599,6 +1599,40 @@ async function startSession() {
   if (!navigator.geolocation) { appAlert("Geolocation not supported on this device.", "GPS unavailable"); return; }
   readFormsIntoState();
 
+  // ← Nudge: if there's a drawn boundary that isn't saved to any field,
+  // offer to save it so it will sync to the user's other devices.
+  if ((state.boundary.points && state.boundary.points.length >= 3) && !state.loadedFieldKey) {
+    var want = await appConfirm(
+      "Your boundary isn't saved to a field yet, so it won't sync to your other devices. Save it now?",
+      { title: "Save boundary to a field?", okLabel: "Save field", cancelLabel: "Skip" }
+    );
+    if (want) {
+      var suggested = (state.field && state.field.name) ? state.field.name : "";
+      var fname = window.prompt("Field name:", suggested);
+      if (fname && fname.trim()) {
+        var nm = fname.trim();
+        try {
+          var lib2 = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+          lib2[nm] = {
+            _modified: new Date().toISOString(),
+            name: nm,
+            crop:    ($("fldCrop")    && $("fldCrop").value)    || state.field.crop    || "Corn",
+            variety: ($("fldVariety") && $("fldVariety").value) || state.field.variety || "",
+            boundary: { points: state.boundary.points.slice(), acres: state.boundary.acres },
+            cost: (typeof readCostInputs === "function") ? readCostInputs() : {},
+            savedAt: new Date().toISOString(),
+          };
+          localStorage.setItem(LS_FIELDS, JSON.stringify(lib2));
+          state.loadedFieldKey = nm;
+          _boundUnsavedFlag = false;
+          renderBoundaryDirty();
+          if (typeof loadFieldsList === "function") loadFieldsList();
+          if (typeof updateDataStats === "function") updateDataStats();
+        } catch (e) { console.warn("inline field save failed:", e); }
+      }
+    }
+  }
+
   // ← NEW: themed field-check + weather dialog before starting
   const proceed = await showStartDialog();
   if (!proceed) { return; }
@@ -2191,12 +2225,14 @@ $("btnBoundFinish").addEventListener("click", () => {
   drawDrivenPreview();             // show the driven path alongside the offset boundary
   refreshSwathsIfOn();             // boundary ready -> tile swaths if they were on
   setMode(state.running ? "RUNNING" : "IDLE");
+  markBoundaryDirty();             // ← auto-sync into loaded field
 });
 var _boundOffsetSelEl = $("boundOffsetSide");
 if (_boundOffsetSelEl) _boundOffsetSelEl.addEventListener("change", function () {
   state.boundary.offsetSide = _boundOffsetSelEl.value;
   previewBoundaryOffset();   // live preview when side changes
   refreshSwathsIfOn();       // boundary moved -> re-tile swaths
+  markBoundaryDirty();       // ← auto-sync into loaded field
 });
 
 // Live: changing the Working Width re-tiles swaths (and re-previews offset).
@@ -2214,6 +2250,7 @@ $("btnBoundClear").addEventListener("click", () => {
   clearSwaths();
   state.boundary.acres = 0;
   $("boundAcres").textContent = "0.00";
+  markBoundaryDirty();   // ← auto-sync into loaded field
 });
 function drawBoundaryPreview() {
   if (state.boundary.poly) state.boundary.poly.setMap(null);
@@ -2814,6 +2851,49 @@ $("btnDeleteEq").addEventListener("click", async () => {
 });
 
 // ============================================================
+// BOUNDARY AUTOSAVE — keep LS_FIELDS in sync with live edits
+// ------------------------------------------------------------
+// When a field is loaded (state.loadedFieldKey) and the user edits its
+// boundary, write the new boundary + a fresh _modified timestamp back into
+// the field library so the next Sync Now ships the change to every other
+// device. Debounced so rapid changes coalesce into one write.
+// ============================================================
+var _boundAutoSaveTimer = null;
+var _boundUnsavedFlag   = false;
+function markBoundaryDirty() {
+  _boundUnsavedFlag = true;
+  renderBoundaryDirty();
+  if (_boundAutoSaveTimer) clearTimeout(_boundAutoSaveTimer);
+  _boundAutoSaveTimer = setTimeout(autosaveLoadedFieldBoundary, 800);
+}
+function renderBoundaryDirty() {
+  var el = document.getElementById("boundDirty");
+  if (!el) return;
+  if (!state.loadedFieldKey) { el.textContent = ""; el.classList.add("hidden"); return; }
+  if (_boundUnsavedFlag) { el.textContent = "• unsaved"; el.classList.remove("hidden"); }
+  else                   { el.textContent = "✓ synced";  el.classList.remove("hidden"); }
+}
+function autosaveLoadedFieldBoundary() {
+  if (!state.loadedFieldKey) return;
+  try {
+    var lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
+    var entry = lib[state.loadedFieldKey];
+    if (!entry) return;
+    entry.boundary = {
+      points: (state.boundary.points || []).slice(),
+      acres: +state.boundary.acres || 0
+    };
+    entry._modified = new Date().toISOString();
+    entry.savedAt   = new Date().toISOString();
+    lib[state.loadedFieldKey] = entry;
+    localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
+    _boundUnsavedFlag = false;
+    renderBoundaryDirty();
+    if (typeof updateDataStats === "function") updateDataStats();
+  } catch (e) { console.warn("boundary autosave failed:", e); }
+}
+
+// ============================================================
 // MULTI-FIELD LIBRARY
 // ============================================================
 function loadFieldsList() {
@@ -2842,6 +2922,8 @@ if ($("btnSaveField")) $("btnSaveField").addEventListener("click", () => {
   };
   localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
   state.loadedFieldKey = name;
+  _boundUnsavedFlag = false;
+  renderBoundaryDirty();
   if ($("fldStatus")) $("fldStatus").textContent = `Saved field: ${name} (${lib[name].boundary.acres.toFixed(2)} ac)`;
   loadFieldsList();
   if (typeof updateDataStats === "function") updateDataStats();   // �� NEW LINE
@@ -2930,6 +3012,8 @@ if ($("btnLoadField")) $("btnLoadField").addEventListener("click", () => {
   $("boundAcres").textContent = state.boundary.acres.toFixed(2);
   if ($("fldStatus")) $("fldStatus").textContent = `Loaded: ${f.name} (${state.boundary.acres.toFixed(2)} ac)`;
   state.loadedFieldKey = k;
+  _boundUnsavedFlag = false;       // fresh load == already in sync
+  renderBoundaryDirty();
 });
 if ($("btnDeleteField")) $("btnDeleteField").addEventListener("click", async () => {
   const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
@@ -3587,6 +3671,11 @@ $("btnPdfRep").addEventListener("click", async () => {
       <tr><td>Max Speed</td><td>${r.maxSpeed} mph</td></tr>
       <tr><td>Bushels</td><td>${r.bushels}</td></tr>
       <tr><td>Gallons</td><td>${r.gallons}</td></tr>
+      ${r.equipment && r.equipment.type === "planter" ? `
+      <tr><td>Seeding Rate</td><td>${r.seedingRateLbsAc != null ? r.seedingRateLbsAc + " lbs/ac" : "—"}</td></tr>
+      <tr><td>Lbs Planted</td><td>${r.lbsPlanted != null ? r.lbsPlanted.toLocaleString() + " lbs" : "—"}</td></tr>
+      <tr><td>Target Lbs</td><td>${r.lbsPlantedTarget != null ? r.lbsPlantedTarget.toLocaleString() + " lbs" : "—"}</td></tr>
+      ` : ""}
     </table>
 
     ${r.equipment.type === "sprayer" ? `
@@ -3707,6 +3796,13 @@ function formatReport(r) {
     `Max Speed: ${r.maxSpeed} mph`,
     `Bushels:   ${r.bushels}`,
     `Gallons:   ${r.gallons}`,
+    ...((r.equipment && r.equipment.type === "planter") ? [
+      ``,
+      `--- Planting ---`,
+      `Seed Rate:   ${r.seedingRateLbsAc != null ? r.seedingRateLbsAc + " lbs/ac" : "—"}`,
+      `Lbs Planted: ${r.lbsPlanted != null ? r.lbsPlanted.toLocaleString() + " lbs" : "—"}`,
+      `Target Lbs:  ${r.lbsPlantedTarget != null ? r.lbsPlantedTarget.toLocaleString() + " lbs" : "—"}`,
+    ] : []),
     ``,
     `--- Weather (spray record) ---`,
     `Wind:      ${(r.weather && (r.weather.windSpeed || r.weather.windDir)) ? ((r.weather.windSpeed ? r.weather.windSpeed + " mph " : "") + (r.weather.windDir || "")).trim() : "\u2014"}`,
@@ -3827,6 +3923,7 @@ function reportsToCSV() {
     "Machine", "Type", "Width (ft)",
     "Acres", "Boundary Acres", "Coverage %",
     "Avg Speed (mph)", "Max Speed (mph)", "Bushels", "Gallons",
+    "Seed Rate (lbs/ac)", "Lbs Planted", "Target Lbs",
     "Wind Speed (mph)", "Wind Dir", "Temp (F)", "Sky", "Weather Time",
     "Exp Yield (bu/ac)", "Start Moisture (%)", "Harvest Readings",
     "Last Yield (bu/ac)", "Last Moisture (%)", "Last Quality",
@@ -3851,6 +3948,9 @@ function reportsToCSV() {
       (r.maxSpeed != null ? r.maxSpeed : ""),
       (r.bushels != null ? r.bushels : ""),
       (r.gallons != null ? r.gallons : ""),
+      (r.seedingRateLbsAc != null ? r.seedingRateLbsAc : ""),
+      (r.lbsPlanted != null ? r.lbsPlanted : ""),
+      (r.lbsPlantedTarget != null ? r.lbsPlantedTarget : ""),
       w.windSpeed || "", w.windDir || "", w.temp || "", w.sky || "",
       w.capturedAt ? new Date(w.capturedAt).toLocaleString() : "",
       (r.harvest && r.harvest.expectedYield) || "",
@@ -4786,6 +4886,7 @@ window.addEventListener("DOMContentLoaded", () => {
   applyEquipmentUI();
   renderSectionButtons();
   if (typeof refreshSyncUI === "function") refreshSyncUI();   // �������� Stage 1: sync UI
+  if (typeof renderBoundaryDirty === "function") renderBoundaryDirty();
   startLocationFollow();
   showEqSubmenu($("eqType").value);
   updateEqSummary();
