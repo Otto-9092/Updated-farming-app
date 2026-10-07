@@ -45,8 +45,7 @@ const state = {
   baleLog: [],              // baler: timestamped bale events
   notes: [],                // field notes (text + optional photo, GPS-tagged)
   _stagedPhoto: null,       // compressed dataURL staged in the Add Note dialog
-  planter:  { rowSpacing: 30, rows: 16, population: 34000, variety: "", downforce: 150, seedingRateLbsAc: 120 },
-  lbsPlanted: 0,            // live total lbs of seed metered out this session (planter)
+  planter:  { rowSpacing: 30, rows: 16, population: 34000, variety: "", downforce: 150 },
   tillage:  { depth: 6, passType: "primary", notes: "" },
   spreader: { productType: "dry_fert", rate: 200, bin: 8000, productName: "" },
   other:    { notes: "" },
@@ -80,7 +79,36 @@ const CELL_SIZE_DEG = 0.00005;
 const MPS_TO_MPH = 2.23694;
 
 // ===== GPS quality thresholds =====
-const GPS_MAX_ACCURACY_M    = 15;   // reject fixes worse than this (meters)
+// Legacy constant kept for anything that still imports it; the live value
+// is read from getGpsAccuracyMax() so the user can override via the pill popover.
+const GPS_MAX_ACCURACY_M    = 15;   // default fallback (meters)
+
+// User-selectable GPS quality presets. The pill popover writes the chosen
+// key to localStorage; getGpsAccuracyMax() reads it and returns the ceiling.
+const GPS_FILTER_PRESETS = {
+  any:        { max: Infinity, label: "Any (debug)",       short: "ANY" },
+  permissive: { max: 30,       label: "Permissive (≤30m)", short: "30m" },
+  standard:   { max: 15,       label: "Standard (≤15m)",   short: "15m" },
+  good:       { max: 5,        label: "Good (≤5m)",        short: "5m"  },
+  rtk:        { max: 0.1,      label: "RTK (≤0.1m)",       short: "RTK" }
+};
+const LS_GPS_FILTER = "dof_gps_filter";
+function getGpsFilterKey() {
+  try {
+    var k = localStorage.getItem(LS_GPS_FILTER) || "standard";
+    return GPS_FILTER_PRESETS[k] ? k : "standard";
+  } catch (e) { return "standard"; }
+}
+function getGpsAccuracyMax() {
+  return GPS_FILTER_PRESETS[getGpsFilterKey()].max;
+}
+function setGpsFilterKey(k) {
+  if (!GPS_FILTER_PRESETS[k]) return;
+  try { localStorage.setItem(LS_GPS_FILTER, k); } catch (e) {}
+  if (typeof setGpsPill === "function" && state && state.lastGpsAccuracy != null) {
+    setGpsPill(true, state.lastGpsAccuracy);
+  }
+}
 const GPS_MIN_MOVE_M        = 0.5;  // ignore micro-jitter below this (meters)
 const GPS_MAX_REALISTIC_MPH = 60;   // reject impossible speed jumps
 const SPEED_EMA_ALPHA       = 0.25; // exponential smoothing: lower = smoother, higher = more responsive
@@ -1599,40 +1627,6 @@ async function startSession() {
   if (!navigator.geolocation) { appAlert("Geolocation not supported on this device.", "GPS unavailable"); return; }
   readFormsIntoState();
 
-  // ← Nudge: if there's a drawn boundary that isn't saved to any field,
-  // offer to save it so it will sync to the user's other devices.
-  if ((state.boundary.points && state.boundary.points.length >= 3) && !state.loadedFieldKey) {
-    var want = await appConfirm(
-      "Your boundary isn't saved to a field yet, so it won't sync to your other devices. Save it now?",
-      { title: "Save boundary to a field?", okLabel: "Save field", cancelLabel: "Skip" }
-    );
-    if (want) {
-      var suggested = (state.field && state.field.name) ? state.field.name : "";
-      var fname = window.prompt("Field name:", suggested);
-      if (fname && fname.trim()) {
-        var nm = fname.trim();
-        try {
-          var lib2 = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
-          lib2[nm] = {
-            _modified: new Date().toISOString(),
-            name: nm,
-            crop:    ($("fldCrop")    && $("fldCrop").value)    || state.field.crop    || "Corn",
-            variety: ($("fldVariety") && $("fldVariety").value) || state.field.variety || "",
-            boundary: { points: state.boundary.points.slice(), acres: state.boundary.acres },
-            cost: (typeof readCostInputs === "function") ? readCostInputs() : {},
-            savedAt: new Date().toISOString(),
-          };
-          localStorage.setItem(LS_FIELDS, JSON.stringify(lib2));
-          state.loadedFieldKey = nm;
-          _boundUnsavedFlag = false;
-          renderBoundaryDirty();
-          if (typeof loadFieldsList === "function") loadFieldsList();
-          if (typeof updateDataStats === "function") updateDataStats();
-        } catch (e) { console.warn("inline field save failed:", e); }
-      }
-    }
-  }
-
   // ← NEW: themed field-check + weather dialog before starting
   const proceed = await showStartDialog();
   if (!proceed) { return; }
@@ -1648,7 +1642,6 @@ async function startSession() {
   state.running = true;
   state.sessionStart = Date.now();
   state.acres = 0; state.bushels = 0; state.gallons = 0;
-  state.lbsPlanted = 0;        // reset planter seed total for the new session
   // Reset tank + load tracking for the new session
   state.tankGallonsAtRefill = 0;
   state.loads = 0;
@@ -1721,7 +1714,7 @@ function startLocationFollow() {
       setGpsPill(true, acc);
 
       // Reject low-quality fixes for display too
-      if (acc > GPS_MAX_ACCURACY_M) return;
+      if (acc > getGpsAccuracyMax()) return;
 
       if (state.machineMarker) state.machineMarker.setPosition({ lat, lng });
       if (state.map && state.autoCenter) state.map.panTo({ lat, lng });
@@ -1760,7 +1753,7 @@ function onPos(pos) {
   setGpsPill(true, acc);
 
   // --- Reject low-quality fixes outright ---
-  if (acc > GPS_MAX_ACCURACY_M) {
+  if (acc > getGpsAccuracyMax()) {
     // Bad fix: skip painting, skip metrics update, but keep listening
     return;
   }
@@ -1952,9 +1945,6 @@ function drawCoveragePolygon(path, p1, p2, swathWidthM) {
       const baseYield = state.field.crop === "Soybeans" ? 55
                      : state.field.crop === "Wheat"    ? 70 : 180;
       state.bushels += acresDelta * baseYield;
-    } else if (state.equipment.type === "planter") {
-      const rate = +(state.planter && state.planter.seedingRateLbsAc) || 0;
-      state.lbsPlanted += acresDelta * rate;
     }
   }
 }
@@ -2004,21 +1994,6 @@ function updateMetrics(mph) {
   $("mBu").textContent  = Math.round(state.bushels);
   $("mGal").textContent = state.gallons.toFixed(1);
 
-  // Planter: live lbs of seed metered out + target total for the field (if boundary set)
-  if (state.equipment.type === "planter") {
-    const lbsEl    = $("mLbs");
-    const lbsTgtEl = $("mLbsTarget");
-    const rate     = +(state.planter && state.planter.seedingRateLbsAc) || 0;
-    if (lbsEl) lbsEl.textContent = Math.round(state.lbsPlanted || 0).toLocaleString();
-    if (lbsTgtEl) {
-      if (state.boundary.acres > 0 && rate > 0) {
-        lbsTgtEl.textContent = Math.round(state.boundary.acres * rate).toLocaleString();
-      } else {
-        lbsTgtEl.textContent = "\u2014";
-      }
-    }
-  }
-
   // keep tank-remaining / countdown / loads tiles live
   updateTankAndLoads();
 
@@ -2051,13 +2026,6 @@ function applyEquipmentUI() {
   // but hidden when no equipment is selected (clean home screen).
   const isNone = state.equipment.type === "none";
   $("mBuBox").classList.toggle("hidden",   isSprayer || isNone);
-
-  // Planter-only metrics: lbs planted (live) + target lbs for the field.
-  const isPlanter = state.equipment.type === "planter";
-  const lbsBox  = $("mLbsBox");
-  const lbsTgtBox = $("mLbsTargetBox");
-  if (lbsBox)    lbsBox.classList.toggle("hidden", !isPlanter);
-  if (lbsTgtBox) lbsTgtBox.classList.toggle("hidden", !isPlanter);
 
   // Live harvest tiles (latest yield/moisture) — combines only.
   const isCombine = state.equipment.type === "combine";
@@ -2225,14 +2193,12 @@ $("btnBoundFinish").addEventListener("click", () => {
   drawDrivenPreview();             // show the driven path alongside the offset boundary
   refreshSwathsIfOn();             // boundary ready -> tile swaths if they were on
   setMode(state.running ? "RUNNING" : "IDLE");
-  markBoundaryDirty();             // ← auto-sync into loaded field
 });
 var _boundOffsetSelEl = $("boundOffsetSide");
 if (_boundOffsetSelEl) _boundOffsetSelEl.addEventListener("change", function () {
   state.boundary.offsetSide = _boundOffsetSelEl.value;
   previewBoundaryOffset();   // live preview when side changes
   refreshSwathsIfOn();       // boundary moved -> re-tile swaths
-  markBoundaryDirty();       // ← auto-sync into loaded field
 });
 
 // Live: changing the Working Width re-tiles swaths (and re-previews offset).
@@ -2250,7 +2216,6 @@ $("btnBoundClear").addEventListener("click", () => {
   clearSwaths();
   state.boundary.acres = 0;
   $("boundAcres").textContent = "0.00";
-  markBoundaryDirty();   // ← auto-sync into loaded field
 });
 function drawBoundaryPreview() {
   if (state.boundary.poly) state.boundary.poly.setMap(null);
@@ -2533,7 +2498,7 @@ const EQ_TYPES = {
     label: "Planter",
     emoji: "🚜",
     subId: "subPlanter",
-    fields: ["plRowSpacing", "plRows", "plPopulation", "plVariety", "plDownforce", "plSeedingRate"],
+    fields: ["plRowSpacing", "plRows", "plPopulation", "plVariety", "plDownforce"],
   },
   tillage: {
     label: "Tillage",
@@ -2613,21 +2578,13 @@ function saveEqModal() {
   // Pull values from the visible sub-menu into state
   const values = readEqParams(type).values;
   applyEqParamsToState(type, values);
-  // Convenience: seed the main "Working Width" from a sub-form width
-  // when it hasn't been set yet, so acreage/painting works out of the box.
-  // Covers swather, baler, AND planter (rows x spacing / 12).
-  if (type === "swather" || type === "baler" || type === "planter") {
+  // Convenience: seed the main "Working Width" from a swather/baler width
+  // when it hasn't been set yet, so acreage tracking works out of the box.
+  if (type === "swather" || type === "baler") {
     var wEl = $("eqWidth");
-    var subW = 0;
-    if (type === "swather")      subW = parseFloat(values.swWidth) || 0;
-    else if (type === "baler")   subW = parseFloat(values.blWidth) || 0;
-    else if (type === "planter") {
-      var _rows = parseFloat(values.plRows)       || 0;
-      var _sp   = parseFloat(values.plRowSpacing) || 0;
-      subW = (_rows && _sp) ? (_rows * _sp / 12) : 0;
-    }
+    var subW = parseFloat(type === "swather" ? values.swWidth : values.blWidth) || 0;
     if (wEl && subW > 0 && (!parseFloat(wEl.value) || parseFloat(wEl.value) <= 0)) {
-      wEl.value = (typeof subW.toFixed === "function") ? subW.toFixed(1) : subW;
+      wEl.value = subW;
       state.equipment.width = Math.max(1, subW);
     }
   }
@@ -2677,7 +2634,6 @@ function applyEqParamsToState(type, values) {
     state.planter.population = parseFloat(values.plPopulation) || 0;
     state.planter.variety    = values.plVariety || "";
     state.planter.downforce  = parseFloat(values.plDownforce)  || 0;
-    state.planter.seedingRateLbsAc = parseFloat(values.plSeedingRate) || 120;
     // ← NEW: capture the seed-inventory lot ID from the picker (if any)
     state.planter._seedLotId = (window.SeedTag && typeof window.SeedTag.captureSelectedLot === "function")
       ? window.SeedTag.captureSelectedLot()
@@ -2733,8 +2689,7 @@ function updateEqSummary() {
   } else if (type === "planter") {
     const p = state.planter || {};
     const suggestedWidth = (p.rows && p.rowSpacing) ? (p.rows * p.rowSpacing / 12).toFixed(1) : "?";
-    const rateTxt = (p.seedingRateLbsAc > 0) ? ` — ${p.seedingRateLbsAc} lbs/ac` : "";
-    text = `Planter: ${p.rows || "?"} rows × ${p.rowSpacing || "?"}" (${suggestedWidth} ft) — ${p.population || "?"} seeds/ac${rateTxt}${p.variety ? ` — ${p.variety}` : ""}`;
+    text = `Planter: ${p.rows || "?"} rows × ${p.rowSpacing || "?"}" (${suggestedWidth} ft) — ${p.population || "?"} seeds/ac${p.variety ? ` — ${p.variety}` : ""}`;
   } else if (type === "tillage") {
     const t = state.tillage || {};
     text = `Tillage: ${t.depth || "?"}" deep, ${t.passType || "primary"} pass${t.notes ? ` — ${t.notes}` : ""}`;
@@ -2851,49 +2806,6 @@ $("btnDeleteEq").addEventListener("click", async () => {
 });
 
 // ============================================================
-// BOUNDARY AUTOSAVE — keep LS_FIELDS in sync with live edits
-// ------------------------------------------------------------
-// When a field is loaded (state.loadedFieldKey) and the user edits its
-// boundary, write the new boundary + a fresh _modified timestamp back into
-// the field library so the next Sync Now ships the change to every other
-// device. Debounced so rapid changes coalesce into one write.
-// ============================================================
-var _boundAutoSaveTimer = null;
-var _boundUnsavedFlag   = false;
-function markBoundaryDirty() {
-  _boundUnsavedFlag = true;
-  renderBoundaryDirty();
-  if (_boundAutoSaveTimer) clearTimeout(_boundAutoSaveTimer);
-  _boundAutoSaveTimer = setTimeout(autosaveLoadedFieldBoundary, 800);
-}
-function renderBoundaryDirty() {
-  var el = document.getElementById("boundDirty");
-  if (!el) return;
-  if (!state.loadedFieldKey) { el.textContent = ""; el.classList.add("hidden"); return; }
-  if (_boundUnsavedFlag) { el.textContent = "• unsaved"; el.classList.remove("hidden"); }
-  else                   { el.textContent = "✓ synced";  el.classList.remove("hidden"); }
-}
-function autosaveLoadedFieldBoundary() {
-  if (!state.loadedFieldKey) return;
-  try {
-    var lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
-    var entry = lib[state.loadedFieldKey];
-    if (!entry) return;
-    entry.boundary = {
-      points: (state.boundary.points || []).slice(),
-      acres: +state.boundary.acres || 0
-    };
-    entry._modified = new Date().toISOString();
-    entry.savedAt   = new Date().toISOString();
-    lib[state.loadedFieldKey] = entry;
-    localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
-    _boundUnsavedFlag = false;
-    renderBoundaryDirty();
-    if (typeof updateDataStats === "function") updateDataStats();
-  } catch (e) { console.warn("boundary autosave failed:", e); }
-}
-
-// ============================================================
 // MULTI-FIELD LIBRARY
 // ============================================================
 function loadFieldsList() {
@@ -2922,8 +2834,6 @@ if ($("btnSaveField")) $("btnSaveField").addEventListener("click", () => {
   };
   localStorage.setItem(LS_FIELDS, JSON.stringify(lib));
   state.loadedFieldKey = name;
-  _boundUnsavedFlag = false;
-  renderBoundaryDirty();
   if ($("fldStatus")) $("fldStatus").textContent = `Saved field: ${name} (${lib[name].boundary.acres.toFixed(2)} ac)`;
   loadFieldsList();
   if (typeof updateDataStats === "function") updateDataStats();   // �� NEW LINE
@@ -3012,8 +2922,6 @@ if ($("btnLoadField")) $("btnLoadField").addEventListener("click", () => {
   $("boundAcres").textContent = state.boundary.acres.toFixed(2);
   if ($("fldStatus")) $("fldStatus").textContent = `Loaded: ${f.name} (${state.boundary.acres.toFixed(2)} ac)`;
   state.loadedFieldKey = k;
-  _boundUnsavedFlag = false;       // fresh load == already in sync
-  renderBoundaryDirty();
 });
 if ($("btnDeleteField")) $("btnDeleteField").addEventListener("click", async () => {
   const lib = JSON.parse(localStorage.getItem(LS_FIELDS) || "{}");
@@ -3049,14 +2957,12 @@ if ($("btnResetPaint")) $("btnResetPaint").addEventListener("click", async () =>
   state.acres = 0;
   state.bushels = 0;
   state.gallons = 0;
-  state.lbsPlanted = 0;
   state.efficiencyHits = 0;
   state.efficiencyAttempts = 0;
   $("mAcres").textContent = "0.00";
   $("mBu").textContent = "0";
   $("mGal").textContent = "0.0";
   $("mEff").textContent = "0";
-  if ($("mLbs")) $("mLbs").textContent = "0";
   if ($("mAcresLeft")) $("mAcresLeft").textContent = state.boundary.acres > 0 ? state.boundary.acres.toFixed(2) : "—";
   if ($("mETA")) $("mETA").textContent = "—";
 });
@@ -3380,10 +3286,6 @@ $("btnSave").addEventListener("click", async () => {
     boundaryAcres: +state.boundary.acres.toFixed(2),
     coverage: state.boundary.acres > 0
       ? +((state.acres / state.boundary.acres) * 100).toFixed(1) : null,
-    lbsPlanted: (state.equipment.type === "planter") ? Math.round(state.lbsPlanted || 0) : null,
-    lbsPlantedTarget: (state.equipment.type === "planter" && state.boundary.acres > 0 && state.planter && state.planter.seedingRateLbsAc)
-      ? Math.round(state.boundary.acres * state.planter.seedingRateLbsAc) : null,
-    seedingRateLbsAc: (state.equipment.type === "planter" && state.planter) ? (+state.planter.seedingRateLbsAc || null) : null,
     avgSpeed: state.speedCount > 0 ? +(state.speedSum / state.speedCount).toFixed(1) : 0,
     maxSpeed: +state.speedMax.toFixed(1),
     weather: { ...(state.weather || {}) },   // ← NEW: spray-record weather
@@ -3671,11 +3573,6 @@ $("btnPdfRep").addEventListener("click", async () => {
       <tr><td>Max Speed</td><td>${r.maxSpeed} mph</td></tr>
       <tr><td>Bushels</td><td>${r.bushels}</td></tr>
       <tr><td>Gallons</td><td>${r.gallons}</td></tr>
-      ${r.equipment && r.equipment.type === "planter" ? `
-      <tr><td>Seeding Rate</td><td>${r.seedingRateLbsAc != null ? r.seedingRateLbsAc + " lbs/ac" : "—"}</td></tr>
-      <tr><td>Lbs Planted</td><td>${r.lbsPlanted != null ? r.lbsPlanted.toLocaleString() + " lbs" : "—"}</td></tr>
-      <tr><td>Target Lbs</td><td>${r.lbsPlantedTarget != null ? r.lbsPlantedTarget.toLocaleString() + " lbs" : "—"}</td></tr>
-      ` : ""}
     </table>
 
     ${r.equipment.type === "sprayer" ? `
@@ -3796,13 +3693,6 @@ function formatReport(r) {
     `Max Speed: ${r.maxSpeed} mph`,
     `Bushels:   ${r.bushels}`,
     `Gallons:   ${r.gallons}`,
-    ...((r.equipment && r.equipment.type === "planter") ? [
-      ``,
-      `--- Planting ---`,
-      `Seed Rate:   ${r.seedingRateLbsAc != null ? r.seedingRateLbsAc + " lbs/ac" : "—"}`,
-      `Lbs Planted: ${r.lbsPlanted != null ? r.lbsPlanted.toLocaleString() + " lbs" : "—"}`,
-      `Target Lbs:  ${r.lbsPlantedTarget != null ? r.lbsPlantedTarget.toLocaleString() + " lbs" : "—"}`,
-    ] : []),
     ``,
     `--- Weather (spray record) ---`,
     `Wind:      ${(r.weather && (r.weather.windSpeed || r.weather.windDir)) ? ((r.weather.windSpeed ? r.weather.windSpeed + " mph " : "") + (r.weather.windDir || "")).trim() : "\u2014"}`,
@@ -3923,7 +3813,6 @@ function reportsToCSV() {
     "Machine", "Type", "Width (ft)",
     "Acres", "Boundary Acres", "Coverage %",
     "Avg Speed (mph)", "Max Speed (mph)", "Bushels", "Gallons",
-    "Seed Rate (lbs/ac)", "Lbs Planted", "Target Lbs",
     "Wind Speed (mph)", "Wind Dir", "Temp (F)", "Sky", "Weather Time",
     "Exp Yield (bu/ac)", "Start Moisture (%)", "Harvest Readings",
     "Last Yield (bu/ac)", "Last Moisture (%)", "Last Quality",
@@ -3948,9 +3837,6 @@ function reportsToCSV() {
       (r.maxSpeed != null ? r.maxSpeed : ""),
       (r.bushels != null ? r.bushels : ""),
       (r.gallons != null ? r.gallons : ""),
-      (r.seedingRateLbsAc != null ? r.seedingRateLbsAc : ""),
-      (r.lbsPlanted != null ? r.lbsPlanted : ""),
-      (r.lbsPlantedTarget != null ? r.lbsPlantedTarget : ""),
       w.windSpeed || "", w.windDir || "", w.temp || "", w.sky || "",
       w.capturedAt ? new Date(w.capturedAt).toLocaleString() : "",
       (r.harvest && r.harvest.expectedYield) || "",
@@ -4115,6 +4001,7 @@ function setGpsPill(ok, accuracyM) {
   if (!ok) {
     p.textContent = "GPS: OFF";
     p.className = "pill pill-bad";
+    state.lastGpsAccuracy = null;
     return;
   }
   if (accuracyM == null || !isFinite(accuracyM)) {
@@ -4122,14 +4009,131 @@ function setGpsPill(ok, accuracyM) {
     p.className = "pill pill-warn";
     return;
   }
+  state.lastGpsAccuracy = accuracyM;
   const m = Math.round(accuracyM);
-  p.textContent = `GPS: ${m}m`;
-  // Color-code by quality
-  if (accuracyM <= 5)        p.className = "pill pill-good";   // excellent
-  else if (accuracyM <= 15)  p.className = "pill pill-warn";   // usable
-  else                       p.className = "pill pill-bad";    // rejected
+  const preset = GPS_FILTER_PRESETS[getGpsFilterKey()];
+  const limit = preset.max;
+  // Show both current fix and selected filter so the pill is self-explaining.
+  p.textContent = "GPS: " + m + "m / " + preset.short;
+  // Color-code against the SELECTED filter, not a hardcoded ladder.
+  if (accuracyM <= limit)         p.className = "pill pill-good";   // passing
+  else if (accuracyM <= limit*2)  p.className = "pill pill-warn";   // marginal
+  else                            p.className = "pill pill-bad";    // rejected
+  // Live-refresh popover rows if open
+  if (typeof refreshGpsFilterPopover === "function") refreshGpsFilterPopover();
 }
-function setMode(m) { $("modePill").textContent = m; }
+
+// ============================================================
+// GPS QUALITY FILTER POPOVER (opens when the GPS pill is tapped)
+// ============================================================
+function buildGpsFilterPopover() {
+  if (document.getElementById("gpsFilterPop")) return;
+  var pop = document.createElement("div");
+  pop.id = "gpsFilterPop";
+  pop.className = "gps-filter-pop";
+  pop.setAttribute("role", "dialog");
+  pop.setAttribute("aria-label", "GPS quality filter");
+  pop.innerHTML =
+    '<div class="gfp-head">GPS Quality Filter'+
+    '  <button class="gfp-close" aria-label="Close">\u00d7</button>'+
+    '</div>'+
+    '<div class="gfp-sub" id="gfpSub">Current fix: —</div>'+
+    '<div class="gfp-list" id="gfpList"></div>'+
+    '<div class="gfp-foot">Painting is skipped on fixes above the limit.</div>';
+  document.body.appendChild(pop);
+  pop.querySelector(".gfp-close").addEventListener("click", closeGpsFilterPopover);
+  // Click-outside to close
+  document.addEventListener("mousedown", gpsPopOutsideHandler, true);
+  document.addEventListener("touchstart", gpsPopOutsideHandler, true);
+}
+function gpsPopOutsideHandler(ev) {
+  var pop = document.getElementById("gpsFilterPop");
+  if (!pop || !pop.classList.contains("open")) return;
+  var pill = document.getElementById("gpsPill");
+  if (pop.contains(ev.target)) return;
+  if (pill && pill.contains(ev.target)) return;
+  closeGpsFilterPopover();
+}
+function openGpsFilterPopover() {
+  buildGpsFilterPopover();
+  var pop = document.getElementById("gpsFilterPop");
+  var pill = document.getElementById("gpsPill");
+  if (!pop || !pill) return;
+  // Anchor below the pill, right-aligned to the viewport edge
+  var r = pill.getBoundingClientRect();
+  pop.style.top  = (r.bottom + 6) + "px";
+  pop.style.right = Math.max(8, (window.innerWidth - r.right)) + "px";
+  pop.classList.add("open");
+  refreshGpsFilterPopover();
+}
+function closeGpsFilterPopover() {
+  var pop = document.getElementById("gpsFilterPop");
+  if (pop) pop.classList.remove("open");
+}
+function refreshGpsFilterPopover() {
+  var pop = document.getElementById("gpsFilterPop");
+  if (!pop || !pop.classList.contains("open")) return;
+  var sub = document.getElementById("gfpSub");
+  var list = document.getElementById("gfpList");
+  if (!sub || !list) return;
+  var acc = state.lastGpsAccuracy;
+  sub.textContent = (acc == null)
+    ? "Current fix: — (no GPS yet)"
+    : "Current fix: " + (acc < 1 ? acc.toFixed(2) : Math.round(acc)) + " m";
+  var cur = getGpsFilterKey();
+  var order = ["any", "permissive", "standard", "good", "rtk"];
+  list.innerHTML = order.map(function (k) {
+    var p = GPS_FILTER_PRESETS[k];
+    var passes = (acc != null && acc <= p.max);
+    var mark = (acc == null) ? "" : (passes ? "\u2713" : "\u2717");
+    var markCls = passes ? "gfp-mark pass" : "gfp-mark fail";
+    var sel = (k === cur) ? " selected" : "";
+    return '<button class="gfp-row'+sel+'" data-k="'+k+'">'+
+           '  <span class="gfp-label">'+p.label+'</span>'+
+           '  <span class="'+markCls+'">'+mark+'</span>'+
+           '</button>';
+  }).join("");
+  // Wire row clicks (replaces old listeners each refresh — safe)
+  Array.prototype.forEach.call(list.querySelectorAll(".gfp-row"), function (btn) {
+    btn.addEventListener("click", function () {
+      var k = btn.getAttribute("data-k");
+      setGpsFilterKey(k);
+      // RTK soft guardrail
+      if (k === "rtk" && state.lastGpsAccuracy != null && state.lastGpsAccuracy > 5) {
+        if (typeof window.showToast === "function") {
+          window.showToast(
+            "Device is reporting ±" + Math.round(state.lastGpsAccuracy) +
+            "m — no fixes will pass RTK filter. Painting is paused until a better fix.",
+            { kind: "warn", duration: 6000 }
+          );
+        }
+      }
+      refreshGpsFilterPopover();
+    });
+  });
+}
+// Wire the pill click (once, on DOM ready). The pill itself is in index.html.
+(function wireGpsPill() {
+  function wire() {
+    var pill = document.getElementById("gpsPill");
+    if (!pill) return;
+    pill.style.cursor = "pointer";
+    pill.setAttribute("role", "button");
+    pill.setAttribute("tabindex", "0");
+    pill.setAttribute("title", "Tap to change GPS quality filter");
+    pill.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      var pop = document.getElementById("gpsFilterPop");
+      if (pop && pop.classList.contains("open")) closeGpsFilterPopover();
+      else openGpsFilterPopover();
+    });
+    pill.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pill.click(); }
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wire);
+  else wire();
+})();
 function avg(a) { return a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0; }
 function cellKey(lat, lng) {
   return Math.round(lat/CELL_SIZE_DEG) + "_" + Math.round(lng/CELL_SIZE_DEG);
@@ -4886,7 +4890,6 @@ window.addEventListener("DOMContentLoaded", () => {
   applyEquipmentUI();
   renderSectionButtons();
   if (typeof refreshSyncUI === "function") refreshSyncUI();   // �������� Stage 1: sync UI
-  if (typeof renderBoundaryDirty === "function") renderBoundaryDirty();
   startLocationFollow();
   showEqSubmenu($("eqType").value);
   updateEqSummary();
