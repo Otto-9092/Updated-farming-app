@@ -1034,3 +1034,79 @@ input, select {
   .metrics .m-val, .m-val { font-size: 28px; }
   .metrics .m-label, .m-label { font-size: 13px; }
 }
+
+/* ============================================================
+   GPS QUALITY FILTER POPOVER
+   Opened by tapping the #gpsPill in the header.
+   ============================================================ */
+.gps-filter-pop {
+  position: fixed;
+  z-index: 10000;
+  min-width: 240px;
+  max-width: 320px;
+  padding: 10px 12px 12px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  display: none;
+}
+.gps-filter-pop.open { display: block; }
+.gfp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.gfp-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.gfp-close:hover { color: var(--text); }
+.gfp-sub {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+.gfp-list { display: flex; flex-direction: column; gap: 4px; }
+.gfp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  text-align: left;
+}
+.gfp-row:hover { background: var(--panel); }
+.gfp-row.selected {
+  border-color: var(--green);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--green);
+}
+.gfp-row.selected .gfp-label { font-weight: 700; }
+.gfp-mark {
+  font-weight: 700;
+  margin-left: 10px;
+  min-width: 1em;
+  text-align: center;
+}
+.gfp-mark.pass { color: var(--green); }
+.gfp-mark.fail { color: var(--red); }
+.gfp-foot {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: italic;
+}
