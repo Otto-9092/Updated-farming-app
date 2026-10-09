@@ -1,12 +1,13 @@
-[README (18).md](https://github.com/user-attachments/files/33234318/README.18.md)
+[README (19).md](https://github.com/user-attachments/files/33254927/README.19.md)
 # 🌾 OπO Farming — Data Systems Pro
 
 A mobile-first **Progressive Web App (PWA)** for farm field operations: live GPS
 coverage mapping, equipment/field management, spray & seed calculators, season
 reporting, per-field **Profit & Loss** tracking, **seed-tag OCR + lot
-inventory**, an in-app **Field Guide handbook**, and a **DIY yield monitor**
-that talks to an ESP32 over Web Serial — all with **Google Drive cross-device
-sync** and full **offline** support.
+inventory**, an in-app **Field Guide handbook**, a **DIY yield monitor** that
+talks to an ESP32 over Web Serial, and **customer-facing As-Planted /
+As-Harvested PDF exports** — all with **Google Drive cross-device sync** and
+full **offline** support.
 
 Built to run on an in-cab tablet (Samsung Galaxy Tab) as part of the larger
 **"Combine Brain"** retrofit project — RTK GPS guidance, machine telemetry,
@@ -34,22 +35,24 @@ next step once the sensor pair is bolted onto the elevator.
 6. [Cross-Device Sync](#-cross-device-sync)
 7. [The Tabs](#-the-tabs)
 8. [Coverage Painting & GPS Smoothing](#-coverage-painting--gps-smoothing)
-9. [Profit & Loss Tab](#-profit--loss-tab)
-10. [Seed Tag + Inventory](#-seed-tag--inventory)
-11. [Yield Monitor Tab](#-yield-monitor-tab)
-12. [Field Guide (Handbook)](#-field-guide-handbook)
-13. [Releasing / Versioning](#-releasing--versioning-read-this-before-you-ship)
-14. [Local Development](#-local-development)
-15. [Troubleshooting](#-troubleshooting)
-16. [Roadmap](#-roadmap)
-17. [Changelog](#-changelog)
+9. [Map Export (As-Planted / As-Harvested PDFs)](#-map-export-as-planted--as-harvested-pdfs)
+10. [Profit & Loss Tab](#-profit--loss-tab)
+11. [Seed Tag + Inventory](#-seed-tag--inventory)
+12. [Yield Monitor Tab](#-yield-monitor-tab)
+13. [Field Guide (Handbook)](#-field-guide-handbook)
+14. [Releasing / Versioning](#-releasing--versioning-read-this-before-you-ship)
+15. [Local Development](#-local-development)
+16. [Troubleshooting](#-troubleshooting)
+17. [Roadmap](#-roadmap)
+18. [Changelog](#-changelog)
 
 ---
 
 ## ✨ Features
 
 - **Live coverage mapping** — Google Maps overlay paints acres as you drive; boundary capture with offset (left/right/center of machine).
-- **Swath smoothing (build-27)** — minimum-distance gate, EMA-smoothed heading, and GPS-dropout detection kill the zig-zag jitter when creeping or when a fix momentarily drifts.
+- **Swath smoothing** — minimum-distance gate, EMA-smoothed heading, and GPS-dropout detection kill the zig-zag jitter when creeping or when a fix momentarily drifts.
+- **Map Export (As-Planted / As-Harvested PDFs)** — one-tap map snapshot embedded in the Report PDF with the OπO Farming logo, signature block, and operator / customer / date lines.
 - **Field & Equipment library** — reusable fields (with boundaries) and machines (sprayer, combine, planter, tillage, spreader, swather, baler).
 - **Tools / Calculators** — product/chemical mix calculator, cost-per-acre calculator.
 - **Reports** — per-operation records (acres, bushels, gallons, bales, etc.) with as-applied rate layers.
@@ -72,10 +75,10 @@ next step once the sensor pair is bolted onto the elevator.
 - **PWA** — `manifest.json` + `sw.js` service worker.
 - **localStorage** — primary data store (keyed objects).
 - **IndexedDB** — note photo blobs + seed-tag photos (separate DB).
-- **Google APIs** — Maps JavaScript API (mapping) + Google Identity Services / Drive (sync).
+- **Google APIs** — Maps JavaScript API (live mapping), **Static Maps API** (PDF snapshots), Google Identity Services / Drive (sync).
 - **Tesseract.js** — on-device OCR for seed tags (lazy-loaded from jsDelivr, cached by SW).
 - **marked** — markdown rendering for the Field Guide (lazy-loaded from jsDelivr).
-- **Web Serial API** — ESP32 connection for the Yield Monitor (Chrome/Edge on Android/desktop; iOS Safari is view-only).
+- **Web Serial API** — ESP32 connection for the Yield Monitor (Chrome/Edge desktop; mobile is view-only).
 
 ---
 
@@ -94,8 +97,10 @@ next step once the sensor pair is bolted onto the elevator.
 | `handbook.js` | Field Guide tab: fetches markdown sections from `opio-field-guide` repo |
 | `handbook.css` | Handbook tab styles |
 | `yieldmonitor.js` | Yield Monitor tab: Web Serial connect, calibration workflow, K storage |
+| `mapexport.js` | **Capture Map** button + Static-Maps snapshot + branded PDF header/footer/signature injection |
 | `sw.js` | Service worker: cache versioning + offline strategy (app shell + handbook + Tesseract) |
 | `manifest.json` | PWA metadata (icons, theme color, display mode) |
+| `opio-logo.png` | OπO Farming logo (transparent background, used in the PDF header) |
 | `icon-*.png`, `favicon.ico` | App icons |
 
 ---
@@ -109,7 +114,8 @@ next step once the sensor pair is bolted onto the elevator.
                 │ loads (in order)
                 ▼
    config.js → app.js → uxenhancements.js → asapplied.js
-                          → seedtag.js → handbook.js → yieldmonitor.js
+                          → seedtag.js → handbook.js
+                          → yieldmonitor.js → mapexport.js
                 │
      ┌──────────┼───────────┬────────────┬──────────────┐
      ▼          ▼           ▼            ▼              ▼
@@ -148,6 +154,11 @@ conflict resolution.
 | Note photos | *(IndexedDB: `opio-notes`)* | — | — |
 | Seed-tag photos | *(IndexedDB: `opio-seedtags`)* | — | — |
 
+Report records as of build-28 may also carry an optional `mapImage` property
+(`{ dataUrl, capturedAt, title }`) populated by `mapexport.js` when the user
+tapped **📸 Capture Map** during the session. It syncs along with the rest
+of the report payload.
+
 **Tombstones** record deletions (`{ id: deletedAtISO }`) so a delete on one
 device propagates to others instead of the item reappearing. They auto-expire
 after `TOMB_MAX_AGE_DAYS` (90).
@@ -184,6 +195,7 @@ flowchart LR
 
 The sync **payload** includes: `fields`, `equipment`, `reports`, `seedPresets`,
 `seedInventory`, `profitLoss`, `yieldRuns`, and `tombstones` for each.
+Captured map images ride along inside the report records.
 
 ---
 
@@ -191,7 +203,7 @@ The sync **payload** includes: `fields`, `equipment`, `reports`, `seedPresets`,
 
 | Tab | ID | Render hook | What it does |
 |-----|----|-----------|--------------|
-| Operate | `tab-operate` | — | Live mapping / active session |
+| Operate | `tab-operate` | — | Live mapping / active session (📸 Capture Map button lives here) |
 | Field & Equipment | `tab-setup` | — | Manage fields & machines; includes the **Seed Inventory** card |
 | Tools | `tab-tools` | `seedMixCalcFromState()` etc. | Mix & cost calculators |
 | Reports | `tab-reports` | — | Operation records |
@@ -233,7 +245,7 @@ instead of staring at an empty map.
 
 Walking tests at 1 Hz with a 15 m accuracy filter are a worst case for the
 renderer — the GPS noise is a bigger fraction of real movement than it is at
-tractor speeds. Build-27 adds three gates between a fix and a painted
+tractor speeds. Build-27 added three gates between a fix and a painted
 rectangle so the swath stays clean at any speed:
 
 1. **Minimum-distance gate (`GPS_MIN_MOVE_M = 0.75 m`)** — don't paint a new
@@ -268,6 +280,8 @@ rectangle so the swath stays clean at any speed:
 - `state.lastPaintedPos` — last fix we actually painted from; used by the
   min-distance gate.
 - `state.smoothedBearing` — current EMA-smoothed heading.
+- `state.capturedMapImage` — snapshot captured by **📸 Capture Map** (null
+  until the user takes one); embedded in the next Save Report.
 - `state.fixCount` / `state.paintedCount` / `state.rejectedCount` — counters
   shown on the status strip.
 - `state.coveragePolys` — array of painted rectangles.
@@ -287,6 +301,95 @@ If a fix is rejected, the strip turns orange and shows why
 (`GPS too rough (18m > 15m filter)`, `Speed spike rejected (82 mph)`,
 `GPS gap bridged (45m) — restarting swath`, etc.) rather than failing
 silently.
+
+---
+
+## 📸 Map Export (As-Planted / As-Harvested PDFs)
+
+Self-contained module (`mapexport.js`) that lets you capture a snapshot of
+the painted coverage mid-session and embeds it, together with an OπO Farming
+header and a signature block, into the Report PDF. Fully additive — no
+changes to `app.js` state or to the existing PDF flow; the module
+monkey-patches `localStorage.setItem` and `window.open` to inject the image
+and header without rewriting the PDF template.
+
+### Workflow for the operator
+
+1. Start a session, drive long enough to paint some coverage.
+2. Tap **📸 Capture Map** on the Operate screen.
+3. Preview the captured image; tap **Keep** (or **Retake**).
+4. Finish the pass, Save Report as normal.
+5. Open the saved report → **Print / Save PDF** → the PDF now includes the
+   OπO logo header, the captured map image, the existing summary table,
+   operator notes, and a signature block (Operator / Customer / Date) at the
+   bottom.
+
+### Automatic title selection
+
+The map's PDF title is chosen from the session's equipment type:
+
+| Equipment type | PDF title |
+|---|---|
+| `planter` / `drill` | **As-Planted Map — [Field Name]** |
+| `combine` | **As-Harvested Map — [Field Name]** |
+| `sprayer` | **As-Applied Map — [Field Name]** |
+| anything else | **Coverage Map — [Field Name]** |
+
+### Capture technique
+
+The module builds a **Google Static Maps API** URL encoding the field
+boundary (amber outline) and every painted coverage polygon (translucent
+green) as styled `path` parameters, requests the image at
+`640×640 @ scale=2` (effective 1280×1280 retina), and converts the response
+to a data URL that embeds cleanly in the PDF and survives localStorage/sync.
+
+Google caps the Static Maps URL at ~8192 chars. If a session's painted
+polygons blow that limit, the module auto-simplifies the paths using
+Douglas-Peucker with a progressively coarser tolerance (0, 1e-5, 3e-5, 8e-5,
+2e-4, 5e-4 degrees) until the URL fits. Simplification is logged to the
+console so you can see when it fires. An extremely dense session that can't
+fit even at the coarsest tolerance surfaces an error dialog rather than
+silently failing — in that case we can add an `html2canvas` fallback in a
+future build.
+
+### What goes on the PDF
+
+Each Report PDF produced on a device running build-28+ gets:
+
+- **Top header band** — OπO Farming logo + wordmark + "Data Systems Pro"
+  tagline, with a green divider underneath. The browser-tab title is also
+  rewritten so the saved-PDF filename reads `OπO Farming` instead of any
+  legacy branding.
+- **Map section** (if a `mapImage` is attached to the report) — title line
+  (e.g. "As-Planted Map — North 40"), full-width map image.
+- **Original summary table + field notes** — unchanged, built by `app.js` as before.
+- **Signature block** — three lines side-by-side:
+  - Operator Signature
+  - Customer / Delivered To
+  - Date
+- **Footer** — "Generated by OπO Farming · v2026.10.09 · 28 · DD/MM/YYYY HHMM".
+
+The signature block is only added to single-report PDFs. Multi-report
+rollups like **Reports Export** and **Season Summary** get the header and
+footer but skip the signature block (they're not a per-customer deliverable).
+
+### State and storage
+
+- **`state.capturedMapImage`** — `{ dataUrl, capturedAt, title }` while a
+  session is running. Reset to `null` on `startSession()`.
+- **`report.mapImage`** — same shape, attached to the saved report record on
+  `Save Report`. Syncs with the rest of the report payload via the existing
+  Drive sync engine.
+
+### Public surface
+
+`mapexport.js` exposes a tiny `window.MapExport` object for future wiring
+(e.g. a "Re-capture" button on the Reports tab):
+
+- `MapExport.captureMap()` — kick off the capture flow.
+- `MapExport.mapTitleFor(eqType)` — resolve the title string.
+- `MapExport.buildStaticMapUrl(simplifyTolerance)` — build the raw URL (used
+  for the internal fit-under-URL-limit loop).
 
 ---
 
@@ -425,8 +528,8 @@ you must **bust the cache** or devices keep running the old files.
 The canonical build number lives in **`config.js`**:
 
 ```js
-window.APP_BUILD = "2026.10.08-27";             // machine form: YYYY.MM.DD-N
-window.APP_VERSION_LABEL = "v2026.10.08 · 27";  // human label shown in header
+window.APP_BUILD = "2026.10.09-28";             // machine form: YYYY.MM.DD-N
+window.APP_VERSION_LABEL = "v2026.10.09 · 28";  // human label shown in header
 ```
 
 - **`app.js` stamps the header `#appVersion` label from `APP_VERSION_LABEL` at
@@ -445,7 +548,7 @@ window.APP_VERSION_LABEL = "v2026.10.08 · 27";  // human label shown in header
 2. **`sw.js`** — `CACHE_VERSION = "opio-YYYY.MM.DD-N";` and every `?v=YYYYMMDD-N`
    in `CORE_ASSETS` (currently: `styles.css`, `seedtag.css`, `config.js`,
    `app.js`, `uxenhancements.js`, `asapplied.js`, `seedtag.js`, `handbook.js`,
-   `yieldmonitor.js`).
+   `yieldmonitor.js`, `mapexport.js`).
 3. **`index.html`** — the `?v=YYYYMMDD-N` query string on every `<script>` /
    `<link>` and the hard-coded `#appVersion` fallback span.
 
@@ -466,7 +569,7 @@ device:
 You'll know it worked when the header shows the new **vYYYY.MM.DD · NN** and
 the console shows **no** `[version] MISMATCH` warning.
 
-Current build: `v2026.10.08 · 27` (cache `opio-2026.10.08-27`).
+Current build: `v2026.10.09 · 28` (cache `opio-2026.10.09-28`).
 
 ---
 
@@ -492,17 +595,29 @@ run locally, add `http://localhost:*/*` and `http://localhost:8080` (or your
 port) as extra allowed origins in the Google Cloud Console — otherwise Maps
 tiles and Google sign-in will fail with an origin mismatch.
 
+> **Static Maps API note:** the map snapshot feature in `mapexport.js` uses
+> the Static Maps API, which must be **separately enabled** in the Google
+> Cloud Console project behind your API key (Maps JavaScript API alone is
+> not enough). If the Capture Map button returns an error about an
+> unauthorized API, enable **Static Maps API** on the same key.
+
 **Editing tips:**
 - The P&L module is self-contained at the end of `app.js` — safe to edit in isolation.
-- `seedtag.js`, `handbook.js`, and `yieldmonitor.js` are fully self-contained
-  IIFE modules — safe to edit or replace wholesale without touching `app.js`.
+- `seedtag.js`, `handbook.js`, `yieldmonitor.js`, and `mapexport.js` are fully
+  self-contained IIFE modules — safe to edit or replace wholesale without
+  touching `app.js`.
 - `asapplied.js` is also self-contained — it **monkey-patches** `onPos`,
   `drawCoveragePolygon`, and `paintSwath` at runtime instead of editing
   `app.js` directly. If you refactor any of those three, keep them as
   top-level function declarations so the `window.*` patches still attach.
+- `mapexport.js` similarly monkey-patches `localStorage.setItem` and
+  `window.open`. It identifies Report PDF popups by a text match on the
+  popup title/body (`OπO Farming`, `O\u03C0O`, `Diamond O`, `Field Report`,
+  `Season Summary`, `Reports Export`). If future `app.js` rewrites change
+  those strings, update the regex at the top of `decoratePopup()`.
 - New tabs = add a `data-tab` button + a `#tab-X` panel + (optional) a render
   hook in the tab switcher, **or** inject them from a self-contained module
-  the way the three modules above do it.
+  the way the modules above do it.
 - Style with the existing CSS variables so light/dark themes both work.
 
 ---
@@ -518,6 +633,11 @@ tiles and Google sign-in will fail with an origin mismatch.
 | Swath looks zig-zaggy / jittery | GPS noise bigger than real motion (common at walking speed) | Expected on foot. In the tractor, raise `BEARING_EMA_ALPHA` toward 0.45 if swath feels laggy on turns, or lower it toward 0.20 for smoother straight runs. See [Coverage Painting & GPS Smoothing](#-coverage-painting--gps-smoothing). |
 | Status strip shows `GPS gap bridged (Xm) — restarting swath` | Momentary GPS dropout; a hop > `3 × swath width` was detected | Normal around tree lines / under bins. If it fires on open ground, raise `GAP_WIDTH_MULTIPLIER` toward 5. |
 | Tiny gaps between rectangles while driving straight | `GPS_MIN_MOVE_M` too high for your fix rate / speed | Drop from 0.75 toward 0.5 m. |
+| **📸 Capture Map button missing** | Running an old cached build without `mapexport.js` | Cache bust and reload (full 3-file version bump). |
+| **Capture Map says "Map export is too complex to render"** | Painted polygons blew Google's ~8 K URL limit even after simplification | Capture earlier in the session, or wait for the planned `html2canvas` fallback. |
+| **Captured map is blank / shows "You must enable Billing"** | Static Maps API isn't enabled on the project behind the Maps key | Google Cloud Console → APIs & Services → Enable **Static Maps API**. The JS Maps API alone isn't enough. |
+| **Captured map shows "This page can't load Google Maps correctly"** | Static Maps API key referrer restriction doesn't match current origin | Google Cloud Console → API key → HTTP referrers → add the GitHub Pages origin pattern. |
+| **PDF has no header / signature block** | Popup was blocked before `mapexport.js` could decorate it | Allow pop-ups for the app's origin, then re-open the PDF. |
 | Maps tiles fail to load in production | Maps API key origin restriction doesn't match the deploy URL | Google Cloud Console → API key → HTTP referrers → add correct pattern |
 | Google sign-in fails with `origin_mismatch` | OAuth Client authorized JavaScript origins missing this URL | Google Cloud Console → OAuth Client → add origin (no trailing slash, no path) |
 | P&L / inventory / yield runs not syncing | Not signed in, or didn't tap Sync Now | Sign in to Google, then **Sync Now** on both devices |
@@ -547,6 +667,7 @@ This app is the **software layer** of the larger "Combine Brain" build for the
 - ✅ **Yield Monitor tab (calibration)** — Web Serial to ESP32, per-crop K storage, run history.
 - ✅ **GPS pipeline rebuild** — single always-on watcher, user-selectable accuracy filter, visible status strip with painted / rejected / total fix counters.
 - ✅ **Swath smoothing** — min-distance gate, EMA-smoothed heading, GPS-dropout detection (build-27).
+- ✅ **Customer-facing map export** — As-Planted / As-Harvested / As-Applied PDFs with OπO branding and signature block (build-28).
 
 ### In progress
 - 🔨 **Yield monitor — live mapping.** The tab currently handles calibration
@@ -558,6 +679,10 @@ This app is the **software layer** of the larger "Combine Brain" build for the
   `BEARING_EMA_ALPHA`, `GPS_MIN_MOVE_M`, and `GAP_WIDTH_MULTIPLIER`.
 
 ### Next
+- ⏭️ **`html2canvas` fallback for Map Export** so sessions with insanely
+  dense coverage can still produce a PDF.
+- ⏭️ **Re-capture / replace map from the Reports tab** so you can regenerate
+  the snapshot after a session is already saved.
 - ⏭️ **Yield-monitor Wi-Fi transport** (firmware v1.3+) so Chrome for Android /
   iOS can consume the live stream without Web Serial.
 - ⏭️ **Fuel level** monitoring.
@@ -576,6 +701,7 @@ Versions use the format `vYYYY.MM.DD · NN` (see [Releasing / Versioning](#-rele
 
 | Version | Highlights |
 |---------|-----------|
+| **v2026.10.09 · 28** | **Map Export (As-Planted / As-Harvested / As-Applied PDFs).** New self-contained `mapexport.js` module adds a **📸 Capture Map** button on the Operate screen that pulls a Google Static Maps snapshot of the painted coverage (field boundary in amber, coverage in translucent green). The snapshot is attached to the saved report and injected into the Report PDF above the existing summary table, together with an OπO Farming logo header, a signature block (Operator / Customer / Date), and a build-stamped footer. Automatic title selection by equipment type: planter/drill → "As-Planted Map", combine → "As-Harvested Map", sprayer → "As-Applied Map". Douglas-Peucker polyline simplification auto-fits dense coverage into Google's ~8 K URL limit. New `opio-logo.png` asset shipped alongside the icons. No changes to `app.js` — `mapexport.js` monkey-patches `localStorage.setItem` (to attach the image to the newest saved report) and `window.open` (to decorate the PDF popup). |
 | **v2026.10.08 · 27** | **Swath smoothing.** Three new gates between a GPS fix and a painted rectangle: (1) a **minimum-distance gate** (`GPS_MIN_MOVE_M = 0.75 m`) tracked against a new `state.lastPaintedPos` separate from `state.lastPos`, so the gate doesn't break speed derivation; (2) **GPS-dropout detection** (`GAP_WIDTH_MULTIPLIER = 3 × swath width`) that resets the paint cursor and smoothed bearing instead of bridging a huge false rectangle, with a visible status-strip message when it fires; (3) **heading smoothing** via a new `emaBearing()` helper using circular averaging (sin/cos components, so 0°/360° wrap doesn't jerk the smoothed heading when pointed due north). `paintSwath` kept backward-compatible — it still falls back to raw point-to-point bearing when a smoothed one isn't passed, so `asapplied.js`'s RTK bridge is unaffected. Tuning constants documented in [Coverage Painting & GPS Smoothing](#-coverage-painting--gps-smoothing). |
 | **v2026.10.08 · 26** | *(No separate changelog entry captured during the smoothing-prep work; folded into v27.)* |
 | **v2026.10.08 · 25** | **GPS pipeline rebuild.** Collapsed the paint pipeline onto a **single always-on `watchPosition()`** (`startLocationFollow`) that routes into `onPos()` whenever `state.running` is true. iOS Safari throttles / silently drops a second concurrent watcher, which is what left build-24 stuck on "Starting session…" with no painting. Added **paint-pipeline counters** (`fixCount` / `paintedCount` / `rejectedCount`) and a **fail-loud status strip** that reports GPS accuracy, speed, counters, and the exact reason any fix was rejected. Removed the overlap-grid gate from `drawCoveragePolygon` so every stripe counts toward acres — the grid cell is still tracked for backward compat but no longer gates paint. |
