@@ -2965,7 +2965,7 @@ $("btnDeleteEq").addEventListener("click", async () => {
   if (!(await appConfirm(`Delete machine "${k}"?`, { title: "Delete machine", okLabel: "Delete", danger: true }))) return;
   delete lib[k];
   localStorage.setItem(LS_EQ, JSON.stringify(lib));
-  recordTombstone(LS_TOMB_EQ, k);   // ← remember the deletion for sync
+  recordTombstone(LS_TOMB_EQ, k);   // ������� remember the deletion for sync
   loadEquipmentList();
   if (typeof updateDataStats === "function") updateDataStats();   // ← NEW LINE
 });
@@ -3469,8 +3469,34 @@ $("btnSave").addEventListener("click", async () => {
       return { inputs: ci, summary: computeCostSummary(ci) };
     })(),
     notes: (state.notes || []).slice(),       // ← NEW: field notes (GPS-tagged)
+    // --- build-29: persist coverage geometry so re-capture works later ---
+    // coveragePaths: array of polygon paths; each path is an array of {lat,lng}.
+    // boundaryPath : the field boundary at save time (or null if none).
+    // Together these let mapexport.js rebuild the Static Map from any saved
+    // report, not just the currently-running session.
+    coveragePaths: (function () {
+      try {
+        return (state.coveragePolys || [])
+          .filter(function (p) { return p && typeof p.getPath === "function"; })
+          .map(function (p) {
+            var out = [];
+            var path = p.getPath();
+            for (var i = 0; i < path.getLength(); i++) {
+              var ll = path.getAt(i);
+              out.push({ lat: +ll.lat().toFixed(6), lng: +ll.lng().toFixed(6) });
+            }
+            return out;
+          })
+          .filter(function (arr) { return arr.length >= 3; });
+      } catch (e) { return []; }
+    })(),
+    boundaryPath: (state.boundary && state.boundary.points && state.boundary.points.length >= 3)
+      ? state.boundary.points.map(function (p) {
+          return { lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) };
+        })
+      : null,
   };
-const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
+  const all = JSON.parse(localStorage.getItem(LS_REPS) || "{}");
   all[id] = rep;
   localStorage.setItem(LS_REPS, JSON.stringify(all));
   loadReportsList();
@@ -5700,7 +5726,7 @@ function mergeLibrary(localObj, cloudObj, tsField, localTomb, cloudTomb) {
     var delTs = Math.max(tparse(localTomb[k]), tparse(cloudTomb[k]));
 
     if (delTs && delTs >= aliveTs) {
-      // Deletion wins → omit item, carry tombstone forward
+      // Deletion wins �� omit item, carry tombstone forward
       mergedTomb[k] = new Date(delTs).toISOString();
       return;
     }
