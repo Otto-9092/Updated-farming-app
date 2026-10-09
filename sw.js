@@ -8,7 +8,7 @@
    first successful load so seed-tag scanning works offline.
    Bump CACHE_VERSION whenever you ship new files.
    ============================================================ */
-const CACHE_VERSION = "opio-2026.10.08-26";
+const CACHE_VERSION = "opio-2026.10.08-27";
 const CACHE_NAME = "opio-cache-" + CACHE_VERSION;
 const HANDBOOK_CACHE_NAME = "opio-handbook-" + CACHE_VERSION;
 const TESS_CACHE_NAME = "opio-tesseract-" + CACHE_VERSION;
@@ -17,15 +17,15 @@ const TESS_CACHE_NAME = "opio-tesseract-" + CACHE_VERSION;
 // versions referenced in index.html so the right copies are precached.
 const CORE_ASSETS = [
   "./",
-  "./styles.css?v=20261008-26",
-  "./seedtag.css?v=20261008-26",
-  "./config.js?v=20261008-26",
-  "./app.js?v=20261008-26",
-  "./uxenhancements.js?v=20261008-26",
-  "./asapplied.js?v=20261008-26",
-  "./seedtag.js?v=20261008-26",
-  "./handbook.js?v=20261008-26",
-  "./yieldmonitor.js?v=20261008-26",
+  "./styles.css?v=20261008-27",
+  "./seedtag.css?v=20261008-27",
+  "./config.js?v=20261008-27",
+  "./app.js?v=20261008-27",
+  "./uxenhancements.js?v=20261008-27",
+  "./asapplied.js?v=20261008-27",
+  "./seedtag.js?v=20261008-27",
+  "./handbook.js?v=20261008-27",
+  "./yieldmonitor.js?v=20261008-27",
   "./manifest.json",
   "./icon-16.png",
   "./icon-32.png",
@@ -48,111 +48,100 @@ const TESS_HOSTS = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
-      Promise.all(CORE_ASSETS.map((url) =>
-        cache.add(url).catch((err) => console.warn("[SW] skip precache:", url, err))
-      ))
-    ).then(() => self.skipWaiting())
+      cache.addAll(CORE_ASSETS).catch((err) => {
+        // Don't let one missing icon kill the whole install.
+        console.warn("[sw] precache partial failure:", err);
+      })
+    )
   );
+  self.skipWaiting();
 });
 
+// Activate: drop old caches so stale builds don't linger.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => {
-        return k !== CACHE_NAME && k !== HANDBOOK_CACHE_NAME && k !== TESS_CACHE_NAME;
-      }).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+      Promise.all(
+        keys
+          .filter((k) =>
+            k.startsWith("opio-cache-") ||
+            k.startsWith("opio-handbook-") ||
+            k.startsWith("opio-tesseract-")
+          )
+          .filter((k) =>
+            k !== CACHE_NAME &&
+            k !== HANDBOOK_CACHE_NAME &&
+            k !== TESS_CACHE_NAME
+          )
+          .map((k) => caches.delete(k))
+      )
+    )
   );
+  self.clients.claim();
 });
 
-function isNetworkOnly(url) {
-  return (
-    url.hostname.includes("googleapis.com") ||
-    url.hostname.includes("gstatic.com") ||
-    url.hostname.includes("google.com") ||
-    url.hostname.includes("googleusercontent.com")
-  );
-}
-function isHandbookRequest(url) {
-  return url.href.startsWith(HANDBOOK_BASE);
-}
-function isTesseractRequest(url) {
-  if (!TESS_HOSTS.includes(url.hostname)) return false;
-  return /tesseract/i.test(url.pathname) || /traineddata/i.test(url.pathname);
-}
-
+// Fetch strategy:
+//   • Handbook sections       — cache-first, fall through to network.
+//   • Tesseract.js assets     — cache-first, fall through to network.
+//   • Google Maps / anything else off-origin — network-only, no cache.
+//   • App shell (same-origin) — cache-first with network fallback.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
-  let url;
-  try { url = new URL(req.url); } catch (e) { return; }
 
-  if (isHandbookRequest(url)) {
-    event.respondWith(
-      fetch(req).then((res) => {
-        if (res && res.status === 200) {
-          const copy = res.clone();
-          caches.open(HANDBOOK_CACHE_NAME).then((c) => c.put(req, copy));
-        }
-        return res;
-      }).catch(() =>
-        caches.match(req).then((hit) => hit || new Response(
-          "# Section unavailable offline\n\nThis section hasn't been viewed while online yet.",
-          { headers: { "Content-Type": "text/markdown" } }
-        ))
-      )
-    );
-    return;
-  }
+  const url = new URL(req.url);
 
-  if (isTesseractRequest(url)) {
+  // Handbook — long-lived cache.
+  if (url.href.startsWith(HANDBOOK_BASE)) {
     event.respondWith(
-      caches.match(req).then((hit) => {
+      caches.open(HANDBOOK_CACHE_NAME).then(async (cache) => {
+        const hit = await cache.match(req);
         if (hit) return hit;
-        return fetch(req).then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(TESS_CACHE_NAME).then((c) => c.put(req, copy));
-          }
+        try {
+          const res = await fetch(req);
+          if (res && res.ok) cache.put(req, res.clone());
           return res;
-        });
+        } catch (e) {
+          return hit || Response.error();
+        }
       })
     );
     return;
   }
 
-  if (isNetworkOnly(url)) return;
-  if (url.origin !== self.location.origin) return;
-
-  const isHTML = req.mode === "navigate" ||
-    (req.headers.get("accept") || "").includes("text/html");
-  if (isHTML) {
+  // Tesseract OCR assets.
+  if (TESS_HOSTS.some((h) => url.hostname === h || url.hostname.endsWith("." + h))) {
     event.respondWith(
-      fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE_NAME).then((c) => c.put(req, copy));
-        return res;
-      }).catch(() =>
-        caches.match(req).then((hit) => hit || caches.match("./index.html"))
-      )
+      caches.open(TESS_CACHE_NAME).then(async (cache) => {
+        const hit = await cache.match(req);
+        if (hit) return hit;
+        try {
+          const res = await fetch(req);
+          if (res && res.ok) cache.put(req, res.clone());
+          return res;
+        } catch (e) {
+          return hit || Response.error();
+        }
+      })
     );
     return;
   }
 
+  // Off-origin (Google Maps, OAuth, etc.) — straight to network.
+  if (url.origin !== self.location.origin) return;
+
+  // App shell — cache-first.
   event.respondWith(
-    caches.match(req).then((hit) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const hit = await cache.match(req);
       if (hit) return hit;
-      return fetch(req).then((res) => {
-        if (res && res.status === 200 && res.type === "basic") {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(req, copy));
-        }
+      try {
+        const res = await fetch(req);
+        if (res && res.ok) cache.put(req, res.clone());
         return res;
-      }).catch(() => hit);
+      } catch (e) {
+        return hit || Response.error();
+      }
     })
   );
-});
-
-self.addEventListener("message", (event) => {
-  if (event.data === "SKIP_WAITING") self.skipWaiting();
 });
