@@ -535,6 +535,7 @@
     // 2) drawCoveragePolygon -> if bushels is locked, restore it after the
     //    original (which would otherwise add to the auto-estimate).
     if (typeof window.drawCoveragePolygon === "function" && !window.drawCoveragePolygon.__aaPatched) {
+      var _draw = window.drawCoveragePolygon;
       window.drawCoveragePolygon = function () {
         var locked = state.bushelsManual;
         var saved = state.bushels;
