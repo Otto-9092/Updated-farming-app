@@ -1627,19 +1627,18 @@ async function startSession() {
   if (!navigator.geolocation) { appAlert("Geolocation not supported on this device.", "GPS unavailable"); return; }
   readFormsIntoState();
 
-  // ← NEW: themed field-check + weather dialog before starting
+  // ← Themed field-check + weather dialog before starting
   const proceed = await showStartDialog();
   if (!proceed) { return; }
 
-  // ← NEW: harvest setup (combine only) — expected yield + start moisture
+  // ← Harvest setup (combine only) — expected yield + start moisture
   state.harvest = { expectedYield: "", startMoisture: "", log: [] };
   if (state.equipment.type === "combine") {
     await showHarvestStartDialog();
   }
-  updateHarvestTile();   // ← seed live tile with baseline
-  updateTankAndLoads();  // ← seed tank/load tiles
+  updateHarvestTile();   // seed live tile with baseline
+  updateTankAndLoads();  // seed tank/load tiles
 
-  state.running = true;
   state.sessionStart = Date.now();
   state.acres = 0; state.bushels = 0; state.gallons = 0;
   // Reset tank + load tracking for the new session
@@ -1648,7 +1647,7 @@ async function startSession() {
   state.loadLog = [];
   state.bales = 0;
   state.baleLog = [];
-  state.notes = [];            // ← reset field notes for the new session
+  state.notes = [];            // reset field notes for the new session
   renderNotes();
   state.coverageCells.clear();
   state.efficiencyHits = 0; state.efficiencyAttempts = 0;
@@ -1665,10 +1664,17 @@ async function startSession() {
   state.speedMax = 0;
   state.trailPoints = [];
 
-  // --- New paint pipeline counters (rebuild 2026.10.08) ---
+  // --- Paint pipeline counters (rebuild 2026.10.08 build 25) ---
   state.fixCount = 0;
   state.paintedCount = 0;
   state.rejectedCount = 0;
+
+  // Flip the running flag LAST — the single always-on watcher
+  // (startLocationFollow) checks state.running on every fix and routes
+  // into the paint pipeline when it's true. No second watchPosition
+  // call here; iOS throttles / silently drops the second watcher,
+  // which broke painting in build 24.
+  state.running = true;
   updateStatusStrip("Starting session…");
 
   // Reset UI metrics
@@ -1681,39 +1687,51 @@ async function startSession() {
   $("btnStop").disabled  = false;
   setMode("RUNNING");
 
-  state.watchId = navigator.geolocation.watchPosition(
-    onPos,
-    (err) => { console.warn(err); setGpsPill(false); },
-    { enableHighAccuracy: true, maximumAge: 500, timeout: 10000 }
-  );
-
   requestWakeLock();
 
-  // ← NEW: kick off recurring harvest update prompts for combines
+  // Kick off recurring harvest update prompts for combines
   if (state.equipment.type === "combine") startHarvestTimer();
 }
 
 function stopSession() {
   state.running = false;
-  stopHarvestTimer();   // ← NEW: end recurring harvest prompts
-  if (state.watchId != null) navigator.geolocation.clearWatch(state.watchId);
-  state.watchId = null;
+  stopHarvestTimer();
+  // The single always-on watcher (startLocationFollow) keeps running —
+  // it just goes back to display-only mode now that state.running is false.
+  // We do NOT clearWatch() the always-on watcher.
   $("btnStart").disabled = false;
   $("btnStop").disabled  = true;
   setMode("IDLE");
   releaseWakeLock();
+  updateStatusStrip(null); // hide the strip (checked inside updateStatusStrip)
 }
 
 // ============================================================
-// BACKGROUND LOCATION FOLLOW (runs even outside a session)
-// ============================================================
-// ============================================================
-// BACKGROUND LOCATION FOLLOW (runs even outside a session)
+// SINGLE UNIFIED LOCATION WATCHER (rebuild 2026.10.08 build 25)
+// Runs for the lifetime of the app. When a session is running
+// (state.running === true), each fix is routed into onPos() for
+// the full paint pipeline. When no session is running, it just
+// keeps the GPS pill + map marker up to date.
+//
+// Only ONE watchPosition() exists in the entire app. iOS Safari
+// throttles / drops a second concurrent watcher, which is why
+// build 24's session-only watcher never received fixes and the
+// status strip stayed stuck on "Starting session…".
 // ============================================================
 function startLocationFollow() {
   if (!navigator.geolocation) return;
   navigator.geolocation.watchPosition(
     (pos) => {
+      // --- Session mode: hand off to the full paint pipeline ---
+      if (state.running) {
+        try { onPos(pos); } catch (e) {
+          console.error("[onPos] error:", e);
+          updateStatusStrip("onPos error: " + (e && e.message ? e.message : String(e)));
+        }
+        return;
+      }
+
+      // --- Idle mode: display-only tracking ---
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       const acc = pos.coords.accuracy != null ? pos.coords.accuracy : 999;
@@ -1724,7 +1742,7 @@ function startLocationFollow() {
 
       if (state.machineMarker) state.machineMarker.setPosition({ lat, lng });
       if (state.map && state.autoCenter) state.map.panTo({ lat, lng });
-      if (!state.running) state.lastPos = { lat, lng, ts: pos.timestamp || Date.now() };
+      state.lastPos = { lat, lng, ts: pos.timestamp || Date.now() };
 
       const rawMph = pos.coords.speed != null && pos.coords.speed >= 0
         ? pos.coords.speed * MPS_TO_MPH : 0;
