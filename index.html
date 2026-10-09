@@ -23,8 +23,8 @@
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="icon-16.png" />
 <link rel="shortcut icon" href="favicon.ico" />
-<link rel="stylesheet" href="styles.css?v=20261006-23" />
-<link rel="stylesheet" href="seedtag.css?v=20261006-23" />
+<link rel="stylesheet" href="styles.css?v=20261008-24" />
+<link rel="stylesheet" href="seedtag.css?v=20261008-24" />
 <style>
   .app-version { font-size: 10px; opacity: 0.55; margin-left: 4px; font-weight: normal; white-space: nowrap; }
   /* ===== Card reordering ===== */
@@ -332,6 +332,24 @@
     .hb-content h2 { font-size: 17px; }
     .hb-content h3 { font-size: 15px; }
   }
+  /* ===== Session status strip (paint-pipeline fail-loud feedback) ===== */
+  .session-status-strip {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: #1a1d23;
+    color: #e8f5e8;
+    padding: 8px 12px;
+    font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace;
+    border-bottom: 2px solid #2ecc71;
+    text-align: center;
+  }
+  .session-status-strip.status-warn {
+    background: #4a2c1a;
+    color: #ffd4a3;
+    border-bottom-color: #e67e22;
+  }
+  .session-status-strip.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -348,7 +366,7 @@
     <span class="logo">🚜</span>
     <div>
       <div class="title">OπO Farming</div>
-      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.10.06 · 23</span></div>
+      <div class="subtitle">Data Systems Pro <span id="appVersion" class="app-version">v2026.10.08 · 24</span></div>
     </div>
   </div>
   <div class="status-pills">
@@ -374,6 +392,7 @@
 
   <!-- ===== OPERATE TAB ===== -->
   <section id="tab-operate" class="tab-panel active">
+    <div id="sessionStatusStrip" class="session-status-strip hidden">Session idle</div>
     <div class="map-wrap">
       <div class="operate-layout">
       <div class="map-col">
@@ -1472,14 +1491,14 @@
 
 <!-- Google Identity Services (for Sign in with Google / Drive sync) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="config.js?v=20261006-23"></script>
-<script src="app.js?v=20261006-23"></script>
+<script src="config.js?v=20261008-24"></script>
+<script src="app.js?v=20261008-24"></script>
   <script src="debug-hud.js?v=1"></script>
-<script src="uxenhancements.js?v=20261006-23"></script>
-<script src="asapplied.js?v=20261006-23"></script>
-<script src="seedtag.js?v=20261006-23"></script>
-<script src="handbook.js?v=20261006-23"></script>
-<script src="yieldmonitor.js?v=20261006-23"></script>
+<script src="uxenhancements.js?v=20261008-24"></script>
+<script src="asapplied.js?v=20261008-24"></script>
+<script src="seedtag.js?v=20261008-24"></script>
+<script src="handbook.js?v=20261008-24"></script>
+<script src="yieldmonitor.js?v=20261008-24"></script>
 
 <!-- Google Maps loader (uses key from config.js) -->
 <script>
