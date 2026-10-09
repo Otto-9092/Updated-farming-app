@@ -112,9 +112,11 @@ function setGpsFilterKey(k) {
 const GPS_MIN_MOVE_M        = 0.5;  // ignore micro-jitter below this (meters)
 const GPS_MAX_REALISTIC_MPH = 60;   // reject impossible speed jumps
 const SPEED_EMA_ALPHA       = 0.25; // exponential smoothing: lower = smoother, higher = more responsive
-// ===== localStorage keys =====
-const LS_EQ     = "dof_equipment_library";
-const LS_REPS   = "dof_reports";
+const GPS_MIN_MOVE_M        = 0.75; // ignore micro-jitter below this (meters) — paint only when we've actually moved
+const GPS_MAX_REALISTIC_MPH = 60;   // reject impossible speed jumps
+const SPEED_EMA_ALPHA       = 0.25; // exponential smoothing: lower = smoother, higher = more responsive
+const BEARING_EMA_ALPHA     = 0.30; // heading smoothing for swath perpendicular — lower = smoother rectangles, higher = snappier on turns
+const GAP_WIDTH_MULTIPLIER  = 3;    // if hop since last painted point > N × swath width, treat as GPS dropout (don't bridge, reset)
 const LS_FIELDS = "dof_fields_library";
 const LS_SEED   = "dof_seed_presets";
 const LS_PL     = "dof_pl_library";   // Profit & Loss fields (keyed object, syncs like the others)
@@ -1652,9 +1654,11 @@ async function startSession() {
   state.coverageCells.clear();
   state.efficiencyHits = 0; state.efficiencyAttempts = 0;
   state.coveragePolys.forEach(p => p.setMap(null));
+  state.coveragePolys.forEach(p => p.setMap(null));
   state.coveragePolys = [];
   state.lastPos = null;
-  state.speedBuf = []; state.acHrBuf = [];
+  state.lastPaintedPos = null;   // build-27: separate paint cursor so min-distance gate doesn't break speed derivation
+  state.smoothedBearing = null;  // build-27: EMA-smoothed heading for swath perpendicular
 
   clearTrail();
   state.lastSpeedTier = null;
@@ -1846,18 +1850,63 @@ function onPos(pos) {
     updateMetrics(smoothMph);
     return;
   }
+  // --- Normal path: decide whether to paint, then advance ---
+  // Build-27 smoothing: three gates between a fix and a painted rectangle.
+  //   1. Min-distance gate — don't paint if we've barely moved since the last
+  //      painted point. Kills GPS-jitter zig-zag when creeping or stationary.
+  //   2. Gap check — if the hop since the last painted point is huge
+  //      (> N × swath width), the GPS almost certainly dropped out; don't
+  //      bridge it with a giant fake rectangle. Reset the paint cursor and
+  //      smoothed bearing so we start clean on the next real fix.
+  //   3. Heading smoothing — compute the rectangle perpendicular from an
+  //      EMA-smoothed bearing rather than the raw point-to-point bearing,
+  //      so individual noisy fixes don't jerk the swath sideways.
+  const paintFrom = state.lastPaintedPos || state.lastPos;
+  const dSincePaint = haversine(paintFrom.lat, paintFrom.lng, lat, lng);
+  const widthFt = state.equipment.width || 0;
+  const widthM = widthFt > 0 ? widthFt / FT_PER_METER : 0;
+  const gapLimitM = widthM > 0 ? widthM * GAP_WIDTH_MULTIPLIER : Infinity;
 
-  // --- Normal path: paint a stripe and advance ---
-  paintSwath(state.lastPos, { lat, lng }, heading);
+  if (dSincePaint < GPS_MIN_MOVE_M) {
+    // Micro-move: update trail/metrics but don't paint a new rectangle.
+    state.trailPoints.push({ lat, lng, ts, speed: smoothMph });
+    state.lastPos = { lat, lng, ts };
+    updateMetrics(smoothMph);
+    updateStatusStrip(null);
+    return;
+  }
+
+  if (dSincePaint > gapLimitM) {
+    // Treat as GPS dropout — reset paint cursor and smoothed bearing so the
+    // next fix starts a fresh painted segment instead of a cross-field streak.
+    state.lastPaintedPos = null;
+    state.smoothedBearing = null;
+    state.trailPoints.push({ lat, lng, ts, speed: smoothMph });
+    state.lastPos = { lat, lng, ts };
+    updateMetrics(smoothMph);
+    updateStatusStrip("GPS gap bridged (" + dSincePaint.toFixed(0) + "m) — restarting swath");
+    return;
+  }
+
+  // Compute the raw bearing from the last painted point to here, then feed
+  // it through a circular EMA (sin/cos components) so the 0°/360° wrap
+  // doesn't produce a 359° jump when we're heading due north.
+  const rawBearing = (heading != null && !isNaN(heading))
+    ? heading
+    : bearingDeg(paintFrom.lat, paintFrom.lng, lat, lng);
+  const smoothedBearing = emaBearing(state.smoothedBearing, rawBearing, BEARING_EMA_ALPHA);
+  state.smoothedBearing = smoothedBearing;
+
+  paintSwath(paintFrom, { lat, lng }, smoothedBearing);
   addTrailSegment(
-    { lat: state.lastPos.lat, lng: state.lastPos.lng },
+    { lat: paintFrom.lat, lng: paintFrom.lng },
     { lat, lng },
     smoothMph
   );
   state.trailPoints.push({ lat, lng, ts, speed: smoothMph });
   state.lastPos = { lat, lng, ts };
+  state.lastPaintedPos = { lat, lng, ts };
   state.paintedCount = (state.paintedCount || 0) + 1;
-
   updateMetrics(smoothMph);
   updateStatusStrip(null);
 }
@@ -1980,10 +2029,17 @@ function clearTrail() {
 function paintSwath(p1, p2, headingDeg) {
   const widthFt = state.equipment.width;
   if (!widthFt || widthFt <= 0) {
+function paintSwath(p1, p2, headingDeg) {
+  const widthFt = state.equipment.width;
+  if (!widthFt || widthFt <= 0) {
     updateStatusStrip("Working width is 0 — set it in Field & Equipment");
     return;
   }
   const widthM  = widthFt / FT_PER_METER;
+  // Build-27: caller (onPos) now hands us an already-smoothed bearing, so we
+  // trust it. The raw-bearing fallback is kept for callers that don't smooth
+  // (e.g. the as-applied RTK bridge in asapplied.js, in case it ever calls
+  // paintSwath directly).
   const bearing = (headingDeg != null && !isNaN(headingDeg))
     ? headingDeg : bearingDeg(p1.lat, p1.lng, p2.lat, p2.lng);
   const left  = (bearing - 90 + 360) % 360;
@@ -1993,7 +2049,23 @@ function paintSwath(p1, p2, headingDeg) {
   drawCoveragePolygon(stripPolygon(p1, p2, left, right, half, half), p1, p2, widthM);
   state.efficiencyAttempts++;
 }
-function stripPolygon(p1, p2, leftBearing, rightBearing, leftMeters, rightMeters) {
+
+// ============================================================
+// Build-27: circular EMA for bearings.
+// Averaging degrees directly fails at the 0°/360° wrap (e.g. the mean of
+// 359° and 1° is 180°, not 0°). We convert to a unit vector (cos, sin),
+// EMA the components, and convert back. Returns 0..360.
+// ============================================================
+function emaBearing(prevDeg, nextDeg, alpha) {
+  if (nextDeg == null || isNaN(nextDeg)) return prevDeg;
+  if (prevDeg == null || isNaN(prevDeg)) return ((nextDeg % 360) + 360) % 360;
+  const rPrev = prevDeg * Math.PI / 180;
+  const rNext = nextDeg * Math.PI / 180;
+  const cos = (1 - alpha) * Math.cos(rPrev) + alpha * Math.cos(rNext);
+  const sin = (1 - alpha) * Math.sin(rPrev) + alpha * Math.sin(rNext);
+  const deg = Math.atan2(sin, cos) * 180 / Math.PI;
+  return (deg + 360) % 360;
+}
   return [
     offsetMeters(p1.lat, p1.lng, leftBearing,  leftMeters),
     offsetMeters(p2.lat, p2.lng, leftBearing,  leftMeters),
