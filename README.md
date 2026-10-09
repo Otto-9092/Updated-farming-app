@@ -1,4 +1,4 @@
-[README (16).md](https://github.com/user-attachments/files/32768676/README.16.md)
+[README (18).md](https://github.com/user-attachments/files/33234318/README.18.md)
 # 🌾 OπO Farming — Data Systems Pro
 
 A mobile-first **Progressive Web App (PWA)** for farm field operations: live GPS
@@ -33,21 +33,23 @@ next step once the sensor pair is bolted onto the elevator.
 5. [Data Model & Storage](#-data-model--storage)
 6. [Cross-Device Sync](#-cross-device-sync)
 7. [The Tabs](#-the-tabs)
-8. [Profit & Loss Tab](#-profit--loss-tab)
-9. [Seed Tag + Inventory](#-seed-tag--inventory)
-10. [Yield Monitor Tab](#-yield-monitor-tab)
-11. [Field Guide (Handbook)](#-field-guide-handbook)
-12. [Releasing / Versioning](#-releasing--versioning-read-this-before-you-ship)
-13. [Local Development](#-local-development)
-14. [Troubleshooting](#-troubleshooting)
-15. [Roadmap](#-roadmap)
-16. [Changelog](#-changelog)
+8. [Coverage Painting & GPS Smoothing](#-coverage-painting--gps-smoothing)
+9. [Profit & Loss Tab](#-profit--loss-tab)
+10. [Seed Tag + Inventory](#-seed-tag--inventory)
+11. [Yield Monitor Tab](#-yield-monitor-tab)
+12. [Field Guide (Handbook)](#-field-guide-handbook)
+13. [Releasing / Versioning](#-releasing--versioning-read-this-before-you-ship)
+14. [Local Development](#-local-development)
+15. [Troubleshooting](#-troubleshooting)
+16. [Roadmap](#-roadmap)
+17. [Changelog](#-changelog)
 
 ---
 
 ## ✨ Features
 
 - **Live coverage mapping** — Google Maps overlay paints acres as you drive; boundary capture with offset (left/right/center of machine).
+- **Swath smoothing (build-27)** — minimum-distance gate, EMA-smoothed heading, and GPS-dropout detection kill the zig-zag jitter when creeping or when a fix momentarily drifts.
 - **Field & Equipment library** — reusable fields (with boundaries) and machines (sprayer, combine, planter, tillage, spreader, swather, baler).
 - **Tools / Calculators** — product/chemical mix calculator, cost-per-acre calculator.
 - **Reports** — per-operation records (acres, bushels, gallons, bales, etc.) with as-applied rate layers.
@@ -86,7 +88,7 @@ next step once the sensor pair is bolted onto the elevator.
 | `styles.css` | Global styles + theme variables (`--panel`, `--accent`, `--green`, …) |
 | `config.js` | Google Maps API key + OAuth Client ID + `APP_BUILD` / `APP_VERSION_LABEL` |
 | `uxenhancements.js` | UX niceties: haptics, toasts, voice dictation, card reordering, ARIA labels |
-| `asapplied.js` | As-applied rate layer: tags each trail point, shapefile export, edit-bushels flow |
+| `asapplied.js` | As-applied rate layer: tags each trail point, shapefile export, edit-bushels flow, RTK paint-gate |
 | `seedtag.js` | Seed-tag OCR (Tesseract.js), lot inventory, planter variety picker |
 | `seedtag.css` | Seed inventory styles |
 | `handbook.js` | Field Guide tab: fetches markdown sections from `opio-field-guide` repo |
@@ -142,6 +144,7 @@ conflict resolution.
 | **Profit & Loss** | `dof_pl_library` | `dof_tomb_pl` | `_modified` |
 | **Yield-monitor runs** | `dof_ym_runs` | `dof_tomb_ym_runs` | `_modified` |
 | **Yield-monitor locked K (per crop)** | `dof_ym_lockedK` | — | — |
+| GPS filter preset | `dof_gps_filter` | — | — |
 | Note photos | *(IndexedDB: `opio-notes`)* | — | — |
 | Seed-tag photos | *(IndexedDB: `opio-seedtags`)* | — | — |
 
@@ -196,6 +199,94 @@ The sync **payload** includes: `fields`, `equipment`, `reports`, `seedPresets`,
 | **Profit & Loss** | `tab-pl` | `window.plRender()` | Per-field income/expense tracking |
 | **Field Guide** | `tab-handbook` | (internal) | Renders the `opio-field-guide` handbook sections |
 | **Yield Monitor** | `tab-ym` | (internal) | Web Serial → ESP32; calibration workflow + history |
+
+---
+
+## 🎯 Coverage Painting & GPS Smoothing
+
+The Operate tab paints a green rectangle between consecutive GPS fixes as the
+machine drives. The pipeline from a raw fix to a painted rectangle runs
+through a single unified watcher (`startLocationFollow`), which hands off to
+`onPos()` whenever a session is active. **Only one `watchPosition()` call
+exists in the whole app** — iOS Safari throttles / drops a second concurrent
+watcher, so the always-on watcher doubles as both the idle-mode marker-follow
+and the session paint pipeline.
+
+### GPS quality filter (user-selectable)
+
+A pill popover on the Operate tab lets the user pick the accuracy ceiling:
+
+| Preset | Max accuracy | Use case |
+|---|---|---|
+| Any (debug) | ∞ | troubleshooting only |
+| Permissive | ≤ 30 m | weak signal / tree-cover |
+| **Standard (default)** | ≤ 15 m | normal in-field work |
+| Good | ≤ 5 m | high-quality fix required |
+| RTK | ≤ 0.1 m | RTK-only painting via `asapplied.js`'s RTK bridge |
+
+The chosen preset is stored at `dof_gps_filter` in localStorage. Fixes above
+the ceiling are rejected and counted on the session status strip
+(`fixes: ✓ / ✗ / total`), so you can see *why* painting is or isn't happening
+instead of staring at an empty map.
+
+### Build-27 smoothing stack
+
+Walking tests at 1 Hz with a 15 m accuracy filter are a worst case for the
+renderer — the GPS noise is a bigger fraction of real movement than it is at
+tractor speeds. Build-27 adds three gates between a fix and a painted
+rectangle so the swath stays clean at any speed:
+
+1. **Minimum-distance gate (`GPS_MIN_MOVE_M = 0.75 m`)** — don't paint a new
+   rectangle unless the machine has moved at least this far since the *last
+   painted point*. Kills the fuzzy-blob jitter when creeping or stationary.
+   `state.lastPaintedPos` is tracked separately from `state.lastPos` so this
+   gate doesn't break speed derivation.
+2. **GPS-dropout detection (`GAP_WIDTH_MULTIPLIER = 3 × swath width`)** — if
+   the hop since the last painted point exceeds this threshold, treat it as a
+   dropout rather than bridging it with a huge false rectangle. The paint
+   cursor and smoothed bearing are reset, and the status strip shows
+   `GPS gap bridged (Xm) — restarting swath`.
+3. **Heading smoothing (`BEARING_EMA_ALPHA = 0.30`)** — the rectangle
+   perpendicular is computed from an EMA-smoothed bearing rather than the raw
+   point-to-point bearing. A dedicated `emaBearing()` helper uses circular
+   averaging (sin/cos components) so the 0°/360° wrap doesn't jerk the
+   smoothed heading when the machine is pointed due north.
+
+**Tuning knobs** (top of `app.js`, near the other GPS thresholds):
+
+| Constant | Default | What it does |
+|---|---|---|
+| `GPS_MIN_MOVE_M` | 0.75 | Minimum movement to paint; lower = tighter rectangles, more jitter risk |
+| `BEARING_EMA_ALPHA` | 0.30 | Heading-smoothing responsiveness; lower = smoother/laggier, higher = snappier |
+| `GAP_WIDTH_MULTIPLIER` | 3 | Dropout threshold as a multiple of swath width |
+| `GPS_MAX_REALISTIC_MPH` | 60 | Speed-spike rejection ceiling |
+| `SPEED_EMA_ALPHA` | 0.25 | Speed-smoothing responsiveness (display only, not paint) |
+
+### Session state fields (reset on every `startSession`)
+
+- `state.lastPos` — last fix we accepted; used for speed derivation.
+- `state.lastPaintedPos` — last fix we actually painted from; used by the
+  min-distance gate.
+- `state.smoothedBearing` — current EMA-smoothed heading.
+- `state.fixCount` / `state.paintedCount` / `state.rejectedCount` — counters
+  shown on the status strip.
+- `state.coveragePolys` — array of painted rectangles.
+- `state.coverageCells` — grid-cell set, kept for backward compat but no
+  longer gates acres (removed in build-25 so every stripe counts).
+
+### Status strip
+
+A fail-loud status strip under the metrics tiles reports GPS state in real
+time while a session is running:
+
+```
+GPS 7m · 4.3 mph   fixes: 142✓ / 3✗ / 145 total
+```
+
+If a fix is rejected, the strip turns orange and shows why
+(`GPS too rough (18m > 15m filter)`, `Speed spike rejected (82 mph)`,
+`GPS gap bridged (45m) — restarting swath`, etc.) rather than failing
+silently.
 
 ---
 
@@ -265,10 +356,14 @@ Monitor** tab with three sub-sections: **Setup**, **Calibration**, and
 **History**. Fully additive — no changes to `app.js` state or existing tabs.
 
 **Connection (Web Serial):**
-- Native support on **Chrome / Edge** for **Android, macOS, Windows, Linux**.
-- **iOS Safari does NOT support Web Serial** — the tab still works for browsing
-  calibration history; the Connect button explains that live capture requires a
-  Chromium browser.
+- Native support on **Chrome / Edge** on **macOS, Windows, Linux, ChromeOS**.
+- **Chrome for Android does NOT support Web Serial** either — this was
+  confirmed on-device 30/09/2026 on a Galaxy Tab S9 FE (SM-X518U, Chrome 154,
+  Android 16). `navigator.serial` simply does not exist on mobile Chromium.
+  The planned Wi-Fi/WebSocket transport (firmware v1.3+) is the mobile path.
+- **iOS Safari does NOT support Web Serial.** The tab still works for
+  browsing calibration history; the Connect button explains that live
+  capture requires a Chromium browser on a desktop/laptop.
 - Connection is persisted via `getPorts()` so re-plugging the ESP32 reconnects
   automatically (saved in `dof_ym_last_port_id`).
 
@@ -330,8 +425,8 @@ you must **bust the cache** or devices keep running the old files.
 The canonical build number lives in **`config.js`**:
 
 ```js
-window.APP_BUILD = "2026.09.28-22";            // machine form: YYYY.MM.DD-N
-window.APP_VERSION_LABEL = "v2026.09.28 · 22";  // human label shown in header
+window.APP_BUILD = "2026.10.08-27";             // machine form: YYYY.MM.DD-N
+window.APP_VERSION_LABEL = "v2026.10.08 · 27";  // human label shown in header
 ```
 
 - **`app.js` stamps the header `#appVersion` label from `APP_VERSION_LABEL` at
@@ -371,7 +466,7 @@ device:
 You'll know it worked when the header shows the new **vYYYY.MM.DD · NN** and
 the console shows **no** `[version] MISMATCH` warning.
 
-Current build: `v2026.09.28 · 22` (cache `opio-2026.09.28-22`).
+Current build: `v2026.10.08 · 27` (cache `opio-2026.10.08-27`).
 
 ---
 
@@ -401,6 +496,10 @@ tiles and Google sign-in will fail with an origin mismatch.
 - The P&L module is self-contained at the end of `app.js` — safe to edit in isolation.
 - `seedtag.js`, `handbook.js`, and `yieldmonitor.js` are fully self-contained
   IIFE modules — safe to edit or replace wholesale without touching `app.js`.
+- `asapplied.js` is also self-contained — it **monkey-patches** `onPos`,
+  `drawCoveragePolygon`, and `paintSwath` at runtime instead of editing
+  `app.js` directly. If you refactor any of those three, keep them as
+  top-level function declarations so the `window.*` patches still attach.
 - New tabs = add a `data-tab` button + a `#tab-X` panel + (optional) a render
   hook in the tab switcher, **or** inject them from a self-contained module
   the way the three modules above do it.
@@ -416,12 +515,15 @@ tiles and Google sign-in will fail with an origin mismatch.
 | "Add Field" / buttons do nothing | Running an old cached `app.js` | Same as above — cache bust |
 | Version label shows an old date | `APP_BUILD` / `APP_VERSION_LABEL` in `config.js` not bumped | Update them (and the `?v=` strings + `#appVersion` fallback) |
 | `[version] MISMATCH` warning in console | Half-deploy — `index.html` still has an old hard-coded label | Update the fallback `#appVersion` span in `index.html` to match `config.js` |
+| Swath looks zig-zaggy / jittery | GPS noise bigger than real motion (common at walking speed) | Expected on foot. In the tractor, raise `BEARING_EMA_ALPHA` toward 0.45 if swath feels laggy on turns, or lower it toward 0.20 for smoother straight runs. See [Coverage Painting & GPS Smoothing](#-coverage-painting--gps-smoothing). |
+| Status strip shows `GPS gap bridged (Xm) — restarting swath` | Momentary GPS dropout; a hop > `3 × swath width` was detected | Normal around tree lines / under bins. If it fires on open ground, raise `GAP_WIDTH_MULTIPLIER` toward 5. |
+| Tiny gaps between rectangles while driving straight | `GPS_MIN_MOVE_M` too high for your fix rate / speed | Drop from 0.75 toward 0.5 m. |
 | Maps tiles fail to load in production | Maps API key origin restriction doesn't match the deploy URL | Google Cloud Console → API key → HTTP referrers → add correct pattern |
 | Google sign-in fails with `origin_mismatch` | OAuth Client authorized JavaScript origins missing this URL | Google Cloud Console → OAuth Client → add origin (no trailing slash, no path) |
 | P&L / inventory / yield runs not syncing | Not signed in, or didn't tap Sync Now | Sign in to Google, then **Sync Now** on both devices |
 | Same field differs across devices | Edited on both between syncs | Resolve via the **conflict dialog** (Mine vs Cloud) |
 | Deleted item reappears after sync | Tombstone not recorded | Ensure deletes call `recordTombstone(LS_TOMB_*, id)` |
-| Yield Monitor "Connect" button says unsupported | Browser has no Web Serial (iOS Safari, or old browser) | Use Chrome / Edge on Android or a laptop; iOS is view-only for history |
+| Yield Monitor "Connect" button says unsupported | Browser has no Web Serial (iOS Safari, Chrome for Android, or old browser) | Use Chrome / Edge on a desktop/laptop; mobile is view-only until the Wi-Fi transport ships |
 | ESP32 connects then disconnects | Bad USB cable or power dip; wrong firmware version | Use a data-capable cable + clean 5V; flash `yield_monitor_combine` v1.2+ with `CSV_STREAM` enabled |
 | Seed-tag OCR won't load | First scan needs network to fetch Tesseract from jsDelivr | Do one scan online; SW caches the engine + language data for offline use after that |
 | Field Guide section blank offline | Section never viewed while online | Open each section once with signal so the SW caches it |
@@ -443,14 +545,21 @@ This app is the **software layer** of the larger "Combine Brain" build for the
 - ✅ **Seed Tag OCR + Inventory** — on-device Tesseract.js, lot tracking, planter auto-decrement.
 - ✅ **Field Guide tab** — in-app handbook from the `opio-field-guide` repo.
 - ✅ **Yield Monitor tab (calibration)** — Web Serial to ESP32, per-crop K storage, run history.
+- ✅ **GPS pipeline rebuild** — single always-on watcher, user-selectable accuracy filter, visible status strip with painted / rejected / total fix counters.
+- ✅ **Swath smoothing** — min-distance gate, EMA-smoothed heading, GPS-dropout detection (build-27).
 
 ### In progress
 - 🔨 **Yield monitor — live mapping.** The tab currently handles calibration
   and history. Next: consume live yield events during a harvest session and
   paint a yield-rate layer on the Operate coverage overlay. Hardware
   (IR pair + TSOP4838) queued for the 1480's clean grain elevator.
+- 🔨 **In-tractor smoothing validation.** Build-27 smoothing was tuned on
+  foot; actual-tractor traces this weekend will decide final values for
+  `BEARING_EMA_ALPHA`, `GPS_MIN_MOVE_M`, and `GAP_WIDTH_MULTIPLIER`.
 
 ### Next
+- ⏭️ **Yield-monitor Wi-Fi transport** (firmware v1.3+) so Chrome for Android /
+  iOS can consume the live stream without Web Serial.
 - ⏭️ **Fuel level** monitoring.
 - ⏭️ **Engine-bay temp + buzzer alarm.**
 - ⏭️ **Permanent in-cab HMI dashboard** tying it all together.
@@ -467,7 +576,10 @@ Versions use the format `vYYYY.MM.DD · NN` (see [Releasing / Versioning](#-rele
 
 | Version | Highlights |
 |---------|-----------|
-| **v2026.09.28 · 22** | **Yield Monitor tab added.** New self-contained `yieldmonitor.js` module injects a top-level Yield Monitor tab with Setup / Calibration / History sub-sections. Web Serial connection to the ESP32 (Chrome/Edge on Android + desktop; iOS Safari is view-only). Parses v1.2 5-column and v0.5 4-column event lines, computes per-crop calibration factor **K** from weigh tickets and Σ excess_us, and stores locked K per crop in `dof_ym_lockedK`. Runs stored under `dof_ym_runs` with tombstones; wired into the Drive sync payload. Connection persisted via `getPorts()` so re-plugging the ESP32 auto-reconnects. Service worker precache and version query strings bumped to include `yieldmonitor.js`. |
+| **v2026.10.08 · 27** | **Swath smoothing.** Three new gates between a GPS fix and a painted rectangle: (1) a **minimum-distance gate** (`GPS_MIN_MOVE_M = 0.75 m`) tracked against a new `state.lastPaintedPos` separate from `state.lastPos`, so the gate doesn't break speed derivation; (2) **GPS-dropout detection** (`GAP_WIDTH_MULTIPLIER = 3 × swath width`) that resets the paint cursor and smoothed bearing instead of bridging a huge false rectangle, with a visible status-strip message when it fires; (3) **heading smoothing** via a new `emaBearing()` helper using circular averaging (sin/cos components, so 0°/360° wrap doesn't jerk the smoothed heading when pointed due north). `paintSwath` kept backward-compatible — it still falls back to raw point-to-point bearing when a smoothed one isn't passed, so `asapplied.js`'s RTK bridge is unaffected. Tuning constants documented in [Coverage Painting & GPS Smoothing](#-coverage-painting--gps-smoothing). |
+| **v2026.10.08 · 26** | *(No separate changelog entry captured during the smoothing-prep work; folded into v27.)* |
+| **v2026.10.08 · 25** | **GPS pipeline rebuild.** Collapsed the paint pipeline onto a **single always-on `watchPosition()`** (`startLocationFollow`) that routes into `onPos()` whenever `state.running` is true. iOS Safari throttles / silently drops a second concurrent watcher, which is what left build-24 stuck on "Starting session…" with no painting. Added **paint-pipeline counters** (`fixCount` / `paintedCount` / `rejectedCount`) and a **fail-loud status strip** that reports GPS accuracy, speed, counters, and the exact reason any fix was rejected. Removed the overlap-grid gate from `drawCoveragePolygon` so every stripe counts toward acres — the grid cell is still tracked for backward compat but no longer gates paint. |
+| **v2026.09.28 · 22** | **Yield Monitor tab added.** New self-contained `yieldmonitor.js` module injects a top-level Yield Monitor tab with Setup / Calibration / History sub-sections. Web Serial connection to the ESP32 (Chromium on desktop/laptop only; Chrome for Android and iOS Safari are view-only). Parses v1.2 5-column and v0.5 4-column event lines, computes per-crop calibration factor **K** from weigh tickets and Σ excess_us, and stores locked K per crop in `dof_ym_lockedK`. Runs stored under `dof_ym_runs` with tombstones; wired into the Drive sync payload. Connection persisted via `getPorts()` so re-plugging the ESP32 auto-reconnects. Service worker precache and version query strings bumped to include `yieldmonitor.js`. |
 | **v2026.09.05 · 18** | **Field Guide tab added.** New `handbook.js` module renders the `opio-field-guide` GitHub repo as a browsable in-app handbook. 20 sections grouped by field workflow, lazy-loaded on click, cached in sessionStorage during the session, and cached by the service worker under `HANDBOOK_CACHE_NAME` so once viewed while online, sections work offline. Uses `marked` from jsDelivr for markdown rendering (lazy-loaded on first section open). Internal `[Section X](NN-slug.md)` cross-references are intercepted and turned into in-app section navigation. Full markdown styling matches the Diamond O cream/amber theme. |
 | **v2026.08.02 · 17** | (Previous release, no changelog entry captured.) |
 | **v2026.08.02 · 15** | **Sync bugfix + versioning hardening.** (1) `describeConflict()` referenced an undeclared variable `list`, throwing `ReferenceError: Can't find variable: list` on Safari/iPad and aborting the entire sync. Now derives compare-keys from `fieldsByLib[c.lib]` (defaults to `[]`). (2) Version is now **single-sourced in `config.js`** (`APP_BUILD` / `APP_VERSION_LABEL`); app.js stamps the header label from it at load and logs a `[version] MISMATCH` console warning if index.html's hard-coded label disagrees, so a half-deploy can't silently show the wrong build. (3) Removed a stale `asapplied.js?v=20260630-6` entry from the service-worker precache list. |
