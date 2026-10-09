@@ -1665,6 +1665,12 @@ async function startSession() {
   state.speedMax = 0;
   state.trailPoints = [];
 
+  // --- New paint pipeline counters (rebuild 2026.10.08) ---
+  state.fixCount = 0;
+  state.paintedCount = 0;
+  state.rejectedCount = 0;
+  updateStatusStrip("Starting session…");
+
   // Reset UI metrics
   $("mAvgSpeed") && ($("mAvgSpeed").textContent = "0.0");
   $("mMaxSpeed") && ($("mMaxSpeed").textContent = "0.0");
@@ -1747,42 +1753,48 @@ function onPos(pos) {
   const ts  = pos.timestamp || Date.now();
   const acc = pos.coords.accuracy != null ? pos.coords.accuracy : 999;
   const heading = pos.coords.heading;
-  const speedMps = pos.coords.speed;
 
-  // --- Update GPS quality pill regardless of whether we accept the fix ---
+  // Count every fix we see, painted or not
+  state.fixCount = (state.fixCount || 0) + 1;
+
+  // Always refresh the GPS pill with the current accuracy
   setGpsPill(true, acc);
 
-  // --- Reject low-quality fixes outright ---
-  if (acc > getGpsAccuracyMax()) {
-    // Bad fix: skip painting, skip metrics update, but keep listening
+  // --- Guard 1: GPS accuracy filter ---
+  const filterMax = getGpsAccuracyMax();
+  if (acc > filterMax) {
+    state.rejectedCount = (state.rejectedCount || 0) + 1;
+    updateStatusStrip("GPS too rough (" + Math.round(acc) + "m > " + filterMax + "m filter)");
     return;
   }
 
-  // --- Compute raw speed (prefer device-provided, fall back to derived) ---
-  let rawMph = 0;
-  if (speedMps != null && !isNaN(speedMps) && speedMps >= 0) {
-    rawMph = speedMps * MPS_TO_MPH;
-  } else if (state.lastPos) {
+  // --- Derive speed from distance/time, NOT from coords.speed ---
+  // (iOS Safari returns garbage values in coords.speed when stationary;
+  //  deriving from Haversine between successive fixes is reliable.)
+  let derivedMph = 0;
+  if (state.lastPos) {
     const dMeters = haversine(state.lastPos.lat, state.lastPos.lng, lat, lng);
     const dt = (ts - state.lastPos.ts) / 1000;
-    if (dt > 0) rawMph = (dMeters / dt) * MPS_TO_MPH;
+    if (dt > 0.1) derivedMph = (dMeters / dt) * MPS_TO_MPH;
   }
 
-  // --- Reject physically impossible speed jumps ---
-  if (rawMph > GPS_MAX_REALISTIC_MPH) {
+  // --- Guard 2: physically impossible speed (likely bad fix) ---
+  if (derivedMph > 80) {
+    state.rejectedCount = (state.rejectedCount || 0) + 1;
+    updateStatusStrip("Speed spike rejected (" + derivedMph.toFixed(0) + " mph)");
     return;
   }
 
-  // --- Exponential moving average for silky speed display ---
+  // --- Smooth the speed for display ---
   if (state.smoothMph == null) {
-    state.smoothMph = rawMph;
+    state.smoothMph = derivedMph;
   } else {
-    state.smoothMph = (SPEED_EMA_ALPHA * rawMph) + ((1 - SPEED_EMA_ALPHA) * state.smoothMph);
+    state.smoothMph = (SPEED_EMA_ALPHA * derivedMph) + ((1 - SPEED_EMA_ALPHA) * state.smoothMph);
   }
   const smoothMph = state.smoothMph;
 
-  // Keep the legacy buffer for any downstream code that uses it
-  state.speedBuf.push(rawMph);
+  // Keep the legacy buffer in case anything downstream still reads it
+  state.speedBuf.push(derivedMph);
   if (state.speedBuf.length > SMOOTH_N) state.speedBuf.shift();
 
   // --- Update marker position & heading ---
@@ -1798,32 +1810,79 @@ function onPos(pos) {
   applyMapView(smoothMph);
   updateMarkerColor(smoothMph);
 
-  // --- Boundary recording mode ---
+  // --- Boundary recording mode: capture the point, don't paint ---
   if (state.boundary.active) {
     state.boundary.points.push({ lat, lng });
     drawBoundaryPreview();
     state.lastPos = { lat, lng, ts };
     updateMetrics(smoothMph);
+    updateStatusStrip("Recording boundary — " + state.boundary.points.length + " pts");
     return;
   }
 
-  // --- Paint swath only if we actually moved enough ---
-  if (state.lastPos) {
-    const moved = haversine(state.lastPos.lat, state.lastPos.lng, lat, lng);
-    if (moved >= GPS_MIN_MOVE_M) {
-      paintSwath(state.lastPos, { lat, lng }, heading);
-      addTrailSegment({ lat: state.lastPos.lat, lng: state.lastPos.lng }, { lat, lng }, smoothMph);
-      state.trailPoints.push({ lat, lng, ts, speed: smoothMph });
-      state.lastPos = { lat, lng, ts };
-    }
-    // If we didn't move enough, KEEP the old lastPos so the next fix
-    // can still compare against the last "real" position
-  } else {
+  // --- First fix of session: seed lastPos and move on ---
+  if (!state.lastPos) {
     state.lastPos = { lat, lng, ts };
     state.trailPoints.push({ lat, lng, ts, speed: smoothMph });
+    updateStatusStrip("First fix — waiting for movement");
+    updateMetrics(smoothMph);
+    return;
   }
 
+  // --- Normal path: paint a stripe and advance ---
+  paintSwath(state.lastPos, { lat, lng }, heading);
+  addTrailSegment(
+    { lat: state.lastPos.lat, lng: state.lastPos.lng },
+    { lat, lng },
+    smoothMph
+  );
+  state.trailPoints.push({ lat, lng, ts, speed: smoothMph });
+  state.lastPos = { lat, lng, ts };
+  state.paintedCount = (state.paintedCount || 0) + 1;
+
   updateMetrics(smoothMph);
+  updateStatusStrip(null);
+}
+
+// ============================================================
+// STATUS STRIP — live feedback during a session.
+// Fail-loud: if a GPS fix is rejected, this tells you WHY on
+// screen so no silent failures can hide in production.
+//
+// message argument:
+//   • null   — normal operation, show counters only (green strip)
+//   • string — show this message (orange strip, treated as a warning
+//              unless it starts with "Recording", "First", or "Starting")
+// ============================================================
+function updateStatusStrip(message) {
+  const strip = document.getElementById("sessionStatusStrip");
+  if (!strip) return;
+
+  if (!state.running) {
+    strip.classList.add("hidden");
+    return;
+  }
+  strip.classList.remove("hidden");
+
+  const acc = state.lastGpsAccuracy;
+  const accStr = (acc != null && isFinite(acc)) ? Math.round(acc) + "m" : "—";
+  const mphStr = (state.smoothMph != null) ? state.smoothMph.toFixed(1) : "0.0";
+  const painted = state.paintedCount || 0;
+  const rejected = state.rejectedCount || 0;
+  const total = state.fixCount || 0;
+
+  const left = "GPS " + accStr + " · " + mphStr + " mph";
+  const right = "fixes: " + painted + "✓ / " + rejected + "✗ / " + total + " total";
+  const msg = message ? ("  —  " + message) : "";
+
+  strip.textContent = left + "   " + right + msg;
+
+  // Orange warning tint only for genuine problems; info messages stay green.
+  const isInfo = !message ||
+    message.startsWith("Recording") ||
+    message.startsWith("First") ||
+    message.startsWith("Starting");
+  strip.classList.toggle("status-warn", !isInfo);
 }
 
 // ============================================================
@@ -1894,26 +1953,27 @@ function clearTrail() {
 }
 
 // ============================================================
-// SWATH PAINTING
+// SWATH PAINTING — rebuilt 2026.10.08
+// Always paints full working width. No section logic.
+// Returns early (with a visible status message) if the working
+// width isn't set, so you can see the problem instead of silently
+// seeing no stripes.
 // ============================================================
 function paintSwath(p1, p2, headingDeg) {
   const widthFt = state.equipment.width;
+  if (!widthFt || widthFt <= 0) {
+    updateStatusStrip("Working width is 0 — set it in Field & Equipment");
+    return;
+  }
   const widthM  = widthFt / FT_PER_METER;
   const bearing = (headingDeg != null && !isNaN(headingDeg))
     ? headingDeg : bearingDeg(p1.lat, p1.lng, p2.lat, p2.lng);
   const left  = (bearing - 90 + 360) % 360;
   const right = (bearing + 90) % 360;
-  const halfFull = widthM / 2;
-  let painted = false;
+  const half  = widthM / 2;
 
-  if (state.sections.full) {
-    drawCoveragePolygon(stripPolygon(p1, p2, left, right, halfFull, halfFull), p1, p2, widthM);
-    painted = true;
-  } else {
-    if (state.sections.left)  { drawCoveragePolygon(stripPolygon(p1, p2, left, right, halfFull, 0), p1, p2, halfFull); painted = true; }
-    if (state.sections.right) { drawCoveragePolygon(stripPolygon(p1, p2, left, right, 0, halfFull), p1, p2, halfFull); painted = true; }
-  }
-  if (painted) state.efficiencyAttempts++;
+  drawCoveragePolygon(stripPolygon(p1, p2, left, right, half, half), p1, p2, widthM);
+  state.efficiencyAttempts++;
 }
 function stripPolygon(p1, p2, leftBearing, rightBearing, leftMeters, rightMeters) {
   return [
@@ -1923,29 +1983,44 @@ function stripPolygon(p1, p2, leftBearing, rightBearing, leftMeters, rightMeters
     offsetMeters(p1.lat, p1.lng, rightBearing, rightMeters),
   ];
 }
+// Draws one swath polygon and accumulates acres/bushels/gallons.
+// Simplified 2026.10.08: no overlap grid gating — every stripe counts.
+// Overlap detection existed to boost "efficiency %" and keep acres from
+// double-counting, but it was also silently preventing acres from
+// incrementing in some cases. For a reliable combine calibration we want
+// every stripe to count. Overlap can be added back as a visual-only
+// highlight later.
 function drawCoveragePolygon(path, p1, p2, swathWidthM) {
+  // Still track the cell for backwards compat with any downstream reader,
+  // but don't use it to gate acres/paint color anymore.
   const key = cellKey((p1.lat + p2.lat)/2, (p1.lng + p2.lng)/2);
-  const isOverlap = state.coverageCells.has(key);
-  if (!isOverlap) { state.coverageCells.add(key); state.efficiencyHits++; }
+  if (!state.coverageCells.has(key)) {
+    state.coverageCells.add(key);
+    state.efficiencyHits++;
+  }
+
   const poly = new google.maps.Polygon({
-    paths: path, strokeWeight: 0,
-    fillColor: isOverlap ? "#e74c3c" : "#2ecc71",
-    fillOpacity: 0.55, map: state.map, zIndex: 1,
+    paths: path,
+    strokeWeight: 0,
+    fillColor: "#2ecc71",
+    fillOpacity: 0.55,
+    map: state.map,
+    zIndex: 1,
   });
   state.coveragePolys.push(poly);
 
   const segMeters = haversine(p1.lat, p1.lng, p2.lat, p2.lng);
   const areaSqFt = (segMeters * FT_PER_METER) * (swathWidthM * FT_PER_METER);
   const acresDelta = areaSqFt / SQFT_PER_ACRE;
-  if (!isOverlap) {
-    state.acres += acresDelta;
-    if (state.equipment.type === "sprayer") {
-      state.gallons += acresDelta * state.sprayer.gpa;
-    } else if (state.equipment.type === "combine") {
-      const baseYield = state.field.crop === "Soybeans" ? 55
-                     : state.field.crop === "Wheat"    ? 70 : 180;
-      state.bushels += acresDelta * baseYield;
-    }
+
+  state.acres += acresDelta;
+
+  if (state.equipment.type === "sprayer") {
+    state.gallons += acresDelta * state.sprayer.gpa;
+  } else if (state.equipment.type === "combine") {
+    const baseYield = state.field.crop === "Soybeans" ? 55
+                   : state.field.crop === "Wheat"    ? 70 : 180;
+    state.bushels += acresDelta * baseYield;
   }
 }
 
