@@ -1,4 +1,4 @@
-[README (19).md](https://github.com/user-attachments/files/33254927/README.19.md)
+[README (20).md](https://github.com/user-attachments/files/33256303/README.20.md)
 # 🌾 OπO Farming — Data Systems Pro
 
 A mobile-first **Progressive Web App (PWA)** for farm field operations: live GPS
@@ -52,7 +52,7 @@ next step once the sensor pair is bolted onto the elevator.
 
 - **Live coverage mapping** — Google Maps overlay paints acres as you drive; boundary capture with offset (left/right/center of machine).
 - **Swath smoothing** — minimum-distance gate, EMA-smoothed heading, and GPS-dropout detection kill the zig-zag jitter when creeping or when a fix momentarily drifts.
-- **Map Export (As-Planted / As-Harvested PDFs)** — one-tap map snapshot embedded in the Report PDF with the OπO Farming logo, signature block, and operator / customer / date lines.
+- **Map Export (As-Planted / As-Harvested PDFs)** — one-tap map snapshot embedded in the Report PDF with the OπO Farming logo, pre-filled signature block (operator / customer / today's date), and build-stamped footer. Re-capture from any saved report at any time; `html2canvas` fallback for insanely dense coverage.
 - **Field & Equipment library** — reusable fields (with boundaries) and machines (sprayer, combine, planter, tillage, spreader, swather, baler).
 - **Tools / Calculators** — product/chemical mix calculator, cost-per-acre calculator.
 - **Reports** — per-operation records (acres, bushels, gallons, bales, etc.) with as-applied rate layers.
@@ -62,7 +62,7 @@ next step once the sensor pair is bolted onto the elevator.
 - **Field Guide** — in-app handbook rendered from the `opio-field-guide` GitHub repo, cached for offline reading.
 - **Yield Monitor** — Web Serial link to the ESP32 combine brain: connect, run calibration passes, compute K, lock per-crop calibration factors.
 - **Google Drive sync** — per-item merge with conflict resolution and delete propagation.
-- **Offline-first** — service worker caches the app shell, Field Guide sections, and the Tesseract OCR engine after first use.
+- **Offline-first** — service worker caches the app shell, Field Guide sections, Tesseract OCR engine, and html2canvas after first use.
 - **Import / Export** — full JSON backup (optionally including note photos).
 - **Light & dark themes** — via CSS variables.
 - **UX niceties** — haptic feedback, undo toasts, voice dictation for Field Notes, GPS-quality peripheral border, card reordering.
@@ -77,6 +77,7 @@ next step once the sensor pair is bolted onto the elevator.
 - **IndexedDB** — note photo blobs + seed-tag photos (separate DB).
 - **Google APIs** — Maps JavaScript API (live mapping), **Static Maps API** (PDF snapshots), Google Identity Services / Drive (sync).
 - **Tesseract.js** — on-device OCR for seed tags (lazy-loaded from jsDelivr, cached by SW).
+- **html2canvas** — fallback for the Map Export when Static Maps URL exceeds the ~8 K char limit (lazy-loaded from jsDelivr, cached by SW).
 - **marked** — markdown rendering for the Field Guide (lazy-loaded from jsDelivr).
 - **Web Serial API** — ESP32 connection for the Yield Monitor (Chrome/Edge desktop; mobile is view-only).
 
@@ -97,8 +98,8 @@ next step once the sensor pair is bolted onto the elevator.
 | `handbook.js` | Field Guide tab: fetches markdown sections from `opio-field-guide` repo |
 | `handbook.css` | Handbook tab styles |
 | `yieldmonitor.js` | Yield Monitor tab: Web Serial connect, calibration workflow, K storage |
-| `mapexport.js` | **Capture Map** button + Static-Maps snapshot + branded PDF header/footer/signature injection |
-| `sw.js` | Service worker: cache versioning + offline strategy (app shell + handbook + Tesseract) |
+| `mapexport.js` | **Capture Map** / **Re-capture Map** buttons + Static-Maps snapshot + html2canvas fallback + branded PDF header/footer/signature injection |
+| `sw.js` | Service worker: cache versioning + offline strategy (app shell + handbook + Tesseract + html2canvas) |
 | `manifest.json` | PWA metadata (icons, theme color, display mode) |
 | `opio-logo.png` | OπO Farming logo (transparent background, used in the PDF header) |
 | `icon-*.png`, `favicon.ico` | App icons |
@@ -151,13 +152,27 @@ conflict resolution.
 | **Yield-monitor runs** | `dof_ym_runs` | `dof_tomb_ym_runs` | `_modified` |
 | **Yield-monitor locked K (per crop)** | `dof_ym_lockedK` | — | — |
 | GPS filter preset | `dof_gps_filter` | — | — |
+| Operator name (for PDF signatures) | `dof_operator_name` | — | — |
 | Note photos | *(IndexedDB: `opio-notes`)* | — | — |
 | Seed-tag photos | *(IndexedDB: `opio-seedtags`)* | — | — |
 
-Report records as of build-28 may also carry an optional `mapImage` property
-(`{ dataUrl, capturedAt, title }`) populated by `mapexport.js` when the user
-tapped **📸 Capture Map** during the session. It syncs along with the rest
-of the report payload.
+### Report records — build-29 fields
+
+Report records now carry two additional geometry fields so a map can be
+re-generated at any time:
+
+- **`coveragePaths`** — array of polygon paths; each path is an array of
+  `{lat, lng}` points at 6-decimal precision. Populated at save time from
+  `state.coveragePolys`.
+- **`boundaryPath`** — the field boundary at save time (or `null`), same
+  shape as a coverage path.
+- **`mapImage`** — `{ dataUrl, capturedAt, title, customer, operator }` once
+  the user has captured a map image, either during the live session or via
+  Reports → 📸 Capture Map.
+
+Reports saved **before build-29** don't have `coveragePaths` / `boundaryPath`
+— they still work for everything except re-capture; the Reports-tab button
+disables itself with a tooltip in that case.
 
 **Tombstones** record deletions (`{ id: deletedAtISO }`) so a delete on one
 device propagates to others instead of the item reappearing. They auto-expire
@@ -195,7 +210,8 @@ flowchart LR
 
 The sync **payload** includes: `fields`, `equipment`, `reports`, `seedPresets`,
 `seedInventory`, `profitLoss`, `yieldRuns`, and `tombstones` for each.
-Captured map images ride along inside the report records.
+Captured map images, coverage paths, and boundary paths ride along inside
+the report records.
 
 ---
 
@@ -206,7 +222,7 @@ Captured map images ride along inside the report records.
 | Operate | `tab-operate` | — | Live mapping / active session (📸 Capture Map button lives here) |
 | Field & Equipment | `tab-setup` | — | Manage fields & machines; includes the **Seed Inventory** card |
 | Tools | `tab-tools` | `seedMixCalcFromState()` etc. | Mix & cost calculators |
-| Reports | `tab-reports` | — | Operation records |
+| Reports | `tab-reports` | — | Operation records + 📸 Capture Map / 🔄 Re-capture Map on selected report |
 | Season | `tab-season` | `renderSeason()` | Season totals + charts + export |
 | **Profit & Loss** | `tab-pl` | `window.plRender()` | Per-field income/expense tracking |
 | **Field Guide** | `tab-handbook` | (internal) | Renders the `opio-field-guide` handbook sections |
@@ -306,27 +322,45 @@ silently.
 
 ## 📸 Map Export (As-Planted / As-Harvested PDFs)
 
-Self-contained module (`mapexport.js`) that lets you capture a snapshot of
-the painted coverage mid-session and embeds it, together with an OπO Farming
-header and a signature block, into the Report PDF. Fully additive — no
-changes to `app.js` state or to the existing PDF flow; the module
-monkey-patches `localStorage.setItem` and `window.open` to inject the image
-and header without rewriting the PDF template.
+Self-contained module (`mapexport.js`) that lets you snapshot the painted
+coverage mid-session OR regenerate one from any saved report, and embeds
+the result — together with an OπO Farming header, pre-filled signature
+block, and build-stamped footer — into the Report PDF.
 
-### Workflow for the operator
+Fully additive. One small `app.js` edit at save-report time (build-29)
+persists `coveragePaths` and `boundaryPath` on every new report so
+re-capture works going forward. Everything else is monkey-patch
+(`localStorage.setItem`, `window.open`, `window.startSession`).
 
+### Two workflows
+
+**A) Live-session capture (same as build-28):**
 1. Start a session, drive long enough to paint some coverage.
 2. Tap **📸 Capture Map** on the Operate screen.
-3. Preview the captured image; tap **Keep** (or **Retake**).
-4. Finish the pass, Save Report as normal.
-5. Open the saved report → **Print / Save PDF** → the PDF now includes the
-   OπO logo header, the captured map image, the existing summary table,
-   operator notes, and a signature block (Operator / Customer / Date) at the
-   bottom.
+3. First time ever? You'll be asked for the Operator name (persisted
+   in `localStorage` under `dof_operator_name` so you only answer once).
+4. Preview the captured image; tap **Keep** (or **Retake**).
+5. Finish the pass, Save Report as normal. The image rides along with
+   the report record and shows up in the PDF.
+
+**B) Re-capture from the Reports tab (build-29):**
+1. Open the Reports tab.
+2. Select any report saved on build-29+ in the Session list.
+3. The action-button row shows **📸 Capture Map** (if no image on this
+   report) or **🔄 Re-capture Map** (if there's already one — tapping
+   replaces it).
+4. The module rebuilds the Static Map from the report's saved
+   `coveragePaths` + `boundaryPath`, previews it, and writes it onto the
+   report when you tap **Done**.
+5. Any subsequent **Export PDF** of that report includes the fresh map.
+
+For reports saved **before build-29**, the Reports-tab button is
+disabled with a tooltip explaining why — there's no saved coverage
+geometry to render.
 
 ### Automatic title selection
 
-The map's PDF title is chosen from the session's equipment type:
+The map's PDF title is chosen from the session's (or report's) equipment type:
 
 | Equipment type | PDF title |
 |---|---|
@@ -335,26 +369,27 @@ The map's PDF title is chosen from the session's equipment type:
 | `sprayer` | **As-Applied Map — [Field Name]** |
 | anything else | **Coverage Map — [Field Name]** |
 
-### Capture technique
+### Capture technique — three-tier fallback
 
-The module builds a **Google Static Maps API** URL encoding the field
-boundary (amber outline) and every painted coverage polygon (translucent
-green) as styled `path` parameters, requests the image at
-`640×640 @ scale=2` (effective 1280×1280 retina), and converts the response
-to a data URL that embeds cleanly in the PDF and survives localStorage/sync.
-
-Google caps the Static Maps URL at ~8192 chars. If a session's painted
-polygons blow that limit, the module auto-simplifies the paths using
-Douglas-Peucker with a progressively coarser tolerance (0, 1e-5, 3e-5, 8e-5,
-2e-4, 5e-4 degrees) until the URL fits. Simplification is logged to the
-console so you can see when it fires. An extremely dense session that can't
-fit even at the coarsest tolerance surfaces an error dialog rather than
-silently failing — in that case we can add an `html2canvas` fallback in a
-future build.
+1. **Primary — Google Static Maps API.** URL-encodes the field boundary
+   (amber outline) + every painted coverage polygon (translucent green)
+   as styled `path` parameters. Returns a `640×640 @ scale=2` (effective
+   1280×1280 retina) PNG, converted to a data URL for the PDF.
+2. **If URL > ~8 K chars (Google's limit) — Douglas-Peucker simplification.**
+   Progressively coarser tolerances (0, 1e-5, 3e-5, 8e-5, 2e-4, 5e-4 degrees)
+   until the URL fits. Simplification is logged to console so you can see
+   when it fires.
+3. **If still too long — html2canvas fallback (build-29).** Lazy-loads
+   `html2canvas@1.4.1` from jsDelivr (cached by the service worker after
+   first use) and screenshots the live map div. Only works for live-session
+   capture — re-capture from the Reports tab can't use this fallback since
+   there's no live map to screenshot; those sessions surface an error dialog
+   instead. In practice, Douglas-Peucker handles everything short of
+   session-long combine passes with hundreds of overlap passes.
 
 ### What goes on the PDF
 
-Each Report PDF produced on a device running build-28+ gets:
+Each Report PDF produced on a device running build-29+ gets:
 
 - **Top header band** — OπO Farming logo + wordmark + "Data Systems Pro"
   tagline, with a green divider underneath. The browser-tab title is also
@@ -363,33 +398,49 @@ Each Report PDF produced on a device running build-28+ gets:
 - **Map section** (if a `mapImage` is attached to the report) — title line
   (e.g. "As-Planted Map — North 40"), full-width map image.
 - **Original summary table + field notes** — unchanged, built by `app.js` as before.
-- **Signature block** — three lines side-by-side:
-  - Operator Signature
-  - Customer / Delivered To
-  - Date
-- **Footer** — "Generated by OπO Farming · v2026.10.09 · 28 · DD/MM/YYYY HHMM".
+- **Signature block** — three lines side-by-side, with build-29 pre-fills:
+  - **Operator Signature** — pre-filled with the operator name from
+    `dof_operator_name`, pen-signature rule below.
+  - **Customer / Delivered To** — pre-filled with the field's `farmName`
+    (or `name` if there's no farm name on the field record), pen rule
+    below so the customer can still sign.
+  - **Date** — pre-filled with today in DD/MM/YYYY.
+- **Footer** — "Generated by OπO Farming · v2026.10.09 · 29 · DD/MM/YYYY HHMM".
 
 The signature block is only added to single-report PDFs. Multi-report
 rollups like **Reports Export** and **Season Summary** get the header and
 footer but skip the signature block (they're not a per-customer deliverable).
 
+For a re-captured map on an old report, the signature block uses whatever
+operator / customer values were saved **on the attached `mapImage`** —
+so a map captured months ago keeps the original names rather than
+re-rendering today's operator onto a historical report.
+
 ### State and storage
 
-- **`state.capturedMapImage`** — `{ dataUrl, capturedAt, title }` while a
-  session is running. Reset to `null` on `startSession()`.
-- **`report.mapImage`** — same shape, attached to the saved report record on
-  `Save Report`. Syncs with the rest of the report payload via the existing
-  Drive sync engine.
+- **`state.capturedMapImage`** — `{ dataUrl, capturedAt, title, customer, operator }`
+  while a session is running. Reset to `null` on `startSession()`.
+- **`report.mapImage`** — same shape, attached to the saved report on save
+  or on Re-capture.
+- **`report.coveragePaths`** / **`report.boundaryPath`** — build-29 geometry
+  fields that let Re-capture rebuild a map any time.
+- **`localStorage.dof_operator_name`** — the operator's name for signature
+  pre-fill. Set manually with the browser console
+  (`localStorage.setItem('dof_operator_name', 'Your Name')`) or captured
+  on first Capture Map.
 
 ### Public surface
 
 `mapexport.js` exposes a tiny `window.MapExport` object for future wiring
-(e.g. a "Re-capture" button on the Reports tab):
+or manual testing:
 
-- `MapExport.captureMap()` — kick off the capture flow.
+- `MapExport.captureMap()` — kick off live-session capture.
+- `MapExport.recaptureFromReport(repId)` — rebuild from any build-29 report.
 - `MapExport.mapTitleFor(eqType)` — resolve the title string.
-- `MapExport.buildStaticMapUrl(simplifyTolerance)` — build the raw URL (used
-  for the internal fit-under-URL-limit loop).
+- `MapExport.buildStaticMapUrl(bundle, tolerance)` — build the raw URL (used
+  internally by the fit-under-URL-limit loop).
+- `MapExport.getOperatorName()` / `setOperatorName(name)` — read/write the
+  persisted operator name.
 
 ---
 
@@ -528,8 +579,8 @@ you must **bust the cache** or devices keep running the old files.
 The canonical build number lives in **`config.js`**:
 
 ```js
-window.APP_BUILD = "2026.10.09-28";             // machine form: YYYY.MM.DD-N
-window.APP_VERSION_LABEL = "v2026.10.09 · 28";  // human label shown in header
+window.APP_BUILD = "2026.10.09-29";             // machine form: YYYY.MM.DD-N
+window.APP_VERSION_LABEL = "v2026.10.09 · 29";  // human label shown in header
 ```
 
 - **`app.js` stamps the header `#appVersion` label from `APP_VERSION_LABEL` at
@@ -569,7 +620,7 @@ device:
 You'll know it worked when the header shows the new **vYYYY.MM.DD · NN** and
 the console shows **no** `[version] MISMATCH` warning.
 
-Current build: `v2026.10.09 · 28` (cache `opio-2026.10.09-28`).
+Current build: `v2026.10.09 · 29` (cache `opio-2026.10.09-29`).
 
 ---
 
@@ -615,6 +666,9 @@ tiles and Google sign-in will fail with an origin mismatch.
   popup title/body (`OπO Farming`, `O\u03C0O`, `Diamond O`, `Field Report`,
   `Season Summary`, `Reports Export`). If future `app.js` rewrites change
   those strings, update the regex at the top of `decoratePopup()`.
+- Build-29 added two fields to the saved-report shape in `app.js`
+  (`coveragePaths`, `boundaryPath`). Keep those if you refactor the save
+  flow — `mapexport.js` Re-capture depends on them.
 - New tabs = add a `data-tab` button + a `#tab-X` panel + (optional) a render
   hook in the tab switcher, **or** inject them from a self-contained module
   the way the modules above do it.
@@ -634,10 +688,12 @@ tiles and Google sign-in will fail with an origin mismatch.
 | Status strip shows `GPS gap bridged (Xm) — restarting swath` | Momentary GPS dropout; a hop > `3 × swath width` was detected | Normal around tree lines / under bins. If it fires on open ground, raise `GAP_WIDTH_MULTIPLIER` toward 5. |
 | Tiny gaps between rectangles while driving straight | `GPS_MIN_MOVE_M` too high for your fix rate / speed | Drop from 0.75 toward 0.5 m. |
 | **📸 Capture Map button missing** | Running an old cached build without `mapexport.js` | Cache bust and reload (full 3-file version bump). |
-| **Capture Map says "Map export is too complex to render"** | Painted polygons blew Google's ~8 K URL limit even after simplification | Capture earlier in the session, or wait for the planned `html2canvas` fallback. |
+| **🔄 Re-capture Map is greyed out** on an old report | Report was saved before build-29; no `coveragePaths` on file | Expected. New reports (saved from build-29 onward) can be re-captured any time. |
+| **Capture Map says "Map export is too complex"** on Re-capture | Dense saved coverage + no live map available for html2canvas fallback | Only live sessions get the html2canvas fallback. If you hit this on Re-capture, we'll need to add an offscreen-map renderer in a future build. |
 | **Captured map is blank / shows "You must enable Billing"** | Static Maps API isn't enabled on the project behind the Maps key | Google Cloud Console → APIs & Services → Enable **Static Maps API**. The JS Maps API alone isn't enough. |
 | **Captured map shows "This page can't load Google Maps correctly"** | Static Maps API key referrer restriction doesn't match current origin | Google Cloud Console → API key → HTTP referrers → add the GitHub Pages origin pattern. |
 | **PDF has no header / signature block** | Popup was blocked before `mapexport.js` could decorate it | Allow pop-ups for the app's origin, then re-open the PDF. |
+| **PDF signature block shows wrong operator name** | Old `dof_operator_name` in localStorage | Set it from a console: `localStorage.setItem('dof_operator_name', 'Your Name')` and re-open the PDF. |
 | Maps tiles fail to load in production | Maps API key origin restriction doesn't match the deploy URL | Google Cloud Console → API key → HTTP referrers → add correct pattern |
 | Google sign-in fails with `origin_mismatch` | OAuth Client authorized JavaScript origins missing this URL | Google Cloud Console → OAuth Client → add origin (no trailing slash, no path) |
 | P&L / inventory / yield runs not syncing | Not signed in, or didn't tap Sync Now | Sign in to Google, then **Sync Now** on both devices |
@@ -668,6 +724,7 @@ This app is the **software layer** of the larger "Combine Brain" build for the
 - ✅ **GPS pipeline rebuild** — single always-on watcher, user-selectable accuracy filter, visible status strip with painted / rejected / total fix counters.
 - ✅ **Swath smoothing** — min-distance gate, EMA-smoothed heading, GPS-dropout detection (build-27).
 - ✅ **Customer-facing map export** — As-Planted / As-Harvested / As-Applied PDFs with OπO branding and signature block (build-28).
+- ✅ **Re-capture map from Reports tab + html2canvas fallback + customer/operator pre-fill** (build-29).
 
 ### In progress
 - 🔨 **Yield monitor — live mapping.** The tab currently handles calibration
@@ -679,10 +736,9 @@ This app is the **software layer** of the larger "Combine Brain" build for the
   `BEARING_EMA_ALPHA`, `GPS_MIN_MOVE_M`, and `GAP_WIDTH_MULTIPLIER`.
 
 ### Next
-- ⏭️ **`html2canvas` fallback for Map Export** so sessions with insanely
-  dense coverage can still produce a PDF.
-- ⏭️ **Re-capture / replace map from the Reports tab** so you can regenerate
-  the snapshot after a session is already saved.
+- ⏭️ **Offscreen map renderer** so Re-capture can fall back when
+  Static Maps + simplification can't fit (currently only live sessions
+  get the html2canvas fallback).
 - ⏭️ **Yield-monitor Wi-Fi transport** (firmware v1.3+) so Chrome for Android /
   iOS can consume the live stream without Web Serial.
 - ⏭️ **Fuel level** monitoring.
@@ -701,6 +757,7 @@ Versions use the format `vYYYY.MM.DD · NN` (see [Releasing / Versioning](#-rele
 
 | Version | Highlights |
 |---------|-----------|
+| **v2026.10.09 · 29** | **Map Export v2 — Re-capture, pre-fills, html2canvas fallback.** (1) **Re-capture from the Reports tab:** `mapexport.js` injects a 📸 Capture Map / 🔄 Re-capture Map button into the Reports action-button row; tapping it rebuilds the Static Map from the report's saved `coveragePaths` + `boundaryPath` and writes the fresh image onto the report. One small `app.js` edit at save-report time now persists `coveragePaths` + `boundaryPath` on every new report so Re-capture works going forward (reports saved before build-29 keep working for everything else; their Re-capture button is disabled with a tooltip). (2) **Pre-filled signature block:** operator name is prompted once on first Capture Map and persisted in `localStorage.dof_operator_name`; customer line pre-fills from the field's `farmName` (or `name`) at capture time; date pre-fills to today in DD/MM/YYYY. Pen rules stay under each line for actual signing. Historical maps keep their original operator/customer rather than re-rendering today's values onto an old report. (3) **html2canvas fallback:** if the Static Maps URL can't fit under Google's ~8 K char limit even after full Douglas-Peucker simplification, the live-session path lazy-loads `html2canvas@1.4.1` from jsDelivr (cached by SW) and screenshots the live map div. Re-capture can't use this fallback (no live map for a saved report) — surfaces an error dialog instead. (4) New SW cache bucket `opio-h2c-*` for html2canvas; version bumped across `config.js`, `index.html`, `sw.js`, and all `?v=` query strings. |
 | **v2026.10.09 · 28** | **Map Export (As-Planted / As-Harvested / As-Applied PDFs).** New self-contained `mapexport.js` module adds a **📸 Capture Map** button on the Operate screen that pulls a Google Static Maps snapshot of the painted coverage (field boundary in amber, coverage in translucent green). The snapshot is attached to the saved report and injected into the Report PDF above the existing summary table, together with an OπO Farming logo header, a signature block (Operator / Customer / Date), and a build-stamped footer. Automatic title selection by equipment type: planter/drill → "As-Planted Map", combine → "As-Harvested Map", sprayer → "As-Applied Map". Douglas-Peucker polyline simplification auto-fits dense coverage into Google's ~8 K URL limit. New `opio-logo.png` asset shipped alongside the icons. No changes to `app.js` — `mapexport.js` monkey-patches `localStorage.setItem` (to attach the image to the newest saved report) and `window.open` (to decorate the PDF popup). |
 | **v2026.10.08 · 27** | **Swath smoothing.** Three new gates between a GPS fix and a painted rectangle: (1) a **minimum-distance gate** (`GPS_MIN_MOVE_M = 0.75 m`) tracked against a new `state.lastPaintedPos` separate from `state.lastPos`, so the gate doesn't break speed derivation; (2) **GPS-dropout detection** (`GAP_WIDTH_MULTIPLIER = 3 × swath width`) that resets the paint cursor and smoothed bearing instead of bridging a huge false rectangle, with a visible status-strip message when it fires; (3) **heading smoothing** via a new `emaBearing()` helper using circular averaging (sin/cos components, so 0°/360° wrap doesn't jerk the smoothed heading when pointed due north). `paintSwath` kept backward-compatible — it still falls back to raw point-to-point bearing when a smoothed one isn't passed, so `asapplied.js`'s RTK bridge is unaffected. Tuning constants documented in [Coverage Painting & GPS Smoothing](#-coverage-painting--gps-smoothing). |
 | **v2026.10.08 · 26** | *(No separate changelog entry captured during the smoothing-prep work; folded into v27.)* |
