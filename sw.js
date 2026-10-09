@@ -8,7 +8,7 @@
    first successful load so seed-tag scanning works offline.
    Bump CACHE_VERSION whenever you ship new files.
    ============================================================ */
-const CACHE_VERSION = "opio-2026.10.08-27";
+const CACHE_VERSION = "opio-2026.10.09-28";
 const CACHE_NAME = "opio-cache-" + CACHE_VERSION;
 const HANDBOOK_CACHE_NAME = "opio-handbook-" + CACHE_VERSION;
 const TESS_CACHE_NAME = "opio-tesseract-" + CACHE_VERSION;
@@ -17,21 +17,23 @@ const TESS_CACHE_NAME = "opio-tesseract-" + CACHE_VERSION;
 // versions referenced in index.html so the right copies are precached.
 const CORE_ASSETS = [
   "./",
-  "./styles.css?v=20261008-27",
-  "./seedtag.css?v=20261008-27",
-  "./config.js?v=20261008-27",
-  "./app.js?v=20261008-27",
-  "./uxenhancements.js?v=20261008-27",
-  "./asapplied.js?v=20261008-27",
-  "./seedtag.js?v=20261008-27",
-  "./handbook.js?v=20261008-27",
-  "./yieldmonitor.js?v=20261008-27",
+  "./styles.css?v=20261009-28",
+  "./seedtag.css?v=20261009-28",
+  "./config.js?v=20261009-28",
+  "./app.js?v=20261009-28",
+  "./uxenhancements.js?v=20261009-28",
+  "./asapplied.js?v=20261009-28",
+  "./seedtag.js?v=20261009-28",
+  "./handbook.js?v=20261009-28",
+  "./yieldmonitor.js?v=20261009-28",
+  "./mapexport.js?v=20261009-28",
   "./manifest.json",
   "./icon-16.png",
   "./icon-32.png",
   "./icon-180.png",
   "./icon-192.png",
-  "./icon-512.png"
+  "./icon-512.png",
+  "./opio-logo.png"
 ];
 
 // Handbook base URL — used to identify handbook fetches and cache them.
