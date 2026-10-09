@@ -3,7 +3,8 @@
 // ============================================================
 // Replace the value below with your own Google Maps JavaScript API key.
 // Get one at: https://console.cloud.google.com/google/maps-apis
-// Required APIs: Maps JavaScript API, (Geometry library is auto-loaded).
+// Required APIs: Maps JavaScript API, Static Maps API
+//                (Geometry library is auto-loaded).
 //
 // IMPORTANT: For production, restrict your key by HTTP referrer
 // (e.g. https://YOUR-GITHUB-USERNAME.github.io/*)
@@ -18,5 +19,5 @@ window.GOOGLE_OAUTH_CLIENT_ID = "1097127772986-0r37oebfdo07mhsij1d1hq2oe0o7qf9h.
 // console if index.html's hard-coded label disagrees, so a half-deploy
 // can never silently show the wrong version again.
 // ============================================================
-window.APP_BUILD = "2026.10.09-28";        // machine form: YYYY.MM.DD-N
-window.APP_VERSION_LABEL = "v2026.10.09 · 28";  // human label shown in header
+window.APP_BUILD = "2026.10.09-29";        // machine form: YYYY.MM.DD-N
+window.APP_VERSION_LABEL = "v2026.10.09 · 29";  // human label shown in header
