@@ -116,6 +116,8 @@ const SPEED_EMA_ALPHA       = 0.25; // exponential smoothing: lower = smoother, 
 const BEARING_EMA_ALPHA     = 0.30; // heading smoothing for swath perpendicular — lower = smoother rectangles, higher = snappier on turns
 const GAP_WIDTH_MULTIPLIER  = 3;    // if hop since last painted point > N × swath width, treat as GPS dropout (don't bridge, reset)
 const LS_FIELDS = "dof_fields_library";
+const LS_EQ     = "dof_equipment_library";
+const LS_REPS   = "dof_reports";
 const LS_SEED   = "dof_seed_presets";
 const LS_PL     = "dof_pl_library";   // Profit & Loss fields (keyed object, syncs like the others)
 const LS_SEED_INV = "dof_seed_inventory";   // Seed tag inventory (keyed by lot id, syncs across devices — photos stay local)
@@ -3144,7 +3146,7 @@ if ($("btnOrient")) $("btnOrient").addEventListener("click", () => {
 if ($("btnAutoZoom")) $("btnAutoZoom").addEventListener("click", () => {
   state.autoZoom = !state.autoZoom;
   const btn = $("btnAutoZoom");
-  btn.textContent = state.autoZoom ? "🔍 Auto-Zoom: ON" : "🔍 Auto-Zoom: OFF";
+  btn.textContent = state.autoZoom ? "🔍 Auto-Zoom: ON" : "��� Auto-Zoom: OFF";
   btn.classList.toggle("active-toggle", state.autoZoom);
 });
 if ($("btnAutoCenter")) $("btnAutoCenter").addEventListener("click", () => {
@@ -3876,7 +3878,7 @@ function formatReport(r) {
     `Field:     ${r.field.name} (${r.field.crop}${r.field.variety ? " / " + r.field.variety : ""})`,
     `Machine:   ${r.equipment.name} ��� ${r.equipment.type} ${r.equipment.width} ft`,
     `Acres:     ${r.acres}`,
-    `Coverage:  ${r.coverage != null ? r.coverage + "%" : "—"} of ${r.boundaryAcres} ac boundary`,
+    `Coverage:  ${r.coverage != null ? r.coverage + "%" : "���"} of ${r.boundaryAcres} ac boundary`,
     `Avg Speed: ${r.avgSpeed} mph`,
     `Max Speed: ${r.maxSpeed} mph`,
     `Bushels:   ${r.bushels}`,
