@@ -109,9 +109,7 @@ function setGpsFilterKey(k) {
     setGpsPill(true, state.lastGpsAccuracy);
   }
 }
-const GPS_MIN_MOVE_M        = 0.5;  // ignore micro-jitter below this (meters)
-const GPS_MAX_REALISTIC_MPH = 60;   // reject impossible speed jumps
-const SPEED_EMA_ALPHA       = 0.25; // exponential smoothing: lower = smoother, higher = more responsive
+// --- GPS smoothing constants (build-27) ---
 const GPS_MIN_MOVE_M        = 0.75; // ignore micro-jitter below this (meters) — paint only when we've actually moved
 const GPS_MAX_REALISTIC_MPH = 60;   // reject impossible speed jumps
 const SPEED_EMA_ALPHA       = 0.25; // exponential smoothing: lower = smoother, higher = more responsive
@@ -2029,9 +2027,6 @@ function clearTrail() {
 function paintSwath(p1, p2, headingDeg) {
   const widthFt = state.equipment.width;
   if (!widthFt || widthFt <= 0) {
-function paintSwath(p1, p2, headingDeg) {
-  const widthFt = state.equipment.width;
-  if (!widthFt || widthFt <= 0) {
     updateStatusStrip("Working width is 0 — set it in Field & Equipment");
     return;
   }
@@ -2066,6 +2061,8 @@ function emaBearing(prevDeg, nextDeg, alpha) {
   const deg = Math.atan2(sin, cos) * 180 / Math.PI;
   return (deg + 360) % 360;
 }
+
+function stripPolygon(p1, p2, leftBearing, rightBearing, leftMeters, rightMeters) {
   return [
     offsetMeters(p1.lat, p1.lng, leftBearing,  leftMeters),
     offsetMeters(p2.lat, p2.lng, leftBearing,  leftMeters),
@@ -5175,7 +5172,7 @@ function migrateLegacyPhotos() {
 
 // ============================================================
 // DAY / NIGHT THEME TOGGLE
-// ☀️ Day = cream (default), 🌙 Night = dark. Remembers your choice.
+// ☀️ Day = cream (default), ���� Night = dark. Remembers your choice.
 // Added feature — does not modify existing logic.
 // ============================================================
 (function setupThemeToggle() {
@@ -5425,7 +5422,7 @@ var KmlImport = (function () {
   function readUInt16LE(b, o) { return (b[o] | (b[o+1]<<8)) >>> 0; }
 
   function inflateRaw(bytes) {
-    // DecompressionStream('deflate-raw') — supported in modern browsers + iOS 16.4+
+    // DecompressionStream('deflate-raw') ��� supported in modern browsers + iOS 16.4+
     if (typeof DecompressionStream === "undefined") {
       return Promise.reject(new Error("no-inflate"));
     }
