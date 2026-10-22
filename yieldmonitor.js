@@ -27,6 +27,22 @@
 //   • Connection is persisted via getPorts() so re-plugging the ESP32
 //     reconnects automatically.
 //
+// BUILD 2026.10.22-31 (field-hardening patch)
+//   - Board identity check: auto-reconnect no longer grabs "the first port".
+//     It opens candidates one at a time, listens for yield-sensor lines
+//     (EVT / [t=..]) and drops any port streaming NMEA (the GPS board).
+//     Ports already open elsewhere (e.g. the RTK pill) are skipped.
+//   - Recording guard: live elapsed time / paddle count, warnings if the
+//     sensor link drops or event numbers skip, auto-reconnect while
+//     recording, screen wake lock, unload warning, unsaved-pass confirm,
+//     confirm before Stop.
+//   - Safe save: storage-full is caught (nothing is lost, the pass stays on
+//     screen). Raw events are stored compactly, or skipped on long passes
+//     (K only needs the excess total). Raw events CSV download button.
+//   - Truck-scale entry: NET pounds + moisture % -> bushels at standard
+//     moisture (corn 15.5%). Passes with dropouts save as EXCLUDED.
+//   - Excess total is recomputed at Stop so the last second is counted.
+//
 // Firmware expected: yield_monitor_combine v1.2+ with CSV_STREAM enabled.
 //   Status line format:
 //     [t=Ns] paddles=N rate=N Hz beam=... short=N wide=N
@@ -60,6 +76,16 @@
     "Other":      60
   };
 
+  // Standard moisture (%) used to convert wet weigh-ticket pounds to bushels.
+  // Corn 15.5 is the one you calibrate on; the others are the usual market
+  // standards and have NOT been field-checked in this app.
+  var STD_MOISTURE = {
+    "Corn": 15.5, "Soybean": 13, "Soybeans": 13, "Wheat": 13.5,
+    "Sorghum": 14, "Sunflower": 10, "Barley": 14.5, "Oats": 14
+  };
+  // Raw events are only stored with a pass when the pass is short enough.
+  var EVENT_STORE_MAX = 15000;
+
   // Regex patterns for parsing serial output
   var EVT_RE_V12   = /^EVT,(\d+),(\d+),(\d+),(\d+)\s*$/;   // v1.2 5-column
   var EVT_RE_OLD   = /^EVT,(\d+),(\d+),(\d+)\s*$/;         // v0.5 4-column
@@ -91,9 +117,9 @@
   // STORAGE
   // ----------------------------------------------------------
   function runsGet() { try { return JSON.parse(localStorage.getItem(LS_RUNS) || "{}"); } catch (e) { return {}; } }
-  function runsSet(o) { localStorage.setItem(LS_RUNS, JSON.stringify(o)); }
+  function runsSet(o) { try { localStorage.setItem(LS_RUNS, JSON.stringify(o)); return true; } catch (e) { return false; } }
   function lockedGet() { try { return JSON.parse(localStorage.getItem(LS_LOCKED_K) || "{}"); } catch (e) { return {}; } }
-  function lockedSet(o) { localStorage.setItem(LS_LOCKED_K, JSON.stringify(o)); }
+  function lockedSet(o) { try { localStorage.setItem(LS_LOCKED_K, JSON.stringify(o)); return true; } catch (e) { return false; } }
   function tombGet() { try { return JSON.parse(localStorage.getItem(LS_TOMB_RUNS) || "{}"); } catch (e) { return {}; } }
   function tombSet(o) { localStorage.setItem(LS_TOMB_RUNS, JSON.stringify(o)); }
 
@@ -103,10 +129,11 @@
     if (!run.savedAt) run.savedAt = nowIso();
     if (!run.id) run.id = newId();
     runs[run.id] = run;
-    runsSet(runs);
+    if (!runsSet(runs)) return false;     // storage full: nothing written
     recomputeLockedK(run.crop);
     renderHistory();
     renderCalibration();
+    return true;
   }
   function deleteRun(id) {
     var runs = runsGet();
@@ -182,7 +209,11 @@
     validEvents: 0,   totalExcessUs: 0,
     recording: false,
     _recordStartCount: 0,
-    _recordStartExcess: 0
+    _recordStartExcess: 0,
+    // build 31
+    identity: null,   foreignLines: 0,  lastEvtAt: 0,
+    dropouts: 0,      missedEvents: 0,  counterResets: 0,
+    _recLastEvt: null
   };
   // Buffered events for full CSV export at end of pass
   var _recordedEvents = [];
@@ -208,12 +239,89 @@
     renderLive();
   }
 
+  // ----------------------------------------------------------
+  // CONNECTION  (build 31: identity check, no blind port grabbing)
+  // ----------------------------------------------------------
+  var _connecting = false;
+  var _wakeLock = null;
+  var _pendingUnsaved = false;
+  var _recTimer = null;
+  var _reconnTimer = null;
+
+  function portInfoOf(p) {
+    try { return (p && p.getInfo) ? (p.getInfo() || {}) : {}; } catch (e) { return {}; }
+  }
+  function rememberPort(p) {
+    var i = portInfoOf(p);
+    if (i.usbVendorId == null) return;
+    try { localStorage.setItem(LS_LAST_PORT, JSON.stringify({ v: i.usbVendorId, p: i.usbProductId })); } catch (e) {}
+  }
+  function savedPortInfo() {
+    try { return JSON.parse(localStorage.getItem(LS_LAST_PORT) || "null"); } catch (e) { return null; }
+  }
+  function matchScore(p, saved) {
+    if (!saved || typeof saved !== "object") return 0;
+    var i = portInfoOf(p);
+    return (i.usbVendorId === saved.v && i.usbProductId === saved.p) ? 1 : 0;
+  }
+
+  async function openPort(port) {
+    await port.open({ baudRate: 115200 });
+    _port = port;
+    _readAbort = false;
+    _lineBuf = "";
+    _live.identity = null;
+    _live.foreignLines = 0;
+    setConnected(true);
+    readLoop(port);   // fire-and-forget
+  }
+
+  // Resolves "yield" | "foreign" | "silent" | "lost"
+  function waitIdentity(ms) {
+    return new Promise(function (resolve) {
+      var t0 = Date.now();
+      (function poll() {
+        if (_live.identity) return resolve(_live.identity);
+        if (!_live.connected) return resolve("lost");
+        if (Date.now() - t0 >= ms) return resolve("silent");
+        setTimeout(poll, 100);
+      })();
+    });
+  }
+
+  // Reconnect without prompting. Tries each already-permitted port that is
+  // not open elsewhere; keeps the one that speaks the yield-sensor protocol.
+  async function autoConnect() {
+    if (_connecting || _live.connected) return;
+    _connecting = true;
+    try {
+      var granted = await navigator.serial.getPorts();
+      if (!granted.length) { statusText("No previously-connected sensor"); return; }
+      var saved = savedPortInfo();
+      var cands = granted.filter(function (p) { return !p.readable; });
+      cands.sort(function (a, b) { return matchScore(b, saved) - matchScore(a, saved); });
+      if (!cands.length) { statusText("Serial ports are in use by another tool"); return; }
+      for (var i = 0; i < cands.length; i++) {
+        try { await openPort(cands[i]); } catch (e) { continue; }
+        var id = await waitIdentity(5000);
+        if (id === "yield") { rememberPort(cands[i]); statusText("Connected"); return; }
+        if (id === "silent" && cands.length === 1) { statusText("Connected - no data yet"); return; }
+        await disconnectSensor(true);   // GPS board, silent among several, or lost
+      }
+      statusText(granted.length > 1
+        ? "Yield sensor not found - tap Connect Sensor and pick its board"
+        : "No previously-connected sensor");
+    } finally {
+      _connecting = false;
+    }
+  }
+
   async function connectSensor(promptUser) {
     if (!webSerialSupported()) {
       appAlert(
         "Web Serial live capture requires a DESKTOP browser " +
         "(Chrome or Edge on Windows, macOS, Linux, or ChromeOS).\n\n" +
-        "Chrome for Android does NOT support Web Serial — plugging an " +
+        "Chrome for Android does NOT support Web Serial \u2014 plugging an " +
         "ESP32 into the tablet via USB will not work, no matter the cable " +
         "or OTG adapter. iPad/iPhone Safari is also unsupported.\n\n" +
         "Mobile support is coming via Wi-Fi (planned firmware v1.3). " +
@@ -223,45 +331,64 @@
       );
       return;
     }
+    if (_live.connected) return;
+    if (_connecting) { statusText("Still checking ports - try again in a few seconds"); return; }
     try {
-      var port;
-      if (promptUser) {
-        port = await navigator.serial.requestPort({});
-      } else {
-        // Try to reconnect to an already-granted port
-        var granted = await navigator.serial.getPorts();
-        if (!granted.length) { statusText("No previously-connected sensor"); return; }
-        port = granted[0];
+      if (!promptUser) { await autoConnect(); return; }
+      var port = await navigator.serial.requestPort({});
+      if (port.readable) {
+        appAlert("That serial port is already open in another part of the app " +
+                 "(probably the RTK pill). Pick the other board \u2014 the yield sensor.",
+                 "Port already in use");
+        return;
       }
-      await port.open({ baudRate: 115200 });
-      _port = port;
-      _readAbort = false;
-      _lineBuf = "";
-      setConnected(true);
-      statusText("Connected");
-      readLoop();  // fire-and-forget
+      _connecting = true;
+      try {
+        await openPort(port);
+        statusText("Connected - checking board...");
+        var id = await waitIdentity(8000);
+        if (id === "foreign") {
+          await disconnectSensor(true);
+          statusText("That is the GPS board, not the yield sensor");
+          appAlert("That port is the GPS / RTK board (it is sending NMEA position data), " +
+                   "not the yield sensor. Tap Connect Sensor again and pick the other board " +
+                   "\u2014 the yield sensor is the one that was on COM4.",
+                   "Wrong board");
+          return;
+        }
+        if (id === "yield") { rememberPort(port); statusText("Connected"); }
+        else if (id === "silent") statusText("Connected - no data yet");
+      } finally {
+        _connecting = false;
+      }
     } catch (e) {
+      if (e && e.name === "NotFoundError") { statusText("No port selected"); return; }
       statusText("Connect failed: " + (e && e.message || e));
       setConnected(false);
     }
   }
-  async function disconnectSensor() {
+
+  async function disconnectSensor(silent) {
+    var wasRecording = _live.recording;
     _readAbort = true;
-    try { if (_reader) { await _reader.cancel(); _reader.releaseLock(); } } catch (e) {}
+    try { if (_reader) { await _reader.cancel(); } } catch (e) {}
+    try { if (_reader) _reader.releaseLock(); } catch (e) {}
     _reader = null;
     try { if (_port) { await _port.close(); } } catch (e) {}
     _port = null;
     setConnected(false);
     statusText("Disconnected");
+    if (wasRecording && silent !== true) markDropout("sensor disconnected by user");
   }
 
-  async function readLoop() {
-    if (!_port) return;
+  async function readLoop(port) {
     var decoder = new TextDecoder();
+    var reader = null;
     try {
-      _reader = _port.readable.getReader();
+      reader = port.readable.getReader();
+      _reader = reader;
       while (!_readAbort) {
-        var chunk = await _reader.read();
+        var chunk = await reader.read();
         if (chunk.done) break;
         _lineBuf += decoder.decode(chunk.value, { stream: true });
         var idx;
@@ -272,15 +399,93 @@
         }
       }
     } catch (e) {
-      statusText("Read error: " + (e && e.message || e));
+      if (!_readAbort) statusText("Read error: " + (e && e.message || e));
     } finally {
-      try { if (_reader) _reader.releaseLock(); } catch (e) {}
-      _reader = null;
-      if (!_readAbort) setConnected(false);
+      try { if (reader) reader.releaseLock(); } catch (e) {}
+      if (_reader === reader) _reader = null;
+      if (!_readAbort && _port === port) {      // unplugged / dropped
+        try { await port.close(); } catch (e) {}
+        _port = null;
+        setConnected(false);
+        statusText("Sensor disconnected");
+        if (_live.recording) markDropout("USB link dropped");
+      }
     }
   }
 
+  // Identity: yield lines mark the board as the sensor; NMEA marks it foreign.
+  function classifyLine(line) {
+    if (line.indexOf("EVT,") === 0) _live.lastEvtAt = Date.now();
+    if (_live.identity === "yield") return;
+    if (EVT_RE_V12.test(line) || EVT_RE_OLD.test(line) || STATUS_RE.test(line)) {
+      _live.identity = "yield";
+      _live.foreignLines = 0;
+      return;
+    }
+    if (/^\$G[A-Z]{3,4},/.test(line)) {
+      _live.foreignLines++;
+      if (_live.foreignLines >= 2) _live.identity = "foreign";
+    }
+  }
+
+  function scheduleReconnect() {
+    if (_reconnTimer) return;
+    _reconnTimer = setInterval(function () {
+      if (_live.connected || !_live.recording) { clearInterval(_reconnTimer); _reconnTimer = null; return; }
+      autoConnect().catch(function () {});
+    }, 3000);
+  }
+
+  function markDropout(reason) {
+    _live.dropouts++;
+    updateRecStatus();
+    scheduleReconnect();
+    if (typeof appAlert === "function") {
+      appAlert("Sensor connection lost while recording (" + reason + ").\n\n" +
+               "Grain counted during the gap is missing, so this pass is now flagged and " +
+               "will be saved EXCLUDED from the K average. The app will try to reconnect " +
+               "on its own; you can keep recording or stop and discard this pass.",
+               "Recording interrupted");
+    }
+  }
+
+  // Event numbers should climb by 1. A jump = missed events; a drop = sensor reboot.
+  function trackGap(n) {
+    var last = _live._recLastEvt;
+    if (last != null) {
+      if (n > last + 1) _live.missedEvents += (n - last - 1);
+      else if (n <= last) _live.counterResets++;
+    }
+    _live._recLastEvt = n;
+  }
+
+  function ymRequestWakeLock() {
+    try {
+      if (navigator.wakeLock && navigator.wakeLock.request) {
+        navigator.wakeLock.request("screen").then(function (l) { _wakeLock = l; }).catch(function () { _wakeLock = null; });
+      }
+    } catch (e) { _wakeLock = null; }
+  }
+  function ymReleaseWakeLock() {
+    try { if (_wakeLock) _wakeLock.release(); } catch (e) {}
+    _wakeLock = null;
+  }
+
+  function installGuards() {
+    window.addEventListener("beforeunload", function (e) {
+      if (_live.recording || _pendingUnsaved) {
+        e.preventDefault();
+        e.returnValue = "";
+        return "";
+      }
+    });
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible" && _live.recording) ymRequestWakeLock();
+    });
+  }
+
   function handleSerialLine(line) {
+    classifyLine(line);
     // Try EVT lines first (they're the common case)
     var m = EVT_RE_V12.exec(line);
     if (m) {
@@ -288,6 +493,7 @@
       if (_live.firstEvtNum == null) _live.firstEvtNum = evtNum;
       _live.lastEvtNum = evtNum;
       if (_live.recording) {
+        trackGap(evtNum);
         _recordedEvents.push({ n: evtNum, t: t_us, w: w_us, f: flag });
         if (flag === 0) {
           _live.validEvents++;
@@ -304,6 +510,7 @@
       if (_live.firstEvtNum == null) _live.firstEvtNum = evtNum2;
       _live.lastEvtNum = evtNum2;
       if (_live.recording) {
+        trackGap(evtNum2);
         _recordedEvents.push({ n: evtNum2, t: t_us2, w: w_us2, f: 0 });
         _live.validEvents++;
       }
@@ -482,14 +689,64 @@
   // ----------------------------------------------------------
   // RECORDING
   // ----------------------------------------------------------
-  function startRecording() {
-    if (!_live.connected) {
-      appAlert("Connect the sensor first (Setup tab -> Connect Sensor).", "Not connected");
+  // ----------------------------------------------------------
+  // RECORDING  (build 31: guarded, truck-scale friendly)
+  // ----------------------------------------------------------
+  function confirmAsync(msg, title, okLabel) {
+    if (typeof appConfirm === "function") return appConfirm(msg, { title: title || "Please confirm", okLabel: okLabel || "OK" });
+    return Promise.resolve(typeof confirm === "function" ? confirm(msg) : true);
+  }
+  function fmtDur(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), x = sec % 60;
+    return (h ? h + ":" + (m < 10 ? "0" : "") : "") + m + ":" + (x < 10 ? "0" : "") + x;
+  }
+  function recomputeExcess() {
+    if (!(_live.baseline_us > 0)) return;
+    var total = 0, valid = 0;
+    for (var i = 0; i < _recordedEvents.length; i++) {
+      var ev = _recordedEvents[i];
+      if (ev.f !== 0) continue;
+      valid++;
+      var d = ev.w - _live.baseline_us;
+      if (d > 0) total += d;
+    }
+    _live.validEvents = valid;
+    _live.totalExcessUs = total;
+  }
+  function updateRecStatus() {
+    var el = byId("ymRecStatus");
+    if (!el || !_live.recording) return;
+    var sec = (Date.now() - _live._recordStartTime.getTime()) / 1000;
+    var txt = "Recording " + fmtDur(sec) + " \u00B7 " + fmtNum(_live.validEvents, 0) + " paddles";
+    if (!_live.connected) txt += " \u00B7 SENSOR OFFLINE, reconnecting";
+    else if (_live.lastEvtAt) txt += " \u00B7 last paddle " + Math.round((Date.now() - _live.lastEvtAt) / 1000) + " s ago";
+    if (_live.missedEvents) txt += " \u00B7 missed " + _live.missedEvents;
+    if (_live.counterResets) txt += " \u00B7 sensor reset " + _live.counterResets + "x";
+    if (_live.dropouts) txt += " \u00B7 DROPOUTS " + _live.dropouts;
+    el.textContent = txt;
+    el.style.color = (!_live.connected || _live.dropouts || _live.counterResets) ? "#c0392b" : "";
+  }
+  function stopRecTimers() {
+    if (_recTimer) { clearInterval(_recTimer); _recTimer = null; }
+  }
+
+  async function startRecording() {
+    if (!_live.connected || _live.identity !== "yield") {
+      appAlert("Connect the yield sensor first (Setup tab -> Connect Sensor). " +
+               "Recording needs live paddle data from the sensor board.", "Sensor not ready");
       return;
     }
     var crop = byId("ymCalCrop").value;
     var field = byId("ymCalField").value;
     if (!crop) { appAlert("Pick a crop first."); return; }
+    if (_pendingUnsaved) {
+      var ok = await confirmAsync("A finished pass has not been saved yet. Starting a new recording throws it away. Continue?",
+                                  "Unsaved pass", "Discard and start");
+      if (!ok) return;
+      _recordedEvents = [];
+      _pendingUnsaved = false;
+    }
     _live.recording = true;
     _live._recordCrop = crop;
     _live._recordField = field;
@@ -498,58 +755,156 @@
     _recordedEvents = [];
     _live.validEvents = 0;
     _live.totalExcessUs = 0;
+    _live.dropouts = 0;
+    _live.missedEvents = 0;
+    _live.counterResets = 0;
+    _live._recLastEvt = null;
     byId("ymRecStartBtn").classList.add("hidden");
     byId("ymRecStopBtn").classList.remove("hidden");
-    byId("ymRecStatus").textContent = "Recording…";
     byId("ymRecSummary").classList.add("hidden");
+    stopRecTimers();
+    _recTimer = setInterval(updateRecStatus, 1000);
+    ymRequestWakeLock();
+    updateRecStatus();
   }
-  function stopRecording() {
+
+  async function stopRecording() {
     if (!_live.recording) return;
+    var go = await confirmAsync("Stop recording? Only stop after the LAST tank of this truckload is completely unloaded into the truck.",
+                                "Stop recording", "Stop");
+    if (!go || !_live.recording) return;
+    recomputeExcess();
     _live.recording = false;
-    var duration = (new Date() - _live._recordStartTime) / 1000;
+    stopRecTimers();
+    ymReleaseWakeLock();
+    _pendingUnsaved = true;
+    var duration = (Date.now() - _live._recordStartTime.getTime()) / 1000;
+    _live._recordDuration = duration;
     byId("ymRecStartBtn").classList.remove("hidden");
     byId("ymRecStopBtn").classList.add("hidden");
     byId("ymRecStatus").textContent = "Stopped.";
-    // Show summary + prompt for weigh ticket
+    byId("ymRecStatus").style.color = "";
+
+    var warn = [];
+    if (_live.dropouts) warn.push("The sensor link dropped " + _live.dropouts + " time(s). Grain during the gap was not counted, so this pass will be saved EXCLUDED.");
+    if (_live.counterResets) warn.push("The sensor restarted " + _live.counterResets + " time(s) mid-pass. This pass will be saved EXCLUDED.");
+    if (_live.missedEvents) warn.push(fmtNum(_live.missedEvents, 0) + " paddle event(s) were missed in the serial stream.");
+    if (_live.validEvents < 50) warn.push("Only " + _live.validEvents + " valid paddles were counted. Is this the right pass?");
+    var warnHtml = warn.length
+      ? '<div class="ym-summary-row" style="color:#c0392b"><b>Check:</b> ' + warn.map(esc).join(" ") + '</div>'
+      : '';
+
     var summary = byId("ymRecSummary");
     summary.classList.remove("hidden");
     summary.innerHTML =
-      '<div class="ym-summary-row">Duration: <b>' + fmtNum(duration, 0) + ' s</b></div>' +
+      '<div class="ym-summary-row">Duration: <b>' + fmtDur(duration) + '</b></div>' +
       '<div class="ym-summary-row">Valid events: <b>' + fmtNum(_live.validEvents, 0) + '</b></div>' +
-      '<div class="ym-summary-row">Total excess: <b>' + fmtNum(_live.totalExcessUs, 0) + ' µs</b></div>' +
+      '<div class="ym-summary-row">Total excess: <b>' + fmtNum(_live.totalExcessUs, 0) + ' \u00B5s</b></div>' +
+      warnHtml +
+      '<div class="ym-summary-row"><i>Truck scale: enter the NET weight (gross minus tare) of everything in this recording, with the elevator moisture.</i></div>' +
       '<div class="ym-summary-row">' +
-      '  <label>Weigh ticket amount' +
-      '    <input id="ymWTAmount" type="number" step="0.01" placeholder="0.00"/>' +
+      '  <label>Net weight' +
+      '    <input id="ymWTAmount" type="number" step="0.01" placeholder="0"/>' +
       '  </label>' +
       '  <label>Units' +
       '    <select id="ymWTUnits">' +
-      '      <option value="bu">Bushels</option>' +
-      '      <option value="lbs">Pounds</option>' +
+      '      <option value="lbs">Pounds (net)</option>' +
+      '      <option value="bu">Bushels (already corrected)</option>' +
       '    </select>' +
       '  </label>' +
+      '  <label>Moisture % (pounds only)' +
+      '    <input id="ymWTMoist" type="number" step="0.1" placeholder="e.g. 18.0"/>' +
+      '  </label>' +
       '  <label>Source (optional)' +
-      '    <input id="ymWTSource" type="text" placeholder="Elevator, on-farm scale, etc."/>' +
+      '    <input id="ymWTSource" type="text" placeholder="Elevator, ticket #, etc."/>' +
       '  </label>' +
       '</div>' +
+      '<div class="ym-summary-row" id="ymWTPreview"></div>' +
       '<div class="ym-summary-row">' +
       '  <button id="ymSaveRun" class="btn btn-primary">Save Pass</button>' +
+      '  <button id="ymDownloadEvents" class="btn">Download raw events (CSV)</button>' +
       '  <button id="ymDiscardRun" class="btn">Discard</button>' +
       '</div>';
     byId("ymSaveRun").addEventListener("click", saveRecordedRun);
-    byId("ymDiscardRun").addEventListener("click", function () {
+    byId("ymDownloadEvents").addEventListener("click", downloadEventsCsv);
+    ["ymWTAmount", "ymWTUnits", "ymWTMoist"].forEach(function (id) {
+      var el = byId(id);
+      el.addEventListener("input", updateTicketPreview);
+      el.addEventListener("change", updateTicketPreview);
+    });
+    byId("ymDiscardRun").addEventListener("click", async function () {
+      var ok = await confirmAsync("Discard this pass? The recorded data cannot be recovered.", "Discard pass", "Discard");
+      if (!ok) return;
       _recordedEvents = [];
+      _pendingUnsaved = false;
       summary.classList.add("hidden");
       byId("ymRecStatus").textContent = "Not recording";
     });
   }
+
+  // Wet pounds -> bushels at standard moisture. Bushels pass through as entered.
+  function ticketBushels(crop, amount, units, moist) {
+    var lbsPerBu = BU_WEIGHTS[crop] || 60;
+    if (units === "bu") return { bu: amount, note: "as entered", needMoisture: false };
+    var base = amount / lbsPerBu;
+    var std = STD_MOISTURE[crop];
+    var m = Number(moist);
+    if (std == null) return { bu: base, note: "no moisture standard for " + crop, needMoisture: false };
+    if (!(m > 0 && m < 50)) return { bu: base, note: "moisture missing", needMoisture: true };
+    return { bu: base * (100 - m) / (100 - std), note: m + "% shrunk to " + std + "%", needMoisture: false, moist: m, std: std };
+  }
+  function updateTicketPreview() {
+    var el = byId("ymWTPreview");
+    if (!el) return;
+    var amount = parseFloat(byId("ymWTAmount").value);
+    if (!(amount > 0)) { el.textContent = ""; return; }
+    var r = ticketBushels(_live._recordCrop, amount, byId("ymWTUnits").value, byId("ymWTMoist").value);
+    el.textContent = r.needMoisture
+      ? "Enter the moisture % to convert pounds to bushels."
+      : "= " + fmtNum(r.bu, 1) + " bu (" + r.note + ")";
+  }
+
+  function downloadEventsCsv() {
+    var rows = ["n,t_us,width_us,flag"];
+    for (var i = 0; i < _recordedEvents.length; i++) {
+      var ev = _recordedEvents[i];
+      rows.push(ev.n + "," + ev.t + "," + ev.w + "," + ev.f);
+    }
+    var d = _live._recordStartTime || new Date();
+    var p2 = function (x) { return (x < 10 ? "0" : "") + x; };
+    var name = "yield_pass_" + p2(d.getDate()) + "-" + p2(d.getMonth() + 1) + "-" + d.getFullYear() +
+               "_" + p2(d.getHours()) + p2(d.getMinutes()) + ".csv";
+    var blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { try { URL.revokeObjectURL(a.href); document.body.removeChild(a); } catch (e) {} }, 1000);
+  }
+
   function saveRecordedRun() {
     var amount = parseFloat(byId("ymWTAmount").value);
-    if (!(amount > 0)) { appAlert("Enter a weigh ticket amount."); return; }
+    if (!(amount > 0)) { appAlert("Enter the net weight from the scale ticket."); return; }
     var units = byId("ymWTUnits").value;
     var source = byId("ymWTSource").value || "";
     var crop = _live._recordCrop;
-    var lbsPerBu = BU_WEIGHTS[crop] || 60;
-    var bushels = units === "bu" ? amount : amount / lbsPerBu;
+    var t = ticketBushels(crop, amount, units, byId("ymWTMoist").value);
+    if (t.needMoisture) {
+      appAlert("Enter the moisture % from the ticket. Pounds are converted to bushels at " +
+               STD_MOISTURE[crop] + "% moisture, and the answer depends on it.", "Moisture needed");
+      return;
+    }
+    if (!(t.bu > 0)) { appAlert("That weight works out to zero bushels. Check the number."); return; }
+
+    var n = _recordedEvents.length;
+    var flags = [];
+    if (_live.dropouts) flags.push("dropout x" + _live.dropouts);
+    if (_live.counterResets) flags.push("sensor reset x" + _live.counterResets);
+    if (n > 0 && _live.missedEvents > n * 0.005) flags.push("missed " + _live.missedEvents + " events");
+    var excluded = flags.length > 0;
+
+    var keepEvents = n <= EVENT_STORE_MAX;
     var run = {
       id: newId(),
       crop: crop,
@@ -557,24 +912,47 @@
       notes: _live._recordNotes,
       startTime: _live._recordStartTime.toISOString(),
       endTime: nowIso(),
+      durationSec: Math.round(_live._recordDuration || 0),
       totalExcessUs: _live.totalExcessUs,
       validEvents: _live.validEvents,
-      totalEvents: _recordedEvents.length,
+      totalEvents: n,
       weighTicketAmount: amount,
       weighTicketUnits: units,
-      weighTicketBushels: bushels,
+      weighTicketBushels: t.bu,
+      weighTicketMoisture: t.moist != null ? t.moist : null,
+      weighTicketStdMoisture: t.std != null ? t.std : null,
       weighTicketSource: source,
-      excludedFromAverage: false,
-      // Store the events for later re-analysis. If the array is huge (thousands
-      // of events), we still keep them — they compress well and the sync system
-      // can handle it. If it becomes an issue we can move them to IndexedDB later.
-      events: _recordedEvents.slice()
+      excludedFromAverage: excluded,
+      flags: flags.join("; "),
+      dropouts: _live.dropouts,
+      missedEvents: _live.missedEvents,
+      counterResets: _live.counterResets,
+      // Compact [n, t_us, width_us, flag] rows. Omitted on very long passes:
+      // K only needs totalExcessUs, and localStorage is small (about 5 MB).
+      eventsFormat: "ntwf",
+      events: keepEvents ? _recordedEvents.map(function (e) { return [e.n, e.t, e.w, e.f]; }) : null,
+      eventsOmitted: !keepEvents
     };
     run.computedK = computeK(run);
-    saveRun(run);
+
+    var saved = saveRun(run);
+    if (!saved && run.events) {            // retry without the raw events
+      run.events = null;
+      run.eventsOmitted = true;
+      saved = saveRun(run);
+    }
+    if (!saved) {
+      appAlert("Browser storage is full, so this pass was NOT saved. It is still on screen: " +
+               "tap Download raw events (CSV) and write down the weigh ticket numbers, then free space " +
+               "(delete old calibration runs or old reports) and tap Save Pass again.", "Storage full");
+      return;
+    }
     _recordedEvents = [];
+    _pendingUnsaved = false;
     byId("ymRecSummary").classList.add("hidden");
-    byId("ymRecStatus").textContent = "Saved. K = " + (run.computedK == null ? "—" : run.computedK.toExponential(3));
+    byId("ymRecStatus").textContent = "Saved. K = " + (run.computedK == null ? "\u2014" : run.computedK.toExponential(3)) +
+      (excluded ? " (EXCLUDED: " + run.flags + ")" : "") +
+      (run.eventsOmitted ? " \u00B7 raw events not stored" : "");
   }
 
   // ----------------------------------------------------------
@@ -665,6 +1043,8 @@
           '<span>K = ' + K + '</span>' +
           '<span>' + fmtNum(r.weighTicketBushels, 1) + ' bu</span>' +
           '<span>' + fmtNum(r.validEvents, 0) + ' events</span>' +
+          (r.weighTicketMoisture != null ? '<span>' + fmtNum(r.weighTicketMoisture, 1) + '% moist</span>' : '') +
+          (r.excludedFromAverage && r.flags ? '<span style="color:#c0392b">EXCLUDED: ' + esc(r.flags) + '</span>' : '') +
           '<span>' + fmtNum(r.totalExcessUs, 0) + ' µs total</span>' +
         '</div>' +
         '<div class="ym-history-actions">' +
@@ -762,7 +1142,8 @@
     renderAll();
     // Attempt silent reconnect to a previously-granted port
     if (webSerialSupported()) {
-      connectSensor(false).catch(function () {});
+      autoConnect().catch(function () {});
+      installGuards();
     } else {
       statusText("Web Serial not supported in this browser");
     }
