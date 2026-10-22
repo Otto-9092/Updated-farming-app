@@ -10,7 +10,7 @@
    after first load so the fallback works offline.
    Bump CACHE_VERSION whenever you ship new files.
    ============================================================ */
-const CACHE_VERSION = "opio-2026.10.22-30";
+const CACHE_VERSION = "opio-2026.10.22-31";
 const CACHE_NAME = "opio-cache-" + CACHE_VERSION;
 const HANDBOOK_CACHE_NAME = "opio-handbook-" + CACHE_VERSION;
 const TESS_CACHE_NAME = "opio-tesseract-" + CACHE_VERSION;
@@ -20,17 +20,17 @@ const H2C_CACHE_NAME = "opio-h2c-" + CACHE_VERSION;
 // versions referenced in index.html so the right copies are precached.
 const CORE_ASSETS = [
   "./",
-  "./styles.css?v=20261022-30",
-  "./seedtag.css?v=20261022-30",
-  "./config.js?v=20261022-30",
-  "./app.js?v=20261022-30",
-  "./uxenhancements.js?v=20261022-30",
-  "./asapplied.js?v=20261022-30",
-  "./seedtag.js?v=20261022-30",
-  "./handbook.js?v=20261022-30",
-  "./yieldmonitor.js?v=20261022-30",
-  "./rtk-source.js?v=20261022-30",
-  "./mapexport.js?v=20261022-30",
+  "./styles.css?v=20261022-31",
+  "./seedtag.css?v=20261022-31",
+  "./config.js?v=20261022-31",
+  "./app.js?v=20261022-31",
+  "./uxenhancements.js?v=20261022-31",
+  "./asapplied.js?v=20261022-31",
+  "./seedtag.js?v=20261022-31",
+  "./handbook.js?v=20261022-31",
+  "./yieldmonitor.js?v=20261022-31",
+  "./rtk-source.js?v=20261022-31",
+  "./mapexport.js?v=20261022-31",
   "./manifest.json",
   "./icon-16.png",
   "./icon-32.png",
